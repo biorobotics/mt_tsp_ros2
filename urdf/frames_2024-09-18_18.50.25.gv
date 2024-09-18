@@ -1,0 +1,9 @@
+digraph G {
+"iiwa_link_7" -> "iiwa_link_ee"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"world" -> "iiwa_link_0"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"world" -> "link0"[label=" Broadcaster: default_authority\nAverage rate: 30.173\nBuffer length: 5.004\nMost recent transform: 1726699825.545053\nOldest transform: 1726699820.540592\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1726699825.551738"[ shape=plaintext ] ;
+}->"world";
+}
