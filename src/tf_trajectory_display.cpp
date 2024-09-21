@@ -147,6 +147,7 @@ namespace mt_tsp_ros2
     new_point.point.z = position[2];
     trajectory_.push_back(new_point);
     // check old data, is it too slow??
+    /*
     for (std::vector<geometry_msgs::msg::PointStamped>::iterator it = trajectory_.begin();
          it != trajectory_.end();) {
       rclcpp::Duration duration = now - it->header.stamp;
@@ -157,6 +158,7 @@ namespace mt_tsp_ros2
         break;
       }
     }
+    */
     line_->clear();
     // split into multiple lines if the trajectory size exceeds MAX_ELEMENTS_PER_LINE (https://github.com/ros-visualization/rviz/issues/1107)
     line_->setNumLines(trajectory_.size() / MAX_ELEMENTS_PER_LINE + 1);
