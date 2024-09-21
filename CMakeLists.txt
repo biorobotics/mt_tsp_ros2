@@ -11,6 +11,40 @@ find_package(ament_cmake REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
+find_package(ament_cmake_ros REQUIRED)
+find_package(pluginlib REQUIRED)
+find_package(rviz_common REQUIRED)
+
+set(CMAKE_AUTOMOC ON)
+qt5_wrap_cpp(MOC_FILES
+  include/mt_tsp_ros2/tf_trajectory_display.hpp
+)
+
+add_library(tf_trajectory_display src/tf_trajectory_display.cpp ${MOC_FILES})
+target_include_directories(tf_trajectory_display PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(tf_trajectory_display
+  pluginlib
+  rviz_common
+)
+install(TARGETS tf_trajectory_display
+        EXPORT export_mt_tsp_ros2
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+)
+install(DIRECTORY include/
+        DESTINATION include
+)
+install(FILES rviz_common_plugins.xml
+        DESTINATION share/${PROJECT_NAME}
+)
+ament_export_include_directories(include)
+ament_export_targets(export_mt_tsp_ros2)
+pluginlib_export_plugin_description_file(rviz_common rviz_common_plugins.xml)
+
 install(DIRECTORY meshes DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)

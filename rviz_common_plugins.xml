@@ -1,0 +1,5 @@
+<library path="tf_trajectory_display">
+  <class type="mt_tsp_ros2::TFTrajectoryDisplay" base_class_type="rviz_common::Display">
+    <description></description>
+  </class>
+</library>
