@@ -14,6 +14,9 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_ros REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rviz_common REQUIRED)
+find_package(pybind11 REQUIRED)
+
+# The following is for TFTrajectoryDisplay
 
 set(CMAKE_AUTOMOC ON)
 qt5_wrap_cpp(MOC_FILES
@@ -45,8 +48,28 @@ ament_export_include_directories(include)
 ament_export_targets(export_mt_tsp_ros2)
 pluginlib_export_plugin_description_file(rviz_common rviz_common_plugins.xml)
 
+# Makes sure other packages can find meshes from this package
 install(DIRECTORY meshes DESTINATION share/${PROJECT_NAME})
 
+# Python bindings
+
+include_directories(
+  include
+)
+
+ament_python_install_package(${PROJECT_NAME})
+
+pybind11_add_module(astar_planner_3d_wrapper
+  src/astar_planner_3d.cpp
+  src/astar_planner_3d_wrapper.cpp
+  src/bind_astar_planner_3d_wrapper.cpp
+)
+install(TARGETS astar_planner_3d_wrapper
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
+# There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
