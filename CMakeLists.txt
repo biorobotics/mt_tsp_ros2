@@ -50,6 +50,7 @@ pluginlib_export_plugin_description_file(rviz_common rviz_common_plugins.xml)
 
 # Makes sure other packages can find meshes from this package
 install(DIRECTORY meshes DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY irb1600_aggregated DESTINATION share/${PROJECT_NAME})
 
 # Python bindings
 
