@@ -11,10 +11,10 @@ class DTPAStarProblem : public AStarProblem {
     DTPAStarProblem(const Ref<const VectorXl> &start_indices,
                     const Ref<const VectorXl> &goal_indices,
                     const Ref<const RowMatrixXd> &masked_cost_mat,
-                    const Ref<const RowMatrixXd> &cost_mat) : start_indices(start_indices), 
+                    std::shared_ptr<RowMatrixXd> cost_mat_ptr) : start_indices(start_indices), 
                                                               goal_indices(goal_indices), 
                                                               masked_cost_mat(masked_cost_mat),
-                                                              cost_mat(cost_mat) {
+                                                              cost_mat_ptr(cost_mat_ptr) {
       
     }
 
@@ -32,7 +32,7 @@ class DTPAStarProblem : public AStarProblem {
       if (node_idx == -1) {
         if (start_indices.size() == 1 && start_indices(0) == 0) {
           // Solving full DTP where we're returning to start q
-          for (int next_node_idx = 0; next_node_idx < cost_mat.cols(); ++next_node_idx) {
+          for (int next_node_idx = 0; next_node_idx < cost_mat_ptr->cols(); ++next_node_idx) {
             if (std::isinf(masked_cost_mat(0, next_node_idx))) {
               continue;
             }
@@ -48,7 +48,7 @@ class DTPAStarProblem : public AStarProblem {
           }
         }
       } else {
-        for (int next_node_idx = 0; next_node_idx < cost_mat.cols(); ++next_node_idx) {
+        for (int next_node_idx = 0; next_node_idx < cost_mat_ptr->cols(); ++next_node_idx) {
           if (std::isinf(masked_cost_mat(node_idx, next_node_idx))) {
             continue;
           }
@@ -79,7 +79,7 @@ class DTPAStarProblem : public AStarProblem {
       } else {
         h = std::numeric_limits<double>::infinity();
         for (auto goal_idx : goal_indices) {
-          h = std::min(h, cost_mat(node_idx, goal_idx));
+          h = std::min(h, (*cost_mat_ptr)(node_idx, goal_idx));
         }
       }
       return h;
@@ -89,7 +89,7 @@ class DTPAStarProblem : public AStarProblem {
     VectorXl start_indices;
     VectorXl goal_indices;
     RowMatrixXd masked_cost_mat;
-    RowMatrixXd cost_mat;
+    std::shared_ptr<RowMatrixXd> cost_mat_ptr;
 };
 
 VectorXl solve_dtp_astar_problem(Ref<Matrix<double, 1, 1>> cost,
@@ -97,10 +97,11 @@ VectorXl solve_dtp_astar_problem(Ref<Matrix<double, 1, 1>> cost,
                                  const Ref<const VectorXl> &goal_indices,
                                  const Ref<const RowMatrixXd> &masked_cost_mat,
                                  const Ref<const RowMatrixXd> &cost_mat) {
+  std::shared_ptr<RowMatrixXd> cost_mat_ptr = std::make_shared<RowMatrixXd>(cost_mat);
   std::shared_ptr<DTPAStarProblem> problem =  std::make_shared<DTPAStarProblem>(start_indices,
                                                                                 goal_indices, 
                                                                                 masked_cost_mat, 
-                                                                                cost_mat);
+                                                                                cost_mat_ptr);
 
   AStarCell start_cell = VectorXi(1);
   start_cell(0) = -1;
@@ -137,7 +138,8 @@ struct TargetSeqHash {
 
 class DTPAStarSolver {
   public:
-    DTPAStarSolver(const Ref<const RowMatrixXd> &cost_mat) : cost_mat(cost_mat) {
+    DTPAStarSolver(const Ref<const RowMatrixXd> &cost_mat) {
+      cost_mat_ptr = std::make_shared<RowMatrixXd>(cost_mat);
     }
 
     VectorXl solve(Ref<Matrix<double, 1, 1>> cost,
@@ -148,7 +150,7 @@ class DTPAStarSolver {
       std::shared_ptr<DTPAStarProblem> problem =  std::make_shared<DTPAStarProblem>(start_indices,
                                                                                     goal_indices, 
                                                                                     masked_cost_mat, 
-                                                                                    cost_mat);
+                                                                                    cost_mat_ptr);
       std::shared_ptr<ARAStarData> astar_data;
       VectorXi target_seq_int = target_seq.cast<int>();
       // assert(stored_data.find(target_seq_int) == stored_data.end());
@@ -177,16 +179,18 @@ class DTPAStarSolver {
           node_seq(i) = path[i](0);
         }
         cost(0) = astar_data->get_f_goal();
+        astar_data->nullify_problem();
         return node_seq;
       } else {
         // std::cout << "No solution. Returning path where agent stays at start config" << std::endl;
         VectorXl node_seq(1);
         node_seq(0) = -1;
         cost(0) = std::numeric_limits<double>::infinity();
+        astar_data->nullify_problem();
         return node_seq;
       }
     }
   private:
-    RowMatrixXd cost_mat;
+    std::shared_ptr<RowMatrixXd> cost_mat_ptr;
     std::unordered_map<TargetSeq, std::shared_ptr<ARAStarData>, TargetSeqHash> stored_data;
 };

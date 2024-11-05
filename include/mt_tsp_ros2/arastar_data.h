@@ -76,6 +76,9 @@ class ARAStarData {
       open(start_cell, seen_nodes[start_cell]->get_f());
     }
 
+    ARAStarData(const AStarCell &start_cell) : start_cell(start_cell), eps(1.0) {
+    }
+
     void print_open() {
       std::cout << "Printing open. Note that this empties the open list" << std::endl;
       while (open_list.size() != 0) {
@@ -86,7 +89,8 @@ class ARAStarData {
     }
 
     std::shared_ptr<ARAStarData> copy() {
-      std::shared_ptr<ARAStarData> copied_data = std::make_shared<ARAStarData>(problem, start_cell);
+      std::shared_ptr<ARAStarData> copied_data = std::make_shared<ARAStarData>(start_cell);
+      // std::shared_ptr<ARAStarData> copied_data = std::make_shared<ARAStarData>(problem, start_cell);
       copied_data->open_list = open_list;
       for (auto elem : seen_nodes) {
         assert(elem.second != nullptr);
@@ -100,6 +104,10 @@ class ARAStarData {
       copied_data->incons = incons;
       copied_data->goal_node = goal_node;
       return copied_data;
+    }
+
+    void nullify_problem() {
+      problem = nullptr;
     }
 
     // Same start cell, but different goal and heuristic
