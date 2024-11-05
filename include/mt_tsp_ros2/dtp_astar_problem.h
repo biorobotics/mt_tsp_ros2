@@ -68,7 +68,6 @@ class DTPAStarProblem : public AStarProblem {
     }
 
     virtual double heuristic(const AStarCell &cell) const override {
-      // return 0; // TODO: take out
       int node_idx = cell(0);
       if (is_goal_node_idx(node_idx)) {
         return 0;
