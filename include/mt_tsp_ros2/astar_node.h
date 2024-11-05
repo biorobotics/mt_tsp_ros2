@@ -123,6 +123,15 @@ class AStarNode {
     }
 
     /*
+     * set_h: update h value
+     */
+    void set_h(double h) {
+      this->h = h;
+      eps_h = eps*h;
+      f = g + eps_h;
+    }
+
+    /*
      * update_path_to_node: updates the optimal predecessor and and cost. Effectively,
      * this corresponds to updating the path to the node
      * ARGUMENTS

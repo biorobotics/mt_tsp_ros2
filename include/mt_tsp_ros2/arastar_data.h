@@ -76,6 +76,52 @@ class ARAStarData {
       open(start_cell, seen_nodes[start_cell]->get_f());
     }
 
+    void print_open() {
+      std::cout << "Printing open. Note that this empties the open list" << std::endl;
+      while (open_list.size() != 0) {
+        OpenListElement top = open_list.top();
+        open_list.pop();
+        std::cout << top.get_cell() << " " << top.get_f() << " " << seen_nodes[top.get_cell()]->get_g() << " " << seen_nodes[top.get_cell()]->get_h() << std::endl;
+      }
+    }
+
+    std::shared_ptr<ARAStarData> copy() {
+      std::shared_ptr<ARAStarData> copied_data = std::make_shared<ARAStarData>(problem, start_cell);
+      copied_data->open_list = open_list;
+      for (auto elem : seen_nodes) {
+        assert(elem.second != nullptr);
+        copied_data->seen_nodes[elem.first] = std::make_shared<AStarNode>(elem.second->get_back(),
+                                                                          elem.second->get_g(),
+                                                                          elem.second->get_h(),
+                                                                          elem.second->get_eps(),
+                                                                          elem.second->get_cell());
+      }
+      copied_data->closed_list = closed_list;
+      copied_data->incons = incons;
+      copied_data->goal_node = goal_node;
+      return copied_data;
+    }
+
+    // Same start cell, but different goal and heuristic
+    void update_problem(const std::shared_ptr<AStarProblem> &problem) {
+      this->problem = problem;
+      std::priority_queue<OpenListElement, std::vector<OpenListElement>, compare_open_list_elements> updated_open_list;
+      while (open_list.size() != 0) {
+        dust_off_open_list();
+        if (open_list.size() == 0) {
+          break;
+        }
+        AStarNodePtr node = seen_nodes[open_list.top().get_cell()];
+        open_list.pop();
+        node->set_h(problem->heuristic(node->get_cell()));
+        updated_open_list.push(OpenListElement(node->get_cell(), node->get_f()));
+      }
+      assert(updated_open_list.size() != 0);
+      open_list = updated_open_list;
+
+      goal_node = nullptr;
+    }
+
     void generate_successors(std::vector<AStarCell> &succ, std::vector<double> &transition_costs, const AStarNodePtr &node) {
       problem->generate_successors(succ, transition_costs, node);
     }
@@ -118,6 +164,10 @@ class ARAStarData {
       incons.clear();
     }
 
+    bool is_goal(const AStarNodePtr &node) {
+      return problem->is_goal(node);
+    }
+
     /*
      * update_path_to_node: updates the path to the node.
      * ARGUMENTS
@@ -140,6 +190,11 @@ class ARAStarData {
       } else if (g < seen_nodes[cell]->get_g()) {
         seen_nodes[cell]->update_path_to_node(back->get_cell(), g);
         // seen_nodes[cell] = node; // Do it this way if we want the updated data
+
+        if (problem->is_goal(seen_nodes[cell]) && (goal_node == nullptr || seen_nodes[cell]->get_g() < goal_node->get_g())) {
+          goal_node = seen_nodes[cell];
+        }
+
         if (is_closed(cell)) {
           make_incons(cell);
         } else {
@@ -233,6 +288,7 @@ class ARAStarData {
 
       AStarNodePtr terminal_node = goal_node;
       if (terminal_node == nullptr) {
+        std::cout << "Did not reach goal" << std::endl;
         // If we didn't find the goal, get the path to the node with the best h-value
         double best_h = -1;
         for (auto it : seen_nodes) {
