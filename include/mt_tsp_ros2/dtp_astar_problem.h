@@ -5,15 +5,16 @@
 
 typedef Matrix<long, Dynamic, 1> VectorXl;
 typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
+typedef Matrix<bool, Dynamic, Dynamic, RowMajor> RowMatrixXb;
 
 class DTPAStarProblem : public AStarProblem {
   public:
     DTPAStarProblem(const Ref<const VectorXl> &start_indices,
                     const Ref<const VectorXl> &goal_indices,
-                    const Ref<const RowMatrixXd> &masked_cost_mat,
+                    const Ref<const RowMatrixXb> &cost_mat_mask,
                     std::shared_ptr<RowMatrixXd> cost_mat_ptr) : start_indices(start_indices), 
                                                               goal_indices(goal_indices), 
-                                                              masked_cost_mat(masked_cost_mat),
+                                                              cost_mat_mask(cost_mat_mask),
                                                               cost_mat_ptr(cost_mat_ptr) {
       
     }
@@ -33,12 +34,12 @@ class DTPAStarProblem : public AStarProblem {
         if (start_indices.size() == 1 && start_indices(0) == 0) {
           // Solving full DTP where we're returning to start q
           for (int next_node_idx = 0; next_node_idx < cost_mat_ptr->cols(); ++next_node_idx) {
-            if (std::isinf(masked_cost_mat(0, next_node_idx))) {
+            if (cost_mat_mask(0, next_node_idx)) {
               continue;
             }
             next_cell(0) = next_node_idx;
             succ.push_back(next_cell);
-            transition_costs.push_back(masked_cost_mat(0, next_node_idx));
+            transition_costs.push_back((*cost_mat_ptr)(0, next_node_idx));
           }
         } else {
           for (auto next_node_idx : start_indices) {
@@ -49,12 +50,12 @@ class DTPAStarProblem : public AStarProblem {
         }
       } else {
         for (int next_node_idx = 0; next_node_idx < cost_mat_ptr->cols(); ++next_node_idx) {
-          if (std::isinf(masked_cost_mat(node_idx, next_node_idx))) {
+          if (cost_mat_mask(node_idx, next_node_idx)) {
             continue;
           }
           next_cell(0) = next_node_idx;
           succ.push_back(next_cell);
-          transition_costs.push_back(masked_cost_mat(node_idx, next_node_idx));
+          transition_costs.push_back((*cost_mat_ptr)(node_idx, next_node_idx));
         }
       }
     }
@@ -88,19 +89,19 @@ class DTPAStarProblem : public AStarProblem {
   private:
     VectorXl start_indices;
     VectorXl goal_indices;
-    RowMatrixXd masked_cost_mat;
+    RowMatrixXb cost_mat_mask;
     std::shared_ptr<RowMatrixXd> cost_mat_ptr;
 };
 
 VectorXl solve_dtp_astar_problem(Ref<Matrix<double, 1, 1>> cost,
                                  const Ref<const VectorXl> &start_indices,
                                  const Ref<const VectorXl> &goal_indices,
-                                 const Ref<const RowMatrixXd> &masked_cost_mat,
+                                 const Ref<const RowMatrixXb> &cost_mat_mask,
                                  const Ref<const RowMatrixXd> &cost_mat) {
   std::shared_ptr<RowMatrixXd> cost_mat_ptr = std::make_shared<RowMatrixXd>(cost_mat);
   std::shared_ptr<DTPAStarProblem> problem =  std::make_shared<DTPAStarProblem>(start_indices,
                                                                                 goal_indices, 
-                                                                                masked_cost_mat, 
+                                                                                cost_mat_mask, 
                                                                                 cost_mat_ptr);
 
   AStarCell start_cell = VectorXi(1);
@@ -145,11 +146,11 @@ class DTPAStarSolver {
     VectorXl solve(Ref<Matrix<double, 1, 1>> cost,
                    const Ref<const VectorXl> &start_indices,
                    const Ref<const VectorXl> &goal_indices,
-                   const Ref<const RowMatrixXd> &masked_cost_mat,
+                   const Ref<const RowMatrixXb> &cost_mat_mask,
                    const Ref<const VectorXl> &target_seq) {
       std::shared_ptr<DTPAStarProblem> problem =  std::make_shared<DTPAStarProblem>(start_indices,
                                                                                     goal_indices, 
-                                                                                    masked_cost_mat, 
+                                                                                    cost_mat_mask, 
                                                                                     cost_mat_ptr);
       std::shared_ptr<ARAStarData> astar_data;
       VectorXi target_seq_int = target_seq.cast<int>();
