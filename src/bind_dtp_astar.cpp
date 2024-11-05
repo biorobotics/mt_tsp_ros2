@@ -7,4 +7,9 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(dtp_astar, m) {
   m.def("solve_dtp_astar_problem", &solve_dtp_astar_problem);
+
+  py::class_<DTPAStarSolver>(m, "DTPAStarSolver")
+    .def(py::init<const Ref<const RowMatrixXd>&>())
+    .def("solve", &DTPAStarSolver::solve)
+    ;
 }
