@@ -80,7 +80,6 @@ target_link_libraries(gurobi_wrapper PRIVATE gurobi110)
 install(TARGETS gurobi_wrapper
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
-message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
 pybind11_add_module(dtp_astar
   src/bind_dtp_astar.cpp
@@ -88,7 +87,16 @@ pybind11_add_module(dtp_astar
 install(TARGETS dtp_astar
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
-message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
+pybind11_add_module(gtsp_wrapper
+  src/gtsp.cpp
+  src/bind_gtsp.cpp
+)
+target_link_directories(gtsp_wrapper PRIVATE /$ENV{HOME}/gurobi1103/linux64/lib/)
+target_link_libraries(gtsp_wrapper PRIVATE gurobi110)
+install(TARGETS gtsp_wrapper
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
 
 # There by default
 if(BUILD_TESTING)
