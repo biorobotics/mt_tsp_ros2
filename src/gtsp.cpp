@@ -4,6 +4,7 @@
 #include "stdio.h"
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <unordered_set>
 
 using namespace std::chrono;
@@ -358,7 +359,7 @@ int __stdcall pcg_cb(GRBmodel *model,
   return error;
 }
 
-VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object recv_callback, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, double mipgap, VectorXlRef_const known_feas_tour) {
+VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object recv_callback, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, double mipgap, VectorXlRef_const known_feas_tour, bool solve_relaxed, int proc_idx) {
   auto start_time = std::chrono::high_resolution_clock::now();
   int num_nodes = cost_mat.rows();
   int num_groups = group_start_idx.size() - 1;
@@ -422,7 +423,7 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
 
       sol_to_edge_ptr.push_back(std::pair<int, int>(node_idx1, node_idx2));
 
-      error = GRBaddvar(model, 0, NULL, NULL, (node_idx1 == node_idx2 ? 0. : cost_mat(node_idx1, node_idx2)), xlb, xub, GRB_BINARY, ("x" + std::to_string(node_idx1) + "_" + std::to_string(node_idx2)).c_str());
+      error = GRBaddvar(model, 0, NULL, NULL, (node_idx1 == node_idx2 ? 0. : cost_mat(node_idx1, node_idx2)), xlb, xub, solve_relaxed ? GRB_CONTINUOUS : GRB_BINARY, ("x" + std::to_string(node_idx1) + "_" + std::to_string(node_idx2)).c_str());
       if (error) quit(env, model);
 
       edge_start_idx += vars_per_edge;
@@ -545,8 +546,11 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
   }
 
 
-  struct PCGData pcg_data(send_callback, recv_callback, num_decision_vars, num_groups, sol_to_edge_ptr);
-  error = GRBsetcallbackfunc(model, pcg_cb, (void *) &pcg_data);
+  std::shared_ptr<struct PCGData> pcg_data_ptr;
+  if (!solve_relaxed) {
+    pcg_data_ptr = std::make_shared<struct PCGData>(send_callback, recv_callback, num_decision_vars, num_groups, sol_to_edge_ptr);
+    error = GRBsetcallbackfunc(model, pcg_cb, (void *) pcg_data_ptr.get());
+  }
   if (error) quit(env, model);
 
   auto stop_time = std::chrono::high_resolution_clock::now();
@@ -560,7 +564,11 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
   VectorXd ret_vec = std::numeric_limits<double>::infinity()*VectorXd::Ones(4);
   ret_vec(0) = setup_time;
   ret_vec(1) = solve_time;
-  ret_vec(2) = pcg_data.callback_time;
+  if (solve_relaxed) {
+    ret_vec(2) = 0.;
+  } else {
+    ret_vec(2) = pcg_data_ptr->callback_time;
+  }
 
   /*
   start_time = std::chrono::high_resolution_clock::now();
@@ -588,20 +596,34 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
     if (error) quit(env, model);
   }
 
-  assert(node_seq.size() == num_groups + 2);
-
-  node_seq(0) = 0;
-  for (int i = 1; i < num_groups + 2; ++i) {
-    int node_idx1 = node_seq(i - 1);
-    bool found = false;
-    for (int node_idx2 = 0; node_idx2 < num_nodes; ++node_idx2) {
-      if (edges(node_idx1, node_idx2) != -1 && soln[edges(node_idx1, node_idx2)] > 0.5) {
-        node_seq(i) = node_idx2;
-        found = true;
-        break;
+  if (solve_relaxed) {
+    assert(node_seq.size() == num_groups);
+    // Populate node_seq with the nodes with min exclusion value per group (ith element is for group i + 1)
+    for (int group_idx = 0; group_idx < num_groups; ++group_idx) {
+      double min_val = std::numeric_limits<double>::infinity();
+      for (int node_idx = group_start_idx[group_idx]; node_idx < group_start_idx[group_idx + 1]; ++node_idx) {
+        if (soln[edges(node_idx, node_idx)] < min_val) {
+          node_seq(group_idx) = node_idx;
+          min_val = soln[edges(node_idx, node_idx)];
+        }
       }
+      assert(found);
     }
-    assert(found);
+  } else {
+    assert(node_seq.size() == num_groups + 2);
+    node_seq(0) = 0;
+    for (int i = 1; i < num_groups + 2; ++i) {
+      int node_idx1 = node_seq(i - 1);
+      bool found = false;
+      for (int node_idx2 = 0; node_idx2 < num_nodes; ++node_idx2) {
+        if (edges(node_idx1, node_idx2) != -1 && soln[edges(node_idx1, node_idx2)] > 0.5) {
+          node_seq(i) = node_idx2;
+          found = true;
+          break;
+        }
+      }
+      assert(found);
+    }
   }
   return ret_vec;
 }
