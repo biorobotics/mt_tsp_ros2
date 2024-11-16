@@ -130,6 +130,13 @@ VectorXd solve_gtsp_no_gsec(VectorXlRef node_seq, RowMatrixXdRef_const cost_mat,
   error = GRBemptyenv(&env);
   if (error) quit(env, model);
 
+  if (verbose) {
+    error = GRBsetintparam(env, "OutputFlag", 1);
+  } else {
+    error = GRBsetintparam(env, "OutputFlag", 0);
+  }
+  if (error) quit(env, model);
+
   if (save_path.length()) {
     error = GRBsetstrparam(env, "LogFile", (save_path + "/log.txt").c_str());
     if (error) quit(env, model);
@@ -138,12 +145,6 @@ VectorXd solve_gtsp_no_gsec(VectorXlRef node_seq, RowMatrixXdRef_const cost_mat,
   error = GRBstartenv(env);
   if (error) quit(env, model);
 
-  if (verbose) {
-    error = GRBsetintparam(env, "OutputFlag", 1);
-  } else {
-    error = GRBsetintparam(env, "OutputFlag", 0);
-  }
-  if (error) quit(env, model);
   error = GRBsetdblparam(env, "TimeLimit", time_limit);
   if (error) quit(env, model);
   error = GRBsetdblparam(env, "MIPGap", mipgap);
@@ -379,6 +380,13 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
   error = GRBemptyenv(&env);
   if (error) quit(env, model);
 
+  if (verbose) {
+    error = GRBsetintparam(env, "OutputFlag", 1);
+  } else {
+    error = GRBsetintparam(env, "OutputFlag", 0);
+  }
+  if (error) quit(env, model);
+
   if (save_path.length()) {
     error = GRBsetstrparam(env, "LogFile", (save_path + "/log.txt").c_str());
     if (error) quit(env, model);
@@ -387,12 +395,6 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
   error = GRBstartenv(env);
   if (error) quit(env, model);
 
-  if (verbose) {
-    error = GRBsetintparam(env, "OutputFlag", 1);
-  } else {
-    error = GRBsetintparam(env, "OutputFlag", 0);
-  }
-  if (error) quit(env, model);
   error = GRBsetdblparam(env, "TimeLimit", time_limit);
   if (error) quit(env, model);
   error = GRBsetdblparam(env, "MIPGap", mipgap);
@@ -648,6 +650,13 @@ VectorXd solve_gtsp_no_gsec_lazy_edge_eval(VectorXlRef node_seq, py::object edge
   error = GRBemptyenv(&env);
   if (error) quit(env, model);
 
+  if (verbose) {
+    error = GRBsetintparam(env, "OutputFlag", 1);
+  } else {
+    error = GRBsetintparam(env, "OutputFlag", 0);
+  }
+  if (error) quit(env, model);
+
   if (save_path.length()) {
     error = GRBsetstrparam(env, "LogFile", (save_path + "/log.txt").c_str());
     if (error) quit(env, model);
@@ -656,12 +665,6 @@ VectorXd solve_gtsp_no_gsec_lazy_edge_eval(VectorXlRef node_seq, py::object edge
   error = GRBstartenv(env);
   if (error) quit(env, model);
 
-  if (verbose) {
-    error = GRBsetintparam(env, "OutputFlag", 1);
-  } else {
-    error = GRBsetintparam(env, "OutputFlag", 0);
-  }
-  if (error) quit(env, model);
   error = GRBsetdblparam(env, "TimeLimit", time_limit);
   if (error) quit(env, model);
   error = GRBsetdblparam(env, "MIPGap", mipgap);
