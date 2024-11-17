@@ -110,7 +110,7 @@ int __stdcall lazy_edge_eval_cb(GRBmodel *model,
   return error;
 }
 
-VectorXd solve_gtsp_no_gsec(VectorXlRef node_seq, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, bool take_first_feas_soln, double mipgap) {
+VectorXd solve_gtsp_no_gsec(VectorXlRef node_seq, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, bool take_first_feas_soln, double mipgap, bool solve_relaxed) {
   auto start_time = std::chrono::high_resolution_clock::now();
   int num_nodes = cost_mat.rows();
   int num_groups = group_start_idx.size() - 1;
@@ -176,7 +176,7 @@ VectorXd solve_gtsp_no_gsec(VectorXlRef node_seq, RowMatrixXdRef_const cost_mat,
 
       edges(node_idx1, node_idx2) = edge_start_idx;
 
-      error = GRBaddvar(model, 0, NULL, NULL, (node_idx1 == node_idx2 ? 0. : cost_mat(node_idx1, node_idx2)), xlb, xub, GRB_BINARY, ("x" + std::to_string(node_idx1) + "_" + std::to_string(node_idx2)).c_str());
+      error = GRBaddvar(model, 0, NULL, NULL, (node_idx1 == node_idx2 ? 0. : cost_mat(node_idx1, node_idx2)), xlb, xub, solve_relaxed ? GRB_CONTINUOUS : GRB_BINARY, ("x" + std::to_string(node_idx1) + "_" + std::to_string(node_idx2)).c_str());
       if (error) quit(env, model);
 
       edge_start_idx += vars_per_edge;
@@ -281,20 +281,34 @@ VectorXd solve_gtsp_no_gsec(VectorXlRef node_seq, RowMatrixXdRef_const cost_mat,
     if (error) quit(env, model);
   }
 
-  assert(node_seq.size() == num_groups + 2);
-
-  node_seq(0) = 0;
-  for (int i = 1; i < num_groups + 2; ++i) {
-    int node_idx1 = node_seq(i - 1);
-    bool found = false;
-    for (int node_idx2 = 0; node_idx2 < num_nodes; ++node_idx2) {
-      if (edges(node_idx1, node_idx2) != -1 && soln[edges(node_idx1, node_idx2)] > 0.5) {
-        node_seq(i) = node_idx2;
-        found = true;
-        break;
+  if (solve_relaxed) {
+    assert(node_seq.size() == num_groups);
+    // Populate node_seq with the nodes with min exclusion value per group (ith element is for group i + 1)
+    for (int group_idx = 0; group_idx < num_groups; ++group_idx) {
+      double min_val = std::numeric_limits<double>::infinity();
+      for (int node_idx = group_start_idx[group_idx]; node_idx < group_start_idx[group_idx + 1]; ++node_idx) {
+        if (soln[edges(node_idx, node_idx)] < min_val) {
+          node_seq(group_idx) = node_idx;
+          min_val = soln[edges(node_idx, node_idx)];
+        }
       }
+      assert(found);
     }
-    assert(found);
+  } else {
+    assert(node_seq.size() == num_groups + 2);
+    node_seq(0) = 0;
+    for (int i = 1; i < num_groups + 2; ++i) {
+      int node_idx1 = node_seq(i - 1);
+      bool found = false;
+      for (int node_idx2 = 0; node_idx2 < num_nodes; ++node_idx2) {
+        if (edges(node_idx1, node_idx2) != -1 && soln[edges(node_idx1, node_idx2)] > 0.5) {
+          node_seq(i) = node_idx2;
+          found = true;
+          break;
+        }
+      }
+      assert(found);
+    }
   }
   return ret_vec;
 }
