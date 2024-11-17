@@ -94,7 +94,7 @@ int __stdcall lazy_edge_eval_cb(GRBmodel *model,
     }
 
     // Handle updated costs
-    if (!error && (did_update_costs or inf_sol_idx.size() == 0)) {
+    if (!error && edge_eval_data->updated_cost_sol_idx.size() && (did_update_costs or inf_sol_idx.size() == 0)) {
       std::vector<int> updated_cost_sol_idx = edge_eval_data->updated_cost_sol_idx;
       std::vector<double> updated_cost_constr_vals = edge_eval_data->updated_cost_constr_vals;
       updated_cost_sol_idx.push_back(edge_eval_data->sol.size() - 1);
