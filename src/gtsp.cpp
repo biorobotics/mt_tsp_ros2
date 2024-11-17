@@ -630,7 +630,7 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
   return ret_vec;
 }
 
-VectorXd solve_gtsp_no_gsec_lazy_edge_eval(VectorXlRef node_seq, py::object edge_evaluator, RowMatrixXdRef_const lb_cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, bool take_first_feas_soln, double mipgap) {
+VectorXd solve_gtsp_no_gsec_lazy_edge_eval(VectorXlRef node_seq, py::object edge_evaluator, RowMatrixXdRef_const lb_cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, bool take_first_feas_soln, double mipgap, VectorXlRef_const known_feas_tour) {
   auto start_time = std::chrono::high_resolution_clock::now();
   int num_nodes = lb_cost_mat.rows();
   int num_groups = group_start_idx.size() - 1;
@@ -772,6 +772,64 @@ VectorXd solve_gtsp_no_gsec_lazy_edge_eval(VectorXlRef node_seq, py::object edge
   error = GRBsetcallbackfunc(model, lazy_edge_eval_cb, (void *) &edge_eval_data);
   if (error) quit(env, model);
 
+  if (known_feas_tour(0) != -1) {
+    assert(known_feas_tour(0) == 0);
+    assert(known_feas_tour(-1) == 0);
+
+    std::unordered_set<int> used_self_edge_set;
+    for (int node_idx = 1; node_idx < num_nodes; ++node_idx) {
+      // Will erase unused elements next
+      used_self_edge_set.insert(edges(node_idx, node_idx));
+    }
+
+    std::unordered_set<int> unused_self_edge_set;
+    for (int seq_idx = 1; seq_idx < known_feas_tour.size() - 1; ++seq_idx) {
+      unused_self_edge_set.insert(edges(known_feas_tour(seq_idx), known_feas_tour(seq_idx))); // Self-edges that are not used in the known feas tour. Again, exclude depot
+      used_self_edge_set.erase(edges(known_feas_tour(seq_idx), known_feas_tour(seq_idx)));
+    }
+
+    std::unordered_set<int> unused_nonself_edge_set;
+    for (int node_idx1 = 0; node_idx1 < num_nodes; ++node_idx1) {
+      for (int node_idx2 = 0; node_idx2 < num_nodes; ++node_idx2) {
+        if (edges(node_idx1, node_idx2) == -1 || node_idx1 == node_idx2) {
+          continue;
+        }
+        // Will erase used elements next
+        unused_nonself_edge_set.insert(edges(node_idx1, node_idx2));
+      }
+    }
+
+    std::unordered_set<int> used_nonself_edge_set;
+    for (int seq_idx = 0; seq_idx < known_feas_tour.size() - 1; ++seq_idx) {
+      used_nonself_edge_set.insert(edges(known_feas_tour(seq_idx), known_feas_tour(seq_idx + 1)));
+      unused_nonself_edge_set.erase(edges(known_feas_tour(seq_idx), known_feas_tour(seq_idx + 1)));
+    }
+
+    assert(used_self_edge_set.size() + used_nonself_edge_set.size() + unused_self_edge_set.size() + unused_nonself_edge_set.size() == num_decision_vars);
+
+    for (auto edge : used_self_edge_set) {
+      assert(edge != -1);
+      GRBsetdblattrelement(model, GRB_DBL_ATTR_START, edge, 1);
+    }
+
+    for (auto edge : used_nonself_edge_set) {
+      assert(edge != -1);
+      GRBsetdblattrelement(model, GRB_DBL_ATTR_START, edge, 1);
+    }
+
+    for (auto edge : unused_self_edge_set) {
+      assert(edge != -1);
+      GRBsetdblattrelement(model, GRB_DBL_ATTR_START, edge, 0);
+    }
+
+    for (auto edge : unused_nonself_edge_set) {
+      assert(edge != -1);
+      GRBsetdblattrelement(model, GRB_DBL_ATTR_START, edge, 0);
+    }
+
+    GRBsetdblattrelement(model, GRB_DBL_ATTR_START, num_decision_vars - 1, 0.); // Theta
+  }
+
   auto stop_time = std::chrono::high_resolution_clock::now();
   auto setup_time = (double)(std::chrono::duration_cast<std::chrono::milliseconds>(stop_time - start_time).count())/1000;
   start_time = std::chrono::high_resolution_clock::now();
@@ -780,7 +838,7 @@ VectorXd solve_gtsp_no_gsec_lazy_edge_eval(VectorXlRef node_seq, py::object edge
   stop_time = std::chrono::high_resolution_clock::now();
   auto solve_time = (double)(std::chrono::duration_cast<std::chrono::milliseconds>(stop_time - start_time).count())/1000;
 
-  VectorXd ret_vec = std::numeric_limits<double>::infinity()*VectorXd::Ones(4);
+  VectorXd ret_vec = std::numeric_limits<double>::infinity()*VectorXd::Ones(5);
   ret_vec(0) = setup_time;
   ret_vec(1) = solve_time;
   ret_vec(2) = edge_eval_data.callback_time;
@@ -804,6 +862,8 @@ VectorXd solve_gtsp_no_gsec_lazy_edge_eval(VectorXlRef node_seq, py::object edge
   }
 
   error = GRBgetdblattr(model, GRB_DBL_ATTR_OBJVAL, &ret_vec(3));
+  if (error) quit(env, model);
+  error = GRBgetdblattr(model, GRB_DBL_ATTR_OBJBOUND, &ret_vec(4));
   if (error) quit(env, model);
 
   std::vector<double> soln(num_decision_vars);
