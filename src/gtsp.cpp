@@ -4,8 +4,6 @@
 #include "stdio.h"
 #include <chrono>
 #include <iostream>
-#include <memory>
-#include <unordered_set>
 
 using namespace std::chrono;
 
@@ -21,6 +19,16 @@ void quit(GRBenv *env, GRBmodel* model) {
   GRBfreeenv(env);
 
   exit(1);
+}
+
+void quit_no_error(GRBenv *env, GRBmodel* model) {
+  /* Free model */
+
+  GRBfreemodel(model);
+
+  /* Free environment */
+
+  GRBfreeenv(env);
 }
 
 struct EdgeEvalData {
@@ -267,8 +275,7 @@ VectorXd solve_gtsp_no_gsec(VectorXlRef node_seq, RowMatrixXdRef_const cost_mat,
   error = GRBgetintattr(model, GRB_INT_ATTR_SOLCOUNT, &solcount);
   if (error) quit(env, model);
   if (solcount == 0) {
-    GRBfreemodel(model);
-    GRBfreeenv(env);
+    quit_no_error(env, model);
     return ret_vec;
   }
 
@@ -310,6 +317,8 @@ VectorXd solve_gtsp_no_gsec(VectorXlRef node_seq, RowMatrixXdRef_const cost_mat,
       assert(found);
     }
   }
+
+  quit_no_error(env, model);
   return ret_vec;
 }
 
@@ -598,8 +607,7 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
   error = GRBgetintattr(model, GRB_INT_ATTR_SOLCOUNT, &solcount);
   if (error) quit(env, model);
   if (solcount == 0) {
-    GRBfreemodel(model);
-    GRBfreeenv(env);
+    quit_no_error(env, model);
     return ret_vec;
   }
 
@@ -641,6 +649,7 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
       assert(found);
     }
   }
+  quit_no_error(env, model);
   return ret_vec;
 }
 
@@ -870,8 +879,7 @@ VectorXd solve_gtsp_no_gsec_lazy_edge_eval(VectorXlRef node_seq, py::object edge
   error = GRBgetintattr(model, GRB_INT_ATTR_SOLCOUNT, &solcount);
   if (error) quit(env, model);
   if (solcount == 0) {
-    GRBfreemodel(model);
-    GRBfreeenv(env);
+    quit_no_error(env, model);
     return ret_vec;
   }
 
@@ -901,5 +909,6 @@ VectorXd solve_gtsp_no_gsec_lazy_edge_eval(VectorXlRef node_seq, py::object edge
     }
     assert(found);
   }
+  quit_no_error(env, model);
   return ret_vec;
 }
