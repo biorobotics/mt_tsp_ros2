@@ -299,7 +299,7 @@ VectorXd solve_gtsp_no_gsec(VectorXlRef node_seq, RowMatrixXdRef_const cost_mat,
           min_val = soln[edges(node_idx, node_idx)];
         }
       }
-      assert(found);
+      assert(!std::isinf(min_val));
     }
   } else {
     assert(node_seq.size() == num_groups + 2);
@@ -383,7 +383,7 @@ int __stdcall pcg_cb(GRBmodel *model,
   return error;
 }
 
-VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object recv_callback, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, double mipgap, VectorXlRef_const known_feas_tour, bool solve_relaxed, int proc_idx) {
+VectorXd pcg_gtsp(VectorXlRef node_seq, RowMatrixXdRef soln_mat, py::object send_callback, py::object recv_callback, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, double mipgap, VectorXlRef_const known_feas_tour, bool solve_relaxed, int proc_idx) {
   auto start_time = std::chrono::high_resolution_clock::now();
   int num_nodes = cost_mat.rows();
   int num_groups = group_start_idx.size() - 1;
@@ -409,6 +409,9 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
     error = GRBsetintparam(env, "OutputFlag", 0);
   }
   if (error) quit(env, model);
+
+  // error = GRBsetintparam(env, "Threads", 1);
+  // if (error) quit(env, model);
 
   if (save_path.length()) {
     error = GRBsetstrparam(env, "LogFile", (save_path + "/log.txt").c_str());
@@ -620,6 +623,19 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
     if (error) quit(env, model);
   }
 
+  
+  if (soln_mat.rows() == num_nodes and soln_mat.cols() == num_nodes) {
+    for (int node_idx1 = 0; node_idx1 < num_nodes; ++node_idx1) {
+      for (int node_idx2 = 0; node_idx2 < num_nodes; ++node_idx2) {
+        if (edges(node_idx1, node_idx2) == -1) {
+          continue; // Assume already contained infinity
+        } else {
+          soln_mat(node_idx1, node_idx2) = soln[edges(node_idx1, node_idx2)];
+        }
+      }
+    }
+  }
+
   if (solve_relaxed) {
     assert(node_seq.size() == num_groups);
     // Populate node_seq with the nodes with min exclusion value per group (ith element is for group i + 1)
@@ -631,7 +647,7 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, py::object send_callback, py::object rec
           min_val = soln[edges(node_idx, node_idx)];
         }
       }
-      assert(found);
+      assert(!std::isinf(min_val));
     }
   } else {
     assert(node_seq.size() == num_groups + 2);
