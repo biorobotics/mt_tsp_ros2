@@ -26,15 +26,15 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
 
   Vector2d dir_0(c_0, s_0);
   Vector2d perp_0(-s_0, c_0);
-  Vector2d center1 = Vector2d(x_0, y_0) + perp_0*rho;
+  Vector2d center1_L = Vector2d(x_0, y_0) + perp_0*rho;
 
   double c_f = cos(theta_f);
   double s_f = sin(theta_f);
   Vector2d dir_f(c_f, s_f);
   Vector2d perp_f(-s_f, c_f);
-  Vector2d center3 = Vector2d(x_f, y_f) + perp_f*rho;
+  Vector2d center3_L = Vector2d(x_f, y_f) + perp_f*rho;
 
-  Vector2d V = center3 - center1;
+  Vector2d V = center3_L - center1_L;
   double D = V.norm();
   if (D <= 4*rho) {
     double gamma = atan2(V(1), V(0));
@@ -44,19 +44,19 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
     double c_A = cos(theta_A);
     double s_A = sin(theta_A);
     Vector2d vec_A = Vector2d(c_A, s_A);
-    Vector2d center2 = center1 + vec_A*rho*2;
+    Vector2d center2 = center1_L + vec_A*rho*2;
     LRL_dist_A = arclength(-perp_0, vec_A, true, rho);
-    LRL_dist_A += arclength(center1 - center2, center3 - center2, false, rho);
-    LRL_dist_A += arclength(center2 - center3, -perp_f, true, rho);
+    LRL_dist_A += arclength(center1_L - center2, center3_L - center2, false, rho);
+    LRL_dist_A += arclength(center2 - center3_L, -perp_f, true, rho);
 
     double theta_B = gamma - theta;
     double c_B = cos(theta_B);
     double s_B = sin(theta_B);
     Vector2d vec_B = Vector2d(c_B, s_B);
-    center2 = center1 + vec_B*rho*2;
+    center2 = center1_L + vec_B*rho*2;
     LRL_dist_B = arclength(-perp_0, vec_B, true, rho);
-    LRL_dist_B += arclength(center1 - center2, center3 - center2, false, rho);
-    LRL_dist_B += arclength(center2 - center3, -perp_f, true, rho);
+    LRL_dist_B += arclength(center1_L - center2, center3_L - center2, false, rho);
+    LRL_dist_B += arclength(center2 - center3_L, -perp_f, true, rho);
   }
 
   // RLR
@@ -64,12 +64,12 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
   double RLR_dist_B = std::numeric_limits<double>::infinity();
 
   perp_0 = Vector2d(s_0, -c_0);
-  center1 = Vector2d(x_0, y_0) + perp_0*rho;
+  Vector2d center1_R = Vector2d(x_0, y_0) + perp_0*rho;
 
   perp_f = Vector2d(s_f, -c_f);
-  center3 = Vector2d(x_f, y_f) + perp_f*rho;
+  Vector2d center3_R = Vector2d(x_f, y_f) + perp_f*rho;
 
-  V = center3 - center1;
+  V = center3_R - center1_R;
   D = V.norm();
   if (D <= 4*rho) {
     double gamma = atan2(V(1), V(0));
@@ -79,19 +79,19 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
     double c_A = cos(theta_A);
     double s_A = sin(theta_A);
     Vector2d vec_A = Vector2d(c_A, s_A);
-    Vector2d center2 = center1 + vec_A*rho*2;
+    Vector2d center2 = center1_R + vec_A*rho*2;
     RLR_dist_A = arclength(-perp_0, vec_A, false, rho);
-    RLR_dist_A += arclength(center1 - center2, center3 - center2, true, rho);
-    RLR_dist_A += arclength(center2 - center3, -perp_f, false, rho);
+    RLR_dist_A += arclength(center1_R - center2, center3_R - center2, true, rho);
+    RLR_dist_A += arclength(center2 - center3_R, -perp_f, false, rho);
 
     double theta_B = gamma - theta;
     double c_B = cos(theta_B);
     double s_B = sin(theta_B);
     Vector2d vec_B = Vector2d(c_B, s_B);
-    center2 = center1 + Vector2d(c_B, s_B)*rho*2;
+    center2 = center1_R + Vector2d(c_B, s_B)*rho*2;
     RLR_dist_B = arclength(-perp_0, vec_B, false, rho);
-    RLR_dist_B += arclength(center1 - center2, center3 - center2, true, rho);
-    RLR_dist_B += arclength(center2 - center3, -perp_f, false, rho);
+    RLR_dist_B += arclength(center1_R - center2, center3_R - center2, true, rho);
+    RLR_dist_B += arclength(center2 - center3_R, -perp_f, false, rho);
   }
 
   double l_LRL_s = std::min(LRL_dist_A, LRL_dist_B);
@@ -104,38 +104,60 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
 
   // LSL
   double l_LSL = std::numeric_limits<double>::infinity();
-  VectorXd ret = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, 1.);
-  if (!std::isinf(ret(0))) {
-    l_m = std::min(l_m, ret(3));
-    l_LSL = ret(3);
+  VectorXd path_LSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, 1.);
+  if (!std::isinf(path_LSL(0))) {
+    l_m = std::min(l_m, path_LSL(3));
+    l_LSL = path_LSL(3);
   }
 
   // LSR
   double l_LSR = std::numeric_limits<double>::infinity();
-  ret = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, -1.);
-  if (!std::isinf(ret(0))) {
-    l_m = std::min(l_m, ret(3));
-    l_LSR = ret(3);
+  VectorXd path_LSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, -1.);
+  if (!std::isinf(path_LSR(0))) {
+    l_m = std::min(l_m, path_LSR(3));
+    l_LSR = path_LSR(3);
   }
 
   // RSR
   double l_RSR = std::numeric_limits<double>::infinity();
-  ret = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, -1.);
-  if (!std::isinf(ret(0))) {
-    l_m = std::min(l_m, ret(3));
-    l_RSR = ret(3);
+  VectorXd path_RSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, -1.);
+  if (!std::isinf(path_RSR(0))) {
+    l_m = std::min(l_m, path_RSR(3));
+    l_RSR = path_RSR(3);
   }
 
   // RSL
   double l_RSL = std::numeric_limits<double>::infinity();
-  ret = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, 1.);
-  if (!std::isinf(ret(0))) {
-    l_m = std::min(l_m, ret(3));
-    l_RSL = ret(3);
+  VectorXd path_RSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, 1.);
+  if (!std::isinf(path_RSL(0))) {
+    l_m = std::min(l_m, path_RSL(3));
+    l_RSL = path_RSL(3);
   }
 
-  if (std::isinf(l_m)) {
-    return false; // Elongation can't be possible if there's no Dubins path
+  if (l_m > s) {
+    return false; // We can't elongate a Dubins path to length s if the shortest Dubins path has length larger than s
+  }
+
+  if (l_m == l_LRL_s || l_m == l_RLR_s) {
+    // If shortest path is CCC, we can always elongate it
+    return true;
+  }
+
+  // Check if path is in O
+  if (l_m == l_LSL || l_m == l_LSR || l_m == l_RSR || l_m == l_RSL) {
+    double ldist = (center3_L - center1_L).norm();
+    double rdist = (center3_R - center1_R).norm();
+    // O4 and O5
+    if (rdist >= 4*rho || ldist >= 4*rho) {
+      return true;
+    }
+    // O1, O2, O3
+    if ((l_m == l_LSL && (path_LSL(0) >= M_PI || path_LSL(2) >= M_PI || path_LSL(1) >= 4)) ||
+        (l_m == l_LSR && (path_LSR(0) >= M_PI || path_LSR(2) >= M_PI || path_LSR(1) >= 4)) ||
+        (l_m == l_RSR && (path_RSR(0) >= M_PI || path_RSR(2) >= M_PI || path_RSR(1) >= 4)) ||
+        (l_m == l_RSL && (path_RSL(0) >= M_PI || path_RSL(2) >= M_PI || path_RSL(1) >= 4))) {
+      return true;
+    }
   }
 
   double l1 = std::max(l_LRL_s, l_RLR_s);
