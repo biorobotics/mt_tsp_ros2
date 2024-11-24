@@ -98,6 +98,14 @@ install(TARGETS gtsp_wrapper
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(gmdm_wrapper
+  src/bind_gmdm.cpp
+)
+target_include_directories(gmdm_wrapper PRIVATE /$ENV{HOME}/cppitertools/cppitertools/)
+install(TARGETS gmdm_wrapper
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
