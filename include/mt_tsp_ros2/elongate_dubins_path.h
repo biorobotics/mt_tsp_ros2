@@ -134,6 +134,10 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
     l_RSL = ret(3);
   }
 
+  if (std::isinf(l_m)) {
+    return false; // Elongation can't be possible if there's no Dubins path
+  }
+
   double l1 = std::max(l_LRL_s, l_RLR_s);
   double l2 = l_m + 2*M_PI;
   if (l_LRL_l < l2) {
