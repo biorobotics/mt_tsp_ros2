@@ -100,7 +100,7 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
   double l_LRL_l = std::max(LRL_dist_A, LRL_dist_B);
   double l_RLR_l = std::max(RLR_dist_A, RLR_dist_B);
 
-  double l_m = std::min(l_LRL_s, l_LRL_l);
+  double l_m = std::min(l_LRL_s, l_RLR_s);
 
   // LSL
   double l_LSL = std::numeric_limits<double>::infinity();
