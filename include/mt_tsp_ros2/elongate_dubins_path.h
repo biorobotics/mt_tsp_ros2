@@ -183,3 +183,167 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
 
   return s <= l1 || s >= l2;
 }
+
+Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double rho) {
+  // LRL
+  double LRL_dist_A = std::numeric_limits<double>::infinity();
+  double LRL_dist_B = std::numeric_limits<double>::infinity();
+
+  double c_0 = cos(theta_0);
+  double s_0 = sin(theta_0);
+
+  Vector2d dir_0(c_0, s_0);
+  Vector2d perp_0(-s_0, c_0);
+  Vector2d center1_L = Vector2d(x_0, y_0) + perp_0*rho;
+
+  double c_f = cos(theta_f);
+  double s_f = sin(theta_f);
+  Vector2d dir_f(c_f, s_f);
+  Vector2d perp_f(-s_f, c_f);
+  Vector2d center3_L = Vector2d(x_f, y_f) + perp_f*rho;
+
+  Vector2d V = center3_L - center1_L;
+  double D = V.norm();
+  if (D <= 4*rho) {
+    double gamma = atan2(V(1), V(0));
+    double theta = acos(D/(4*rho));
+
+    double theta_A = gamma + theta;
+    double c_A = cos(theta_A);
+    double s_A = sin(theta_A);
+    Vector2d vec_A = Vector2d(c_A, s_A);
+    Vector2d center2 = center1_L + vec_A*rho*2;
+    LRL_dist_A = arclength(-perp_0, vec_A, true, rho);
+    LRL_dist_A += arclength(center1_L - center2, center3_L - center2, false, rho);
+    LRL_dist_A += arclength(center2 - center3_L, -perp_f, true, rho);
+
+    double theta_B = gamma - theta;
+    double c_B = cos(theta_B);
+    double s_B = sin(theta_B);
+    Vector2d vec_B = Vector2d(c_B, s_B);
+    center2 = center1_L + vec_B*rho*2;
+    LRL_dist_B = arclength(-perp_0, vec_B, true, rho);
+    LRL_dist_B += arclength(center1_L - center2, center3_L - center2, false, rho);
+    LRL_dist_B += arclength(center2 - center3_L, -perp_f, true, rho);
+  }
+
+  // RLR
+  double RLR_dist_A = std::numeric_limits<double>::infinity();
+  double RLR_dist_B = std::numeric_limits<double>::infinity();
+
+  perp_0 = Vector2d(s_0, -c_0);
+  Vector2d center1_R = Vector2d(x_0, y_0) + perp_0*rho;
+
+  perp_f = Vector2d(s_f, -c_f);
+  Vector2d center3_R = Vector2d(x_f, y_f) + perp_f*rho;
+
+  V = center3_R - center1_R;
+  D = V.norm();
+  if (D <= 4*rho) {
+    double gamma = atan2(V(1), V(0));
+    double theta = acos(D/(4*rho));
+
+    double theta_A = gamma + theta;
+    double c_A = cos(theta_A);
+    double s_A = sin(theta_A);
+    Vector2d vec_A = Vector2d(c_A, s_A);
+    Vector2d center2 = center1_R + vec_A*rho*2;
+    RLR_dist_A = arclength(-perp_0, vec_A, false, rho);
+    RLR_dist_A += arclength(center1_R - center2, center3_R - center2, true, rho);
+    RLR_dist_A += arclength(center2 - center3_R, -perp_f, false, rho);
+
+    double theta_B = gamma - theta;
+    double c_B = cos(theta_B);
+    double s_B = sin(theta_B);
+    Vector2d vec_B = Vector2d(c_B, s_B);
+    center2 = center1_R + Vector2d(c_B, s_B)*rho*2;
+    RLR_dist_B = arclength(-perp_0, vec_B, false, rho);
+    RLR_dist_B += arclength(center1_R - center2, center3_R - center2, true, rho);
+    RLR_dist_B += arclength(center2 - center3_R, -perp_f, false, rho);
+  }
+
+  double l_LRL_s = std::min(LRL_dist_A, LRL_dist_B);
+  double l_RLR_s = std::min(RLR_dist_A, RLR_dist_B);
+
+  double l_LRL_l = std::max(LRL_dist_A, LRL_dist_B);
+  double l_RLR_l = std::max(RLR_dist_A, RLR_dist_B);
+
+  double l_m = std::min(l_LRL_s, l_RLR_s);
+
+  // LSL
+  double l_LSL = std::numeric_limits<double>::infinity();
+  VectorXd path_LSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, 1.);
+  if (!std::isinf(path_LSL(0))) {
+    l_m = std::min(l_m, path_LSL(3));
+    l_LSL = path_LSL(3);
+  }
+
+  // LSR
+  double l_LSR = std::numeric_limits<double>::infinity();
+  VectorXd path_LSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, -1.);
+  if (!std::isinf(path_LSR(0))) {
+    l_m = std::min(l_m, path_LSR(3));
+    l_LSR = path_LSR(3);
+  }
+
+  // RSR
+  double l_RSR = std::numeric_limits<double>::infinity();
+  VectorXd path_RSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, -1.);
+  if (!std::isinf(path_RSR(0))) {
+    l_m = std::min(l_m, path_RSR(3));
+    l_RSR = path_RSR(3);
+  }
+
+  // RSL
+  double l_RSL = std::numeric_limits<double>::infinity();
+  VectorXd path_RSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, 1.);
+  if (!std::isinf(path_RSL(0))) {
+    l_m = std::min(l_m, path_RSL(3));
+    l_RSL = path_RSL(3);
+  }
+
+  if (l_m == l_LRL_s || l_m == l_RLR_s) {
+    // If shortest path is CCC, we can always elongate it
+    return Vector3d(l_m, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
+  }
+
+  // Check if path is in O
+  if (l_m == l_LSL || l_m == l_LSR || l_m == l_RSR || l_m == l_RSL) {
+    double ldist = (center3_L - center1_L).norm();
+    double rdist = (center3_R - center1_R).norm();
+    // O4 and O5
+    if (rdist >= 4*rho || ldist >= 4*rho) {
+      return Vector3d(l_m, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
+    }
+    // O1, O2, O3
+    if ((l_m == l_LSL && (path_LSL(0) >= M_PI || path_LSL(2) >= M_PI || path_LSL(1) >= 4)) ||
+        (l_m == l_LSR && (path_LSR(0) >= M_PI || path_LSR(2) >= M_PI || path_LSR(1) >= 4)) ||
+        (l_m == l_RSR && (path_RSR(0) >= M_PI || path_RSR(2) >= M_PI || path_RSR(1) >= 4)) ||
+        (l_m == l_RSL && (path_RSL(0) >= M_PI || path_RSL(2) >= M_PI || path_RSL(1) >= 4))) {
+      return Vector3d(l_m, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
+    }
+  }
+
+  double l1 = std::max(l_LRL_s, l_RLR_s);
+  double l2 = l_m + 2*M_PI;
+  if (l_LRL_l < l2) {
+    l2 = l_LRL_l;
+  }
+  if (l_RLR_l < l2) {
+    l2 = l_RLR_l;
+  }
+  if (l_RSR < l2) {
+    l2 = l_RSR;
+  }
+  if (l_RSL < l2) {
+    l2 = l_RSL;
+  }
+  if (l_LSR < l2) {
+    l2 = l_LSR;
+  }
+  if (l_LSL < l2) {
+    l2 = l_LSL;
+  }
+
+  return Vector3d(l_m, l1, l2);
+}

@@ -14,4 +14,5 @@ PYBIND11_MODULE(gmdm_wrapper, m) {
   m.def("csc_inverse", &csc_inverse);
   m.def("ccc_inverse", &ccc_inverse);
   m.def("check_elongation_possible", &check_elongation_possible);
+  m.def("get_elongation_intervals", &get_elongation_intervals);
 }
