@@ -383,7 +383,7 @@ int __stdcall pcg_cb(GRBmodel *model,
   return error;
 }
 
-VectorXd pcg_gtsp(VectorXlRef node_seq, RowMatrixXdRef soln_mat, py::object send_callback, py::object recv_callback, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, double mipgap, VectorXlRef_const known_feas_tour, bool solve_relaxed, int proc_idx) {
+VectorXd pcg_gtsp(VectorXlRef node_seq, RowMatrixXdRef soln_mat, py::object send_callback, py::object recv_callback, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, double mipgap, VectorXlRef_const known_feas_tour, bool solve_relaxed, int proc_idx, bool take_first_feas_soln) {
   auto start_time = std::chrono::high_resolution_clock::now();
   int num_nodes = cost_mat.rows();
   int num_groups = group_start_idx.size() - 1;
@@ -409,6 +409,11 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, RowMatrixXdRef soln_mat, py::object send
     error = GRBsetintparam(env, "OutputFlag", 0);
   }
   if (error) quit(env, model);
+
+  if (take_first_feas_soln) {
+    error = GRBsetintparam(env, "SolutionLimit", 1);
+    if (error) quit(env, model);
+  }
 
   // error = GRBsetintparam(env, "Threads", 1);
   // if (error) quit(env, model);

@@ -13,7 +13,7 @@ typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 typedef Ref<Matrix<double, Dynamic, Dynamic, RowMajor>> RowMatrixXdRef;
 typedef Matrix<int, Dynamic, Dynamic, RowMajor> RowMatrixXi;
 
-VectorXd pcg_gtsp(VectorXlRef node_seq, RowMatrixXdRef soln_mat, py::object send_callback, py::object recv_callback, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, double mipgap, VectorXlRef_const known_feas_tour, bool solve_relaxed, int proc_idx);
+VectorXd pcg_gtsp(VectorXlRef node_seq, RowMatrixXdRef soln_mat, py::object send_callback, py::object recv_callback, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, double mipgap, VectorXlRef_const known_feas_tour, bool solve_relaxed, int proc_idx, bool take_first_feas_soln);
 
 VectorXd solve_gtsp_no_gsec(VectorXlRef node_seq, RowMatrixXdRef_const cost_mat, VectorXlRef_const group_start_idx, bool verbose, double time_limit, std::string save_path, bool take_first_feas_soln, double mipgap, bool solve_relaxed);
 
