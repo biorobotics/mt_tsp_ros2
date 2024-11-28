@@ -5,6 +5,22 @@
 
 using namespace Eigen;
 typedef Ref<Matrix<double, Dynamic, 1>> VectorXdRef;
+typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
+
+double root_find(double rho, double s, double l_m) {
+  double theta = M_PI/4;
+  double r = 4*rho*theta - (s - l_m + 4*rho*sin(theta));
+  int max_iter = 10;
+  for (int i = 0; i < max_iter; ++i) {
+    if (abs(r) < 1e-4) {
+      break;
+    }
+    double dr_dtheta = 4*rho - 4*rho*cos(theta);
+    theta -= r/dr_dtheta;
+    r = 4*rho*theta - (s - l_m + 4*rho*sin(theta));
+  }
+  return theta;
+}
 
 double arclength(const Vector2d &v1, const Vector2d &v2, bool left, double rho) {
   double theta = atan2(v2(1), v2(0)) - atan2(v1(1), v1(0));
@@ -346,4 +362,403 @@ Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double
   }
 
   return Vector3d(l_m, l1, l2);
+}
+
+// Returns a sequence of (turn direction, dist) pairs
+RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double s, double rho) {
+  // LRL
+  double LRL_dist_A = std::numeric_limits<double>::infinity();
+  double LRL_dist_B = std::numeric_limits<double>::infinity();
+
+  double c_0 = cos(theta_0);
+  double s_0 = sin(theta_0);
+
+  Vector2d dir_0(c_0, s_0);
+  Vector2d perp_0(-s_0, c_0);
+  Vector2d center1_L = Vector2d(x_0, y_0) + perp_0*rho;
+
+  double c_f = cos(theta_f);
+  double s_f = sin(theta_f);
+  Vector2d dir_f(c_f, s_f);
+  Vector2d perp_f(-s_f, c_f);
+  Vector2d center3_L = Vector2d(x_f, y_f) + perp_f*rho;
+
+  Vector2d V = center3_L - center1_L;
+  double D = V.norm();
+  if (D <= 4*rho) {
+    double gamma = atan2(V(1), V(0));
+    double theta = acos(D/(4*rho));
+
+    double theta_A = gamma + theta;
+    double c_A = cos(theta_A);
+    double s_A = sin(theta_A);
+    Vector2d vec_A = Vector2d(c_A, s_A);
+    Vector2d center2 = center1_L + vec_A*rho*2;
+    LRL_dist_A = arclength(-perp_0, vec_A, true, rho);
+    LRL_dist_A += arclength(center1_L - center2, center3_L - center2, false, rho);
+    LRL_dist_A += arclength(center2 - center3_L, -perp_f, true, rho);
+
+    double theta_B = gamma - theta;
+    double c_B = cos(theta_B);
+    double s_B = sin(theta_B);
+    Vector2d vec_B = Vector2d(c_B, s_B);
+    center2 = center1_L + vec_B*rho*2;
+    LRL_dist_B = arclength(-perp_0, vec_B, true, rho);
+    LRL_dist_B += arclength(center1_L - center2, center3_L - center2, false, rho);
+    LRL_dist_B += arclength(center2 - center3_L, -perp_f, true, rho);
+  }
+
+  // RLR
+  double RLR_dist_A = std::numeric_limits<double>::infinity();
+  double RLR_dist_B = std::numeric_limits<double>::infinity();
+
+  perp_0 = Vector2d(s_0, -c_0);
+  Vector2d center1_R = Vector2d(x_0, y_0) + perp_0*rho;
+
+  perp_f = Vector2d(s_f, -c_f);
+  Vector2d center3_R = Vector2d(x_f, y_f) + perp_f*rho;
+
+  V = center3_R - center1_R;
+  D = V.norm();
+  if (D <= 4*rho) {
+    double gamma = atan2(V(1), V(0));
+    double theta = acos(D/(4*rho));
+
+    double theta_A = gamma + theta;
+    double c_A = cos(theta_A);
+    double s_A = sin(theta_A);
+    Vector2d vec_A = Vector2d(c_A, s_A);
+    Vector2d center2 = center1_R + vec_A*rho*2;
+    RLR_dist_A = arclength(-perp_0, vec_A, false, rho);
+    RLR_dist_A += arclength(center1_R - center2, center3_R - center2, true, rho);
+    RLR_dist_A += arclength(center2 - center3_R, -perp_f, false, rho);
+
+    double theta_B = gamma - theta;
+    double c_B = cos(theta_B);
+    double s_B = sin(theta_B);
+    Vector2d vec_B = Vector2d(c_B, s_B);
+    center2 = center1_R + Vector2d(c_B, s_B)*rho*2;
+    RLR_dist_B = arclength(-perp_0, vec_B, false, rho);
+    RLR_dist_B += arclength(center1_R - center2, center3_R - center2, true, rho);
+    RLR_dist_B += arclength(center2 - center3_R, -perp_f, false, rho);
+  }
+
+  double l_LRL_s = std::min(LRL_dist_A, LRL_dist_B);
+  double l_RLR_s = std::min(RLR_dist_A, RLR_dist_B);
+
+  double l_LRL_l = std::max(LRL_dist_A, LRL_dist_B);
+  double l_RLR_l = std::max(RLR_dist_A, RLR_dist_B);
+
+  double l_m = std::min(l_LRL_s, l_RLR_s);
+
+  // LSL
+  double l_LSL = std::numeric_limits<double>::infinity();
+  VectorXd path_LSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, 1.);
+  if (!std::isinf(path_LSL(0))) {
+    l_m = std::min(l_m, path_LSL(3));
+    l_LSL = path_LSL(3);
+  }
+
+  // LSR
+  double l_LSR = std::numeric_limits<double>::infinity();
+  VectorXd path_LSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, -1.);
+  if (!std::isinf(path_LSR(0))) {
+    l_m = std::min(l_m, path_LSR(3));
+    l_LSR = path_LSR(3);
+  }
+
+  // RSR
+  double l_RSR = std::numeric_limits<double>::infinity();
+  VectorXd path_RSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, -1.);
+  if (!std::isinf(path_RSR(0))) {
+    l_m = std::min(l_m, path_RSR(3));
+    l_RSR = path_RSR(3);
+  }
+
+  // RSL
+  double l_RSL = std::numeric_limits<double>::infinity();
+  VectorXd path_RSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, 1.);
+  if (!std::isinf(path_RSL(0))) {
+    l_m = std::min(l_m, path_RSL(3));
+    l_RSL = path_RSL(3);
+  }
+
+  if (l_m > s) {
+    return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2); // We can't elongate a Dubins path to length s if the shortest Dubins path has length larger than s
+  }
+
+  // If shortest path is CCC, we can always elongate it
+  if (l_m == l_LRL_s) {
+    RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
+
+    // LRL
+    VectorXd path_LRL = ccc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, -1., rho, 1.);
+    assert(!std::isinf(path_LRL(0)));
+
+    // Left turn
+    turns(0, 0) = 1.;
+    turns(0, 1) = path_LRL(0)*rho;
+
+    // Straight (this is a choice I made, we could also turn right for a bit)
+    turns(1, 0) = 0.;
+    turns(1, 1) = (s - l_m)/2;
+
+    // Right turn
+    turns(2, 0) = -1.;
+    turns(2, 1) = rho*M_PI;
+
+    // Straight
+    turns(3, 0) = 0.;
+    turns(3, 1) = (s - l_m)/2;
+
+    // Right turn
+    turns(4, 0) = -1.;
+    turns(4, 1) = path_LRL(1)*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
+
+    // Left turn
+    turns(5, 0) = 1.;
+    turns(5, 1) = path_LRL(2)*rho;
+
+    return turns;
+  }
+
+  if (l_m == l_RLR_s) {
+    RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
+
+    // RLR
+    VectorXd path_RLR = ccc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, 1., rho, -1.);
+    assert(!std::isinf(path_RLR(0)));
+
+    // Right turn
+    turns(0, 0) = -1.;
+    turns(0, 1) = path_RLR(0)*rho;
+
+    // Straight (this is a choice I made, we could also turn left for a bit)
+    turns(1, 0) = 0.;
+    turns(1, 1) = (s - l_m)/2;
+
+    // Left turn
+    turns(2, 0) = 1.;
+    turns(2, 1) = rho*M_PI;
+
+    // Straight
+    turns(3, 0) = 0.;
+    turns(3, 1) = (s - l_m)/2;
+
+    // Left turn
+    turns(4, 0) = 1.;
+    turns(4, 1) = path_RLR(1)*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
+
+    // Right turn
+    turns(5, 0) = -1.;
+    turns(5, 1) = path_RLR(2)*rho;
+
+    return turns;
+  }
+
+  // Check if path is in O
+  if (l_m == l_LSL || l_m == l_LSR || l_m == l_RSR || l_m == l_RSL) {
+    // O1, O2, O3
+    double first_C_sign = 0.;
+    double first_C_angle = 0.;
+    double second_C_sign = 0.;
+    double second_C_angle = 0.;
+    double S_dist = 0.;
+    if (l_m == l_LSL) {
+      first_C_angle = path_LSL(0);
+      first_C_sign = 1.;
+      second_C_angle = path_LSL(2);
+      second_C_sign = 1.;
+      S_dist = path_LSL(1);
+    } else if (l_m == l_LSR) {
+      first_C_angle = path_LSR(0);
+      first_C_sign = 1.;
+      second_C_angle = path_LSR(2);
+      second_C_sign = -1.;
+      S_dist = path_LSR(1);
+    } else if (l_m == l_RSR) {
+      first_C_angle = path_RSR(0);
+      first_C_sign = -1.;
+      second_C_angle = path_RSR(2);
+      second_C_sign = -1.;
+      S_dist = path_RSR(1);
+    } else {
+      first_C_angle = path_RSL(0);
+      first_C_sign = -1.;
+      second_C_angle = path_RSL(2);
+      second_C_sign = 1.;
+      S_dist = path_RSL(1);
+    }
+
+    if (first_C_angle >= M_PI) {
+      // O1. Elongate first C segment
+      RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
+
+      // Straight (this is a choice I made, we could also turn for a bit)
+      turns(0, 0) = 0.;
+      turns(0, 1) = (s - l_m)/2;
+
+      // Turn
+      turns(1, 0) = first_C_sign;
+      turns(1, 1) = M_PI*rho;
+
+      // Straight
+      turns(2, 0) = 0.;
+      turns(2, 1) = (s - l_m)/2;
+
+      // Turn
+      turns(3, 0) = first_C_sign;
+      turns(3, 1) = first_C_angle*rho - rho*M_PI;
+
+      // Straight (from Dubins path)
+      turns(4, 0) = 0.;
+      turns(4, 1) = S_dist*rho;
+
+      // Turn (from Dubins path)
+      turns(5, 0) = second_C_sign;
+      turns(5, 1) = second_C_angle*rho;
+
+      return turns;
+    }
+
+    if (second_C_angle >= M_PI) {
+      // O2. Elongate second C segment
+      RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
+
+      // Turn (from Dubins path)
+      turns(0, 0) = first_C_sign;
+      turns(0, 1) = first_C_angle*rho;
+
+      // Straight (from Dubins path)
+      turns(1, 0) = 0.;
+      turns(1, 1) = S_dist*rho;
+
+      // Straight (this is a choice I made, we could also turn for a bit)
+      turns(2, 0) = 0.;
+      turns(2, 1) = (s - l_m)/2;
+
+      // Turn
+      turns(3, 0) = second_C_sign;
+      turns(3, 1) = M_PI*rho;
+
+      // Straight
+      turns(4, 0) = 0.;
+      turns(4, 1) = (s - l_m)/2;
+
+      // Left turn
+      turns(5, 0) = second_C_sign;
+      turns(5, 1) = second_C_angle*rho - rho*M_PI;
+
+      return turns;
+    }
+
+    if (S_dist >= 4) {
+      // O3. Elongate S segment
+
+      // Elongate by turning left immediately after the first C segment (choice I made, we could also go straight for a bit, and/or elongate via right turn). First, check if we need an LRL or LSRSL
+      if (s - l_m < 2*M_PI*rho - 4*rho) {
+        // Elongate via LRL
+        RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
+
+        // Turn (from Dubins path)
+        turns(0, 0) = first_C_sign;
+        turns(0, 1) = first_C_angle*rho;
+
+        // LRL
+
+        // All four of these arcs (left arc, right arc split in half, and left arc) will be the same arclength. Need the arclength to sum to s - l_m + 4*rho*sin(theta). So 4*rho*theta = s - l_m + 4*rho*sin(theta)
+        double theta = root_find(rho, s, l_m);
+
+        turns(1, 0) = 1.;
+        turns(1, 1) = rho*theta;
+
+        turns(2, 0) = -1.;
+        turns(2, 1) = 2*rho*theta;
+
+        turns(3, 0) = 1.;
+        turns(3, 1) = rho*theta;
+
+        // Straight (from Dubins path, but shorter)
+        turns(4, 0) = 0.;
+        turns(4, 1) = S_dist*rho - 4*rho*sin(theta);
+
+        // Turn (from Dubins path)
+        turns(5, 0) = second_C_sign;
+        turns(5, 1) = second_C_angle*rho;
+
+        return turns;
+      } else {
+        // Elongate via LSRSL. In doing so, we subtract 4rho from the Dubins S segment. The added C segments travel 2*pi*rho. The added S segments must therefore travel a total distance of s - l_m + 4rho - 2*pi*rho
+        RowMatrixXd turns = RowMatrixXd::Zero(8, 2);
+
+        // Turn (from Dubins path)
+        turns(0, 0) = first_C_sign;
+        turns(0, 1) = first_C_angle*rho;
+
+        // Left turn
+        turns(1, 0) = 1.;
+        turns(1, 1) = M_PI/2*rho;
+
+        // Straight
+        turns(2, 0) = 0.;
+        turns(2, 1) = (s - l_m + 4*rho - 2*M_PI*rho)/2*rho;
+
+        // Right turn
+        turns(3, 0) = -1.;
+        turns(3, 1) = M_PI*rho;
+
+        // Straight
+        turns(4, 0) = 0.;
+        turns(4, 1) = (s - l_m + 4*rho - 2*M_PI*rho)/2*rho;
+
+        // Left turn
+        turns(5, 0) = 1.;
+        turns(5, 1) = M_PI/2*rho;
+
+        // Straight (from Dubins path, but shorter)
+        turns(6, 0) = 0.;
+        turns(6, 1) = S_dist*rho - 4*rho;
+
+        // Turn (from Dubins path)
+        turns(7, 0) = second_C_sign;
+        turns(7, 1) = second_C_angle*rho;
+
+        return turns;
+      }
+
+      double ldist = (center3_L - center1_L).norm();
+      double rdist = (center3_R - center1_R).norm();
+      // O4 and O5
+      if (rdist >= 4*rho || ldist >= 4*rho) {
+        return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2); // TODO: implement
+      }
+    }
+  }
+
+  double l1 = std::max(l_LRL_s, l_RLR_s);
+  double l2 = l_m + 2*M_PI;
+  if (l_LRL_l < l2) {
+    l2 = l_LRL_l;
+  }
+  if (l_RLR_l < l2) {
+    l2 = l_RLR_l;
+  }
+  if (l_RSR < l2) {
+    l2 = l_RSR;
+  }
+  if (l_RSL < l2) {
+    l2 = l_RSL;
+  }
+  if (l_LSR < l2) {
+    l2 = l_LSR;
+  }
+  if (l_LSL < l2) {
+    l2 = l_LSL;
+  }
+
+  if (!(s <= l1 || s >= l2)) {
+    return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
+  }
+
+  return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2); // TODO: implement
 }
