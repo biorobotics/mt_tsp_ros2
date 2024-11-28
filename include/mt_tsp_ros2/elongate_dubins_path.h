@@ -569,25 +569,25 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       first_C_sign = 1.;
       second_C_angle = path_LSL(2);
       second_C_sign = 1.;
-      S_dist = path_LSL(1);
+      S_dist = path_LSL(1)*rho;
     } else if (l_m == l_LSR) {
       first_C_angle = path_LSR(0);
       first_C_sign = 1.;
       second_C_angle = path_LSR(2);
       second_C_sign = -1.;
-      S_dist = path_LSR(1);
+      S_dist = path_LSR(1)*rho;
     } else if (l_m == l_RSR) {
       first_C_angle = path_RSR(0);
       first_C_sign = -1.;
       second_C_angle = path_RSR(2);
       second_C_sign = -1.;
-      S_dist = path_RSR(1);
+      S_dist = path_RSR(1)*rho;
     } else {
       first_C_angle = path_RSL(0);
       first_C_sign = -1.;
       second_C_angle = path_RSL(2);
       second_C_sign = 1.;
-      S_dist = path_RSL(1);
+      S_dist = path_RSL(1)*rho;
     }
 
     if (first_C_angle >= M_PI) {
@@ -612,7 +612,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
       // Straight (from Dubins path)
       turns(4, 0) = 0.;
-      turns(4, 1) = S_dist*rho;
+      turns(4, 1) = S_dist;
 
       // Turn (from Dubins path)
       turns(5, 0) = second_C_sign;
@@ -631,7 +631,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
       // Straight (from Dubins path)
       turns(1, 0) = 0.;
-      turns(1, 1) = S_dist*rho;
+      turns(1, 1) = S_dist;
 
       // Straight (this is a choice I made, we could also turn for a bit)
       turns(2, 0) = 0.;
@@ -652,7 +652,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       return turns;
     }
 
-    if (S_dist >= 4) {
+    if (S_dist >= 4*rho) {
       // O3. Elongate S segment
 
       // Elongate by turning left immediately after the first C segment (choice I made, we could also go straight for a bit, and/or elongate via right turn). First, check if we need an LRL or LSRSL
@@ -680,7 +680,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
         // Straight (from Dubins path, but shorter)
         turns(4, 0) = 0.;
-        turns(4, 1) = S_dist*rho - 4*rho*sin(theta);
+        turns(4, 1) = S_dist - 4*rho*sin(theta);
 
         // Turn (from Dubins path)
         turns(5, 0) = second_C_sign;
@@ -717,7 +717,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
         // Straight (from Dubins path, but shorter)
         turns(6, 0) = 0.;
-        turns(6, 1) = S_dist*rho - 4*rho;
+        turns(6, 1) = S_dist - 4*rho;
 
         // Turn (from Dubins path)
         turns(7, 0) = second_C_sign;
