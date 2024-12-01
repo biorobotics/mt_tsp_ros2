@@ -2,6 +2,7 @@
 #include <cmath>
 #include <iostream>
 #include "gmdm.h"
+#include <stdexcept>
 
 using namespace Eigen;
 typedef Ref<Matrix<double, Dynamic, 1>> VectorXdRef;
@@ -177,7 +178,7 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
   }
 
   double l1 = std::max(l_LRL_s, l_RLR_s);
-  double l2 = l_m + 2*M_PI;
+  double l2 = l_m + 2*M_PI*rho;
   if (l_LRL_l < l2) {
     l2 = l_LRL_l;
   }
@@ -341,7 +342,7 @@ Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double
   }
 
   double l1 = std::max(l_LRL_s, l_RLR_s);
-  double l2 = l_m + 2*M_PI;
+  double l2 = l_m + 2*M_PI*rho;
   if (l_LRL_l < l2) {
     l2 = l_LRL_l;
   }
@@ -730,13 +731,46 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       double rdist = (center3_R - center1_R).norm();
       // O4 and O5
       if (rdist >= 4*rho || ldist >= 4*rho) {
+        // If we can elongate just the S segment using the same strategy for O3, do that
+
+        double theta = root_find(rho, s, l_m);
+        if (4*rho*sin(theta) <= S_dist) {
+          // Elongate via LRL
+          RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
+
+          // Turn (from Dubins path)
+          turns(0, 0) = first_C_sign;
+          turns(0, 1) = first_C_angle*rho;
+
+          turns(1, 0) = 1.;
+          turns(1, 1) = rho*theta;
+
+          turns(2, 0) = -1.;
+          turns(2, 1) = 2*rho*theta;
+
+          turns(3, 0) = 1.;
+          turns(3, 1) = rho*theta;
+
+          // Straight (from Dubins path, but shorter)
+          turns(4, 0) = 0.;
+          turns(4, 1) = S_dist - 4*rho*sin(theta);
+
+          // Turn (from Dubins path)
+          turns(5, 0) = second_C_sign;
+          turns(5, 1) = second_C_angle*rho;
+
+          return turns;
+        }
+
+        // Need to start modifying the C segments
+
         return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2); // TODO: implement
       }
     }
   }
 
   double l1 = std::max(l_LRL_s, l_RLR_s);
-  double l2 = l_m + 2*M_PI;
+  double l2 = l_m + 2*M_PI*rho;
   if (l_LRL_l < l2) {
     l2 = l_LRL_l;
   }
@@ -758,6 +792,174 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
   if (!(s <= l1 || s >= l2)) {
     return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
+  }
+
+  if (s <= l1) {
+    // TODO
+    // Need to move the disc such that the path around the disc approaches the long LRL or RLR path
+  }
+
+  if (l2 == l_m + 2*M_PI*rho) {
+    // Add a loop to beginning of the path, then elongate via parallel tangents
+
+    // Dubins path has to be CSC 
+    double first_C_sign = 0.;
+    double first_C_angle = 0.;
+    double second_C_sign = 0.;
+    double second_C_angle = 0.;
+    double S_dist = 0.;
+    if (l_m == l_LSL) {
+      first_C_angle = path_LSL(0);
+      first_C_sign = 1.;
+      second_C_angle = path_LSL(2);
+      second_C_sign = 1.;
+      S_dist = path_LSL(1)*rho;
+    } else if (l_m == l_LSR) {
+      first_C_angle = path_LSR(0);
+      first_C_sign = 1.;
+      second_C_angle = path_LSR(2);
+      second_C_sign = -1.;
+      S_dist = path_LSR(1)*rho;
+    } else if (l_m == l_RSR) {
+      first_C_angle = path_RSR(0);
+      first_C_sign = -1.;
+      second_C_angle = path_RSR(2);
+      second_C_sign = -1.;
+      S_dist = path_RSR(1)*rho;
+    } else {
+      first_C_angle = path_RSL(0);
+      first_C_sign = -1.;
+      second_C_angle = path_RSL(2);
+      second_C_sign = 1.;
+      S_dist = path_RSL(1)*rho;
+    }
+
+    RowMatrixXd turns = RowMatrixXd::Zero(7, 2);
+
+    // Straight (this is a choice I made, we could also turn for a bit)
+    turns(0, 0) = 0.;
+    turns(0, 1) = (s - 2*M_PI*rho - l_m)/2;
+
+    turns(1, 0) = 1.;
+    turns(1, 1) = M_PI*rho;
+
+    // Straight
+    turns(2, 0) = 0.;
+    turns(2, 1) = (s - 2*M_PI*rho - l_m)/2;
+
+    // Turn
+    turns(3, 0) = 1.;
+    turns(3, 1) = M_PI*rho;
+
+    // Turn (from Dubins path)
+    turns(4, 0) = first_C_sign;
+    turns(4, 1) = first_C_angle*rho;
+
+    // Straight (from Dubins path)
+    turns(5, 0) = 0.;
+    turns(5, 1) = S_dist;
+
+    // Turn (from Dubins path)
+    turns(6, 0) = second_C_sign;
+    turns(6, 1) = second_C_angle*rho;
+  }
+
+  if (l2 == l_RSR || l2 == l_RSL || l2 == l_LSR || l2 == l_LSL) {
+    assert(l2 != l_m);
+
+    double first_C_sign = 0.;
+    double first_C_angle = 0.;
+    double second_C_sign = 0.;
+    double second_C_angle = 0.;
+    double S_dist = 0.;
+
+    if (l2 == l_RSR) {
+      first_C_angle = path_RSR(0);
+      first_C_sign = -1.;
+      second_C_angle = path_RSR(2);
+      second_C_sign = -1.;
+      S_dist = path_RSR(1)*rho;
+    } else if (l2 == l_RSL) {
+      first_C_angle = path_RSL(0);
+      first_C_sign = -1.;
+      second_C_angle = path_RSL(2);
+      second_C_sign = 1.;
+      S_dist = path_RSL(1)*rho;
+    } else if (l2 == l_LSR) {
+      first_C_angle = path_LSR(0);
+      first_C_sign = 1.;
+      second_C_angle = path_LSR(2);
+      second_C_sign = -1.;
+      S_dist = path_LSR(1)*rho;
+    } else if (l2 == l_LSL) {
+      first_C_angle = path_LSL(0);
+      first_C_sign = 1.;
+      second_C_angle = path_LSL(2);
+      second_C_sign = 1.;
+      S_dist = path_LSL(1)*rho;
+    }
+
+    if (first_C_angle >= M_PI) {
+      // Elongate first C segment
+      RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
+
+      // Straight (this is a choice I made, we could also turn for a bit)
+      turns(0, 0) = 0.;
+      turns(0, 1) = (s - l2)/2;
+
+      // Turn
+      turns(1, 0) = first_C_sign;
+      turns(1, 1) = M_PI*rho;
+
+      // Straight
+      turns(2, 0) = 0.;
+      turns(2, 1) = (s - l2)/2;
+
+      // Turn
+      turns(3, 0) = first_C_sign;
+      turns(3, 1) = first_C_angle*rho - rho*M_PI;
+
+      // Straight (from Dubins path)
+      turns(4, 0) = 0.;
+      turns(4, 1) = S_dist;
+
+      // Turn (from Dubins path)
+      turns(5, 0) = second_C_sign;
+      turns(5, 1) = second_C_angle*rho;
+
+      return turns;
+    } else if (second_C_angle >= M_PI) {
+      // Elongate second C segment
+      RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
+
+      // Turn (from Dubins path)
+      turns(0, 0) = first_C_sign;
+      turns(0, 1) = first_C_angle*rho;
+
+      // Straight (from Dubins path)
+      turns(1, 0) = 0.;
+      turns(1, 1) = S_dist;
+
+      // Straight (this is a choice I made, we could also turn for a bit)
+      turns(2, 0) = 0.;
+      turns(2, 1) = (s - l2)/2;
+
+      // Turn
+      turns(3, 0) = second_C_sign;
+      turns(3, 1) = M_PI*rho;
+
+      // Straight
+      turns(4, 0) = 0.;
+      turns(4, 1) = (s - l2)/2;
+
+      // Left turn
+      turns(5, 0) = second_C_sign;
+      turns(5, 1) = second_C_angle*rho - rho*M_PI;
+
+      return turns;
+    } else {
+      throw std::runtime_error("One of the C segments in a CSC path should have parallel tangents");
+    }
   }
 
   return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2); // TODO: implement
