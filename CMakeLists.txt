@@ -100,6 +100,7 @@ install(TARGETS gtsp_wrapper
 
 pybind11_add_module(gmdm_wrapper
   src/bind_gmdm.cpp
+  src/dubins.cpp
 )
 target_include_directories(gmdm_wrapper PRIVATE /$ENV{HOME}/cppitertools/cppitertools/)
 install(TARGETS gmdm_wrapper
