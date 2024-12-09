@@ -891,7 +891,6 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       double y_S_end = y_S_start + S_dist*s_S_start;
 
       Vector2d S_dir = Vector2d(x_S_end - x_S_start, y_S_end - y_S_start).normalized();
-      std::cout << atan2(S_dir(1), S_dir(0)) << std::endl;
       Vector2d perp_to_S = Vector2d(S_dir(1), -S_dir(0)).normalized();
 
       // I'm assuming without proof for now that we have an intersection here
