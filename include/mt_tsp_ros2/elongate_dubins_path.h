@@ -14,14 +14,19 @@ typedef const Ref<const Vector2d>& Vector2dRef_const;
 double root_find(double rho, double s, double l_m) {
   double theta = M_PI/4;
   double r = 4*rho*theta - (s - l_m + 4*rho*sin(theta));
-  int max_iter = 10;
+  int max_iter = 100;
+  bool success = false;
   for (int i = 0; i < max_iter; ++i) {
     if (abs(r) < 1e-4) {
+      success = true;
       break;
     }
     double dr_dtheta = 4*rho - 4*rho*cos(theta);
     theta -= r/dr_dtheta;
     r = 4*rho*theta - (s - l_m + 4*rho*sin(theta));
+  }
+  if (!success) {
+    throw std::runtime_error("Newton did not converge");
   }
   return theta;
 }
@@ -34,30 +39,6 @@ double arclength(const Vector2d &v1, const Vector2d &v2, bool left, double rho) 
     theta -= 2*M_PI;
   }
   return abs(theta*rho);
-}
-
-Vector2d line_segments_intersect_point(double x1i, double y1i, double x1f, double y1f,
-                                       double x2i, double y2i, double x2f, double y2f) {
-  double a = x1f - x1i;
-  double b = x2i - x2f;
-  double c = y1f - y1i;
-  double d = y2i - y2f;
-
-  double det = a*d - b*c;
-
-  if (det == 0) {
-    throw std::runtime_error("Line segments are parallel");
-  }
-
-  double lx = x2i - x1i;
-  double ly = y2i - y1i;
-
-  double t1 = (d*lx - b*ly)/det;
-  double t2 = (-c*lx + a*ly)/det;
-  if (!(0 <= t1 and t1 <= 1 and 0 <= t2 and t2 <= 1)) {
-    return std::numeric_limits<double>::infinity()*Vector2d::Ones();
-  }
-  return Vector2d(x1i + t1*(x1f - x1i), y1i + t1*(y1f - y1i));
 }
 
 RowMatrixXd turns_for_dubins_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double rho) {
@@ -96,19 +77,9 @@ RowMatrixXd turns_for_dubins_path(double x_0, double y_0, double theta_0, double
   turns(1, 1) = path.param[1];
   turns(2, 1) = path.param[2];
 
-  return turns;
-}
+  turns.col(1) *= rho;
 
-RowMatrixXd path_with_waypoint(double x_0, double y_0, double theta_0, double x_wp, double y_wp, double theta_wp, double x_f, double y_f, double theta_f, double rho) {
-  RowMatrixXd turns(6, 2);
-  turns.topRows(3) = turns_for_dubins_path(x_0, y_0, theta_0, x_wp, y_wp, theta_wp, rho);
-  turns.bottomRows(3) = turns_for_dubins_path(x_wp, y_wp, theta_wp, x_f, y_f, theta_f, rho);
   return turns;
-}
-
-double path_length_with_waypoint(double x_0, double y_0, double theta_0, double x_wp, double y_wp, double theta_wp, double x_f, double y_f, double theta_f, double rho) {
-  RowMatrixXd turns = path_with_waypoint(x_0, y_0, theta_0, x_wp, y_wp, theta_wp, x_f, y_f, theta_f, rho);
-  return turns.col(1).sum();
 }
 
 bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double s, double rho) {
@@ -468,6 +439,10 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
   double LRL_l_dist1;
   double LRL_l_dist2;
   double LRL_l_dist3;
+
+  double LRL_s_dist1;
+  double LRL_s_dist2;
+  double LRL_s_dist3;
   if (D <= 4*rho) {
     double gamma = atan2(V(1), V(0));
     double theta = acos(D/(4*rho));
@@ -496,10 +471,18 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       LRL_l_dist1 = dist1_A;
       LRL_l_dist2 = dist2_A;
       LRL_l_dist3 = dist3_A;
+
+      LRL_s_dist1 = dist1_B;
+      LRL_s_dist2 = dist2_B;
+      LRL_s_dist3 = dist3_B;
     } else {
       LRL_l_dist1 = dist1_B;
       LRL_l_dist2 = dist2_B;
       LRL_l_dist3 = dist3_B;
+
+      LRL_s_dist1 = dist1_A;
+      LRL_s_dist2 = dist2_A;
+      LRL_s_dist3 = dist3_A;
     }
   }
 
@@ -519,6 +502,10 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
   double RLR_l_dist1;
   double RLR_l_dist2;
   double RLR_l_dist3;
+
+  double RLR_s_dist1;
+  double RLR_s_dist2;
+  double RLR_s_dist3;
   if (D <= 4*rho) {
     double gamma = atan2(V(1), V(0));
     double theta = acos(D/(4*rho));
@@ -547,10 +534,18 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       RLR_l_dist1 = dist1_A;
       RLR_l_dist2 = dist2_A;
       RLR_l_dist3 = dist3_A;
+
+      RLR_s_dist1 = dist1_B;
+      RLR_s_dist2 = dist2_B;
+      RLR_s_dist3 = dist3_B;
     } else {
       RLR_l_dist1 = dist1_B;
       RLR_l_dist2 = dist2_B;
       RLR_l_dist3 = dist3_B;
+
+      RLR_s_dist1 = dist1_A;
+      RLR_s_dist2 = dist2_A;
+      RLR_s_dist3 = dist3_A;
     }
   }
 
@@ -595,6 +590,9 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
   }
 
   if (l_m > s) {
+    if (verbose) {
+      std::cout << "Desired length is shorter than Dubins path length" << std::endl;
+    }
     return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2); // We can't elongate a Dubins path to length s if the shortest Dubins path has length larger than s
   }
 
@@ -816,7 +814,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
         turns(5, 1) = second_C_angle*rho;
 
         return turns;
-      } else { // Tested
+      } else { // Tested with non-unit rho
         if (verbose) {
           std::cout << "Long case" << std::endl;
         }
@@ -833,7 +831,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
         // Straight
         turns(2, 0) = 0.;
-        turns(2, 1) = (s - l_m + 4*rho - 2*M_PI*rho)/2*rho;
+        turns(2, 1) = (s - l_m + 4*rho - 2*M_PI*rho)/2;
 
         // Right turn
         turns(3, 0) = -1.;
@@ -841,7 +839,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
         // Straight
         turns(4, 0) = 0.;
-        turns(4, 1) = (s - l_m + 4*rho - 2*M_PI*rho)/2*rho;
+        turns(4, 1) = (s - l_m + 4*rho - 2*M_PI*rho)/2;
 
         // Left turn
         turns(5, 0) = 1.;
@@ -862,7 +860,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     double ldist = (center3_L - center1_L).norm();
     double rdist = (center3_R - center1_R).norm();
     // O4 and O5
-    if (rdist >= 4*rho || ldist >= 4*rho) { // Tested both cases
+    if (rdist >= 4*rho || ldist >= 4*rho) { // Tested both cases. Tested O5 with non-unit rho
       if (verbose) {
         if (rdist >= 4*rho) {
           std::cout << "Elongating O4 path" << std::endl;
@@ -870,79 +868,87 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
           std::cout << "Elongating O5 path" << std::endl;
         }
       }
-      Vector2d midpoint;
+
+      first_C_sign = 0.;
+      double first_C_dist_low = 0.;
+      double first_C_dist_high = 0.;
       if (rdist >= 4*rho) {
-        midpoint = (center1_R + center3_R)/2;
+        first_C_sign = -1.;
       } else {
-        midpoint = (center1_L + center3_L)/2;
-      }
-      Vector2d direction = center3_R - center1_R;
-      Vector2d perp(direction(1), -direction(0));
-
-      // Pose at start of S segment
-      double theta_S_start = theta_0 + first_C_sign*first_C_angle*rho;
-      double c_S_start = cos(theta_S_start);
-      double s_S_start = sin(theta_S_start);
-      double x_S_start = x_0 + rho/first_C_sign*(-s_0 + s_S_start);
-      double y_S_start = y_0 + rho/first_C_sign*(c_0 - c_S_start);
-
-      // Pose at end of S segment
-      double x_S_end = x_S_start + S_dist*c_S_start;
-      double y_S_end = y_S_start + S_dist*s_S_start;
-
-      Vector2d S_dir = Vector2d(x_S_end - x_S_start, y_S_end - y_S_start).normalized();
-      Vector2d perp_to_S = Vector2d(S_dir(1), -S_dir(0)).normalized();
-
-      // I'm assuming without proof for now that we have an intersection here
-      Vector2d intersect_point = line_segments_intersect_point(midpoint(0), midpoint(1), midpoint(0) + perp(0)*10*rho, midpoint(1) + perp(1)*10*rho,
-                                                               x_S_start, y_S_start, x_S_end, y_S_end);
-      if (std::isinf(intersect_point(0))) {
-        perp = -perp;
-        intersect_point = line_segments_intersect_point(midpoint(0), midpoint(1), midpoint(0) + perp(0)*10*rho, midpoint(1) + perp(1)*10*rho,
-                                                        x_S_start, y_S_start, x_S_end, y_S_end);
+        first_C_sign = 1.;
       }
 
-      Vector2d disc_motion_dir = (midpoint - intersect_point).normalized();
-      if (perp_to_S.dot(disc_motion_dir) < 0) {
-        perp_to_S = -perp_to_S;
-      }
-
-      double s_angle = disc_motion_dir(0)*S_dir(1) - disc_motion_dir(1)*S_dir(0);;
-      double additional_move_dist = rho/abs(s_angle);
-  
-      Vector2d disc_start_point = intersect_point + additional_move_dist*(intersect_point - midpoint).normalized();
-
-      double disc_motion_dist_lb = 0.;
-      double disc_motion_dist_ub = 1.;
+      int max_iter = 100;
 
       // Find upper bound
-      int max_iter = 20;
+      bool found_ub = false;
+
+      double q_f[3] = {x_f, y_f, theta_f};
+      DubinsPath path;
       for (int i = 0; i < max_iter; ++i) {
-        Vector2d disc_pos = disc_start_point + disc_motion_dir*disc_motion_dist_ub;
-        Vector2d wp_pos = disc_pos + perp_to_S*rho;
-        double l = path_length_with_waypoint(x_0, y_0, theta_0, wp_pos(0), wp_pos(1), theta_S_start, x_f, y_f, theta_f, rho);
-        if (l >= s) {
+        first_C_dist_high = first_C_dist_low + rho*(i + 1);
+        double theta_high = theta_0 + first_C_sign*first_C_dist_high/rho;
+        double c_high = cos(theta_high);
+        double s_high = sin(theta_high);
+        double x_high = x_0 + rho/first_C_sign*(-s_0 + s_high);
+        double y_high = y_0 + rho/first_C_sign*(c_0 - c_high);
+
+        // Compute Dubins path length
+        double q_high[3] = {x_high, y_high, theta_high};
+        dubins_shortest_path(&path, q_high, q_f, rho);
+        double l = dubins_path_length(&path) + first_C_dist_high;
+        if (l > s) {
+          found_ub = true;
           break;
         }
-        disc_motion_dist_ub *= 2;
+      }
+      if (!found_ub) {
+        throw std::runtime_error("Did not find upper bound for binary search");
       }
 
-      RowMatrixXd turns;
+      bool success = false;
       for (int i = 0; i < max_iter; ++i) {
-        double disc_motion_dist = (disc_motion_dist_ub + disc_motion_dist_lb)/2;
-        Vector2d disc_pos = disc_start_point + disc_motion_dir*disc_motion_dist;
-        Vector2d wp_pos = disc_pos + perp_to_S*rho;
-        double l = path_length_with_waypoint(x_0, y_0, theta_0, wp_pos(0), wp_pos(1), theta_S_start, x_f, y_f, theta_f, rho);
-        if (l >= s) {
-          disc_motion_dist_ub = disc_motion_dist;
+        double first_C_dist_mid = (first_C_dist_low + first_C_dist_high)/2;
+        // Compute position and heading after traveling this first C segment
+        double theta_mid = theta_0 + first_C_sign*first_C_dist_mid/rho;
+        double c_mid = cos(theta_mid);
+        double s_mid = sin(theta_mid);
+        double x_mid = x_0 + rho/first_C_sign*(-s_0 + s_mid);
+        double y_mid = y_0 + rho/first_C_sign*(c_0 - c_mid);
+
+        // Compute Dubins path length
+        double q_mid[3] = {x_mid, y_mid, theta_mid};
+        dubins_shortest_path(&path, q_mid, q_f, rho);
+        double l = dubins_path_length(&path) + first_C_dist_mid;
+        if (abs(l - s) < 1e-4) {
+          success = true;
+          break;
+        }
+        if (l > s) {
+          first_C_dist_high = first_C_dist_mid;
         } else {
-          disc_motion_dist_lb = disc_motion_dist;
+          first_C_dist_low = first_C_dist_mid;
         }
       }
 
-      Vector2d disc_pos = disc_start_point + disc_motion_dir*disc_motion_dist_lb;
-      Vector2d wp_pos = disc_pos + perp_to_S*rho;
-      return path_with_waypoint(x_0, y_0, theta_0, wp_pos(0), wp_pos(1), theta_S_start, x_f, y_f, theta_f, rho);
+      if (!success) {
+        throw std::runtime_error("Binary search failed");
+      }
+
+      double first_C_dist_mid = (first_C_dist_low + first_C_dist_high)/2;
+
+      RowMatrixXd turns = RowMatrixXd::Zero(4, 2);
+      turns(0, 0) = first_C_sign;
+      turns(0, 1) = first_C_dist_mid;
+
+      double theta_mid = theta_0 + first_C_sign*first_C_dist_mid/rho;
+      double c_mid = cos(theta_mid);
+      double s_mid = sin(theta_mid);
+      double x_mid = x_0 + rho/first_C_sign*(-s_0 + s_mid);
+      double y_mid = y_0 + rho/first_C_sign*(c_0 - c_mid);
+
+      turns.bottomRows(3) = turns_for_dubins_path(x_mid, y_mid, theta_mid, x_f, y_f, theta_f, rho);
+      return turns;
     }
   }
 
@@ -968,6 +974,9 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
   }
 
   if (!(s <= l1 || s >= l2)) {
+    if (verbose) {
+      std::cout << "Endpoint pair is in nabla O and desired length is infeasible" << std::endl;
+    }
     return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
   }
 
@@ -987,8 +996,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
         first_C_dist_low = path_RSL(0);
       }
 
-      VectorXd path_RLR = ccc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, 1., rho, -1.);
-      first_C_dist_high = path_RLR(0);
+      first_C_dist_high = RLR_s_dist1;
     } else { // s <= l_LRL_s
       first_C_sign = 1.;
       if (l_m == l_LSL) {
@@ -997,13 +1005,13 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
         first_C_dist_low = path_LSR(0);
       }
 
-      VectorXd path_LRL = ccc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, -1., rho, 1.);
-      first_C_dist_high = path_LRL(0);
+      first_C_dist_high = LRL_s_dist1;
     }
 
-    int max_iter = 10;
+    int max_iter = 100;
     double q_f[3] = {x_f, y_f, theta_f};
     DubinsPath path;
+    bool success = false;
     for (int i = 0; i < max_iter; ++i) {
       double first_C_dist_mid = (first_C_dist_low + first_C_dist_high)/2;
       // Compute position and heading after traveling this first C segment
@@ -1017,6 +1025,10 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       double q_mid[3] = {x_mid, y_mid, theta_mid};
       dubins_shortest_path(&path, q_mid, q_f, rho);
       double l = dubins_path_length(&path) + first_C_dist_mid;
+      if (abs(l - s) < 1e-4) {
+        success = true;
+        break;
+      }
       if (l > s) {
         first_C_dist_high = first_C_dist_mid;
       } else {
@@ -1024,17 +1036,23 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       }
     }
 
+    if (!success) {
+      throw std::runtime_error("Binary search failed");
+    }
+
+    double first_C_dist_mid = (first_C_dist_low + first_C_dist_high)/2;
+
     RowMatrixXd turns = RowMatrixXd::Zero(4, 2);
     turns(0, 0) = first_C_sign;
-    turns(0, 1) = first_C_dist_low;
+    turns(0, 1) = first_C_dist_mid;
 
-    double theta_low = theta_0 + first_C_sign*first_C_dist_low/rho;
-    double c_low = cos(theta_low);
-    double s_low = sin(theta_low);
-    double x_low = x_0 + rho/first_C_sign*(-s_0 + s_low);
-    double y_low = y_0 + rho/first_C_sign*(c_0 - c_low);
+    double theta_mid = theta_0 + first_C_sign*first_C_dist_mid/rho;
+    double c_mid = cos(theta_mid);
+    double s_mid = sin(theta_mid);
+    double x_mid = x_0 + rho/first_C_sign*(-s_0 + s_mid);
+    double y_mid = y_0 + rho/first_C_sign*(c_0 - c_mid);
 
-    turns.bottomRows(3) = turns_for_dubins_path(x_low, y_low, theta_low, x_f, y_f, theta_f, rho);
+    turns.bottomRows(3) = turns_for_dubins_path(x_mid, y_mid, theta_mid, x_f, y_f, theta_f, rho);
     return turns;
   }
 
@@ -1109,7 +1127,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     return turns;
   }
 
-  if (l2 == l_LRL_l) { // Tested
+  if (l2 == l_LRL_l) { // Tested with non-unit rho
     if (verbose) {
       std::cout << "Elongating nabla O path, with l2 == long LRL path length" << std::endl;
     }
@@ -1118,7 +1136,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
     // Left turn
     turns(0, 0) = 1.;
-    turns(0, 1) = LRL_l_dist1*rho;
+    turns(0, 1) = LRL_l_dist1;
 
     // Straight (this is a choice I made, we could also turn right for a bit)
     turns(1, 0) = 0.;
@@ -1134,11 +1152,11 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
     // Right turn
     turns(4, 0) = -1.;
-    turns(4, 1) = LRL_l_dist2*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
+    turns(4, 1) = LRL_l_dist2 - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
 
     // Left turn
     turns(5, 0) = 1.;
-    turns(5, 1) = LRL_l_dist3*rho;
+    turns(5, 1) = LRL_l_dist3;
 
     return turns;
   }
@@ -1151,7 +1169,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
     // Right turn
     turns(0, 0) = -1.;
-    turns(0, 1) = RLR_l_dist1*rho;
+    turns(0, 1) = RLR_l_dist1;
 
     // Straight (this is a choice I made, we could also turn left for a bit)
     turns(1, 0) = 0.;
@@ -1167,11 +1185,11 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
     // Left turn
     turns(4, 0) = 1.;
-    turns(4, 1) = RLR_l_dist2*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
+    turns(4, 1) = RLR_l_dist2 - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
 
     // Right turn
     turns(5, 0) = -1.;
-    turns(5, 1) = RLR_l_dist3*rho;
+    turns(5, 1) = RLR_l_dist3;
 
     return turns;
   }
