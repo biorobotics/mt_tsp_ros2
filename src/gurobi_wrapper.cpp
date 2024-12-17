@@ -21,6 +21,16 @@ void quit(GRBenv *env, GRBmodel* model) {
   exit(1);
 }
 
+void quit_no_error(GRBenv *env, GRBmodel* model) {
+  /* Free model */
+
+  GRBfreemodel(model);
+
+  /* Free environment */
+
+  GRBfreeenv(env);
+}
+
 VectorXd solve_socp(VectorXdRef soln, VectorXlRef_const A_csr_indptr, VectorXlRef_const A_csr_indices, VectorXdRef_const A_csr_data, VectorXdRef_const b, VectorXdRef_const gradient, int num_zero_cone, int num_linear_cone, bool add_soc, int num_ctrl_pts, int li_dim, int l_idx, int dim_q, int vars_per_step, int steps, int num_decision_vars, bool verbose, double time_limit) {
   auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -127,8 +137,7 @@ VectorXd solve_socp(VectorXdRef soln, VectorXlRef_const A_csr_indptr, VectorXlRe
   error = GRBgetintattr(model, GRB_INT_ATTR_SOLCOUNT, &solcount);
   if (error) quit(env, model);
   if (solcount == 0) {
-    GRBfreemodel(model);
-    GRBfreeenv(env);
+    quit_no_error(env, model);
     return ret_vec;
   }
 
@@ -141,5 +150,6 @@ VectorXd solve_socp(VectorXdRef soln, VectorXlRef_const A_csr_indptr, VectorXlRe
     if (error) quit(env, model);
   }
 
+  quit_no_error(env, model);
   return ret_vec;
 }
