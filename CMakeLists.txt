@@ -107,6 +107,25 @@ install(TARGETS gmdm_wrapper
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(polyanya_wrapper
+  src/bind_polyanya_wrapper.cpp
+  src/polyanya_wrapper.cpp
+  $ENV{HOME}/polyanya/anyangle/polyanya/structs/mesh.cpp
+  $ENV{HOME}/polyanya/anyangle/polyanya/helpers/geometry.cpp
+  $ENV{HOME}/polyanya/anyangle/polyanya/helpers/timer.cpp
+  $ENV{HOME}/polyanya/anyangle/polyanya/helpers/scenario.cpp
+  $ENV{HOME}/polyanya/anyangle/polyanya/search/expansion.cpp
+  $ENV{HOME}/polyanya/anyangle/polyanya/search/searchinstance.cpp
+)
+target_include_directories(polyanya_wrapper PRIVATE
+  $ENV{HOME}/polyanya/anyangle/polyanya/structs
+  $ENV{HOME}/polyanya/anyangle/polyanya/helpers
+  $ENV{HOME}/polyanya/anyangle/polyanya/search
+)
+install(TARGETS polyanya_wrapper
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
