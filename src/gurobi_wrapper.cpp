@@ -31,7 +31,7 @@ void quit_no_error(GRBenv *env, GRBmodel* model) {
   GRBfreeenv(env);
 }
 
-VectorXd solve_socp(VectorXdRef soln, VectorXlRef_const A_csr_indptr, VectorXlRef_const A_csr_indices, VectorXdRef_const A_csr_data, VectorXdRef_const b, VectorXdRef_const gradient, int num_zero_cone, int num_linear_cone, bool add_soc, int num_ctrl_pts, int li_dim, int l_idx, int dim_q, int vars_per_step, int steps, int num_decision_vars, bool verbose, double time_limit) {
+VectorXd solve_socp(VectorXdRef soln, VectorXlRef_const A_csr_indptr, VectorXlRef_const A_csr_indices, VectorXdRef_const A_csr_data, VectorXdRef_const b, VectorXlRef_const Prows, VectorXlRef_const Pcols, VectorXdRef_const Pvals, VectorXdRef_const gradient, int num_zero_cone, int num_linear_cone, bool add_soc, int num_ctrl_pts, int li_dim, int l_idx, int dim_q, int vars_per_step, int steps, int num_decision_vars, bool verbose, double time_limit) {
   auto start_time = std::chrono::high_resolution_clock::now();
 
   GRBenv   *env   = NULL;
@@ -63,6 +63,16 @@ VectorXd solve_socp(VectorXdRef soln, VectorXlRef_const A_csr_indptr, VectorXlRe
   for (int i = 0; i < num_decision_vars; ++i) {
     error = GRBaddvar(model, 0, NULL, NULL, gradient(i), -GRB_INFINITY, GRB_INFINITY, GRB_CONTINUOUS, ("x" + std::to_string(i)).c_str());
     if (error) quit(env, model);
+  }
+
+  if (Prows.size()) {
+    std::vector<int> Prows_vec(Prows.size());
+    std::vector<int> Pcols_vec(Prows.size());
+    std::vector<double> Pvals_vec(Prows.size());
+    VectorXi::Map(Prows_vec.data(), Prows.size()) = Prows.cast<int>();
+    VectorXi::Map(Pcols_vec.data(), Prows.size()) = Pcols.cast<int>();
+    VectorXd::Map(Pvals_vec.data(), Prows.size()) = 0.5*Pvals;
+    GRBaddqpterms(model, Prows.size(), Prows_vec.data(), Pcols_vec.data(), Pvals_vec.data());
   }
 
   std::vector<int> ind;
