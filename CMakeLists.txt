@@ -5,6 +5,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+add_compile_options(-fopenmp)
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in
@@ -15,6 +17,7 @@ find_package(ament_cmake_ros REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rviz_common REQUIRED)
 find_package(pybind11 REQUIRED)
+find_package(OpenMP REQUIRED)
 
 # The following is for TFTrajectoryDisplay
 
@@ -103,6 +106,7 @@ pybind11_add_module(gmdm_wrapper
   src/dubins.cpp
 )
 target_include_directories(gmdm_wrapper PRIVATE /$ENV{HOME}/cppitertools/cppitertools/)
+target_link_libraries(gmdm_wrapper PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS gmdm_wrapper
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )

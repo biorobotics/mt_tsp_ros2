@@ -3,12 +3,16 @@
 #include <iostream>
 #include "mt_tsp_ros2/dubins.h"
 #include <stdexcept>
+#include <omp.h>
 
 using namespace Eigen;
 typedef Ref<Matrix<double, Dynamic, 1>> VectorXdRef;
 typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
 typedef const Ref<const Vector2d>& Vector2dRef_const;
+typedef Matrix<bool, Dynamic, 1> VectorXb;
+typedef const Ref<const RowMatrixXd>& RowMatrixXdRef_const;
+typedef const Ref<const VectorXd>& VectorXdRef_const;
 
 double root_find(double rho, double s, double l_m) {
   double theta = M_PI/4;
@@ -1328,4 +1332,36 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
   throw std::runtime_error("Should not reach the end of elongated_dubins_path function");
   return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2); // We shouldn't ever get here
+}
+
+VectorXb batch_elongation_check(RowMatrixXdRef_const q0s, RowMatrixXdRef_const qfs, VectorXdRef_const ss, double rho, bool use_openmp) {
+  int num_pairs = q0s.rows();
+  assert(num_pairs == qfs.rows());
+  assert(num_pairs == ss.size());
+  VectorXb results(num_pairs);
+  if (use_openmp) {
+    #pragma omp parallel for
+    for (int pair_idx = 0; pair_idx < num_pairs; ++pair_idx) {
+      double x_0 = q0s(pair_idx, 0);
+      double y_0 = q0s(pair_idx, 1);
+      double theta_0 = q0s(pair_idx, 2);
+      double x_f = qfs(pair_idx, 0);
+      double y_f = qfs(pair_idx, 1);
+      double theta_f = qfs(pair_idx, 2);
+      double s = ss(pair_idx);
+      results(pair_idx) = check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho);
+    }
+  } else {
+    for (int pair_idx = 0; pair_idx < num_pairs; ++pair_idx) {
+      double x_0 = q0s(pair_idx, 0);
+      double y_0 = q0s(pair_idx, 1);
+      double theta_0 = q0s(pair_idx, 2);
+      double x_f = qfs(pair_idx, 0);
+      double y_f = qfs(pair_idx, 1);
+      double theta_f = qfs(pair_idx, 2);
+      double s = ss(pair_idx);
+      results(pair_idx) = check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho);
+    }
+  }
+  return results;
 }

@@ -16,4 +16,5 @@ PYBIND11_MODULE(gmdm_wrapper, m) {
   m.def("check_elongation_possible", &check_elongation_possible);
   m.def("get_elongation_intervals", &get_elongation_intervals);
   m.def("elongated_dubins_path", &elongated_dubins_path);
+  m.def("batch_elongation_check", &batch_elongation_check);
 }
