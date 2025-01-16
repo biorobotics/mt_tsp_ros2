@@ -1,7 +1,6 @@
 #include <Eigen/Dense>
 #include <cmath>
 #include <iostream>
-#include "gmdm.h"
 #include "mt_tsp_ros2/dubins.h"
 #include <stdexcept>
 
@@ -168,36 +167,43 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
 
   double l_m = std::min(l_LRL_s, l_RLR_s);
 
+  double q_0[3] = {x_0, y_0, theta_0};
+  double q_f[3] = {x_f, y_f, theta_f};
+
   // LSL
   double l_LSL = std::numeric_limits<double>::infinity();
-  VectorXd path_LSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, 1.);
-  if (!std::isinf(path_LSL(0))) {
-    l_m = std::min(l_m, path_LSL(3));
-    l_LSL = path_LSL(3);
+  DubinsPath path_LSL;
+  int dubins_error = dubins_path(&path_LSL, q_0, q_f, rho, DubinsPathType::LSL);
+  if (!dubins_error) {
+    l_LSL = dubins_path_length(&path_LSL);
+    l_m = std::min(l_m, l_LSL);
   }
 
   // LSR
   double l_LSR = std::numeric_limits<double>::infinity();
-  VectorXd path_LSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, -1.);
-  if (!std::isinf(path_LSR(0))) {
-    l_m = std::min(l_m, path_LSR(3));
-    l_LSR = path_LSR(3);
+  DubinsPath path_LSR;
+  dubins_error = dubins_path(&path_LSR, q_0, q_f, rho, DubinsPathType::LSR);
+  if (!dubins_error) {
+    l_LSR = dubins_path_length(&path_LSR);
+    l_m = std::min(l_m, l_LSR);
   }
 
   // RSR
   double l_RSR = std::numeric_limits<double>::infinity();
-  VectorXd path_RSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, -1.);
-  if (!std::isinf(path_RSR(0))) {
-    l_m = std::min(l_m, path_RSR(3));
-    l_RSR = path_RSR(3);
+  DubinsPath path_RSR;
+  dubins_error = dubins_path(&path_RSR, q_0, q_f, rho, DubinsPathType::RSR);
+  if (!dubins_error) {
+    l_RSR = dubins_path_length(&path_RSR);
+    l_m = std::min(l_m, l_RSR);
   }
 
   // RSL
   double l_RSL = std::numeric_limits<double>::infinity();
-  VectorXd path_RSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, 1.);
-  if (!std::isinf(path_RSL(0))) {
-    l_m = std::min(l_m, path_RSL(3));
-    l_RSL = path_RSL(3);
+  DubinsPath path_RSL;
+  dubins_error = dubins_path(&path_RSL, q_0, q_f, rho, DubinsPathType::RSL);
+  if (!dubins_error) {
+    l_RSL = dubins_path_length(&path_RSL);
+    l_m = std::min(l_m, l_RSL);
   }
 
   if (l_m > s) {
@@ -218,10 +224,10 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
       return true;
     }
     // O1, O2, O3
-    if ((l_m == l_LSL && (path_LSL(0) >= M_PI || path_LSL(2) >= M_PI || path_LSL(1) >= 4)) ||
-        (l_m == l_LSR && (path_LSR(0) >= M_PI || path_LSR(2) >= M_PI || path_LSR(1) >= 4)) ||
-        (l_m == l_RSR && (path_RSR(0) >= M_PI || path_RSR(2) >= M_PI || path_RSR(1) >= 4)) ||
-        (l_m == l_RSL && (path_RSL(0) >= M_PI || path_RSL(2) >= M_PI || path_RSL(1) >= 4))) {
+    if ((l_m == l_LSL && (path_LSL.param[0] >= M_PI || path_LSL.param[2] >= M_PI || path_LSL.param[1] >= 4)) ||
+        (l_m == l_LSR && (path_LSR.param[0] >= M_PI || path_LSR.param[2] >= M_PI || path_LSR.param[1] >= 4)) ||
+        (l_m == l_RSR && (path_RSR.param[0] >= M_PI || path_RSR.param[2] >= M_PI || path_RSR.param[1] >= 4)) ||
+        (l_m == l_RSL && (path_RSL.param[0] >= M_PI || path_RSL.param[2] >= M_PI || path_RSL.param[1] >= 4))) {
       return true;
     }
   }
@@ -336,36 +342,43 @@ Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double
 
   double l_m = std::min(l_LRL_s, l_RLR_s);
 
+  double q_0[3] = {x_0, y_0, theta_0};
+  double q_f[3] = {x_f, y_f, theta_f};
+
   // LSL
   double l_LSL = std::numeric_limits<double>::infinity();
-  VectorXd path_LSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, 1.);
-  if (!std::isinf(path_LSL(0))) {
-    l_m = std::min(l_m, path_LSL(3));
-    l_LSL = path_LSL(3);
+  DubinsPath path_LSL;
+  int dubins_error = dubins_path(&path_LSL, q_0, q_f, rho, DubinsPathType::LSL);
+  if (!dubins_error) {
+    l_LSL = dubins_path_length(&path_LSL);
+    l_m = std::min(l_m, l_LSL);
   }
 
   // LSR
   double l_LSR = std::numeric_limits<double>::infinity();
-  VectorXd path_LSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, -1.);
-  if (!std::isinf(path_LSR(0))) {
-    l_m = std::min(l_m, path_LSR(3));
-    l_LSR = path_LSR(3);
+  DubinsPath path_LSR;
+  dubins_error = dubins_path(&path_LSR, q_0, q_f, rho, DubinsPathType::LSR);
+  if (!dubins_error) {
+    l_LSR = dubins_path_length(&path_LSR);
+    l_m = std::min(l_m, l_LSR);
   }
 
   // RSR
   double l_RSR = std::numeric_limits<double>::infinity();
-  VectorXd path_RSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, -1.);
-  if (!std::isinf(path_RSR(0))) {
-    l_m = std::min(l_m, path_RSR(3));
-    l_RSR = path_RSR(3);
+  DubinsPath path_RSR;
+  dubins_error = dubins_path(&path_RSR, q_0, q_f, rho, DubinsPathType::RSR);
+  if (!dubins_error) {
+    l_RSR = dubins_path_length(&path_RSR);
+    l_m = std::min(l_m, l_RSR);
   }
 
   // RSL
   double l_RSL = std::numeric_limits<double>::infinity();
-  VectorXd path_RSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, 1.);
-  if (!std::isinf(path_RSL(0))) {
-    l_m = std::min(l_m, path_RSL(3));
-    l_RSL = path_RSL(3);
+  DubinsPath path_RSL;
+  dubins_error = dubins_path(&path_RSL, q_0, q_f, rho, DubinsPathType::RSL);
+  if (!dubins_error) {
+    l_RSL = dubins_path_length(&path_RSL);
+    l_m = std::min(l_m, l_RSL);
   }
 
   if (l_m == l_LRL_s || l_m == l_RLR_s) {
@@ -382,10 +395,10 @@ Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double
       return Vector3d(l_m, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
     }
     // O1, O2, O3
-    if ((l_m == l_LSL && (path_LSL(0) >= M_PI || path_LSL(2) >= M_PI || path_LSL(1) >= 4)) ||
-        (l_m == l_LSR && (path_LSR(0) >= M_PI || path_LSR(2) >= M_PI || path_LSR(1) >= 4)) ||
-        (l_m == l_RSR && (path_RSR(0) >= M_PI || path_RSR(2) >= M_PI || path_RSR(1) >= 4)) ||
-        (l_m == l_RSL && (path_RSL(0) >= M_PI || path_RSL(2) >= M_PI || path_RSL(1) >= 4))) {
+    if ((l_m == l_LSL && (path_LSL.param[0] >= M_PI || path_LSL.param[2] >= M_PI || path_LSL.param[1] >= 4)) ||
+        (l_m == l_LSR && (path_LSR.param[0] >= M_PI || path_LSR.param[2] >= M_PI || path_LSR.param[1] >= 4)) ||
+        (l_m == l_RSR && (path_RSR.param[0] >= M_PI || path_RSR.param[2] >= M_PI || path_RSR.param[1] >= 4)) ||
+        (l_m == l_RSL && (path_RSL.param[0] >= M_PI || path_RSL.param[2] >= M_PI || path_RSL.param[1] >= 4))) {
       return Vector3d(l_m, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
     }
   }
@@ -557,36 +570,43 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
   double l_m = std::min(l_LRL_s, l_RLR_s);
 
+  double q_0[3] = {x_0, y_0, theta_0};
+  double q_f[3] = {x_f, y_f, theta_f};
+
   // LSL
   double l_LSL = std::numeric_limits<double>::infinity();
-  VectorXd path_LSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, 1.);
-  if (!std::isinf(path_LSL(0))) {
-    l_m = std::min(l_m, path_LSL(3));
-    l_LSL = path_LSL(3);
+  DubinsPath path_LSL;
+  int dubins_error = dubins_path(&path_LSL, q_0, q_f, rho, DubinsPathType::LSL);
+  if (!dubins_error) {
+    l_LSL = dubins_path_length(&path_LSL);
+    l_m = std::min(l_m, l_LSL);
   }
 
   // LSR
   double l_LSR = std::numeric_limits<double>::infinity();
-  VectorXd path_LSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, rho, -1.);
-  if (!std::isinf(path_LSR(0))) {
-    l_m = std::min(l_m, path_LSR(3));
-    l_LSR = path_LSR(3);
+  DubinsPath path_LSR;
+  dubins_error = dubins_path(&path_LSR, q_0, q_f, rho, DubinsPathType::LSR);
+  if (!dubins_error) {
+    l_LSR = dubins_path_length(&path_LSR);
+    l_m = std::min(l_m, l_LSR);
   }
 
   // RSR
   double l_RSR = std::numeric_limits<double>::infinity();
-  VectorXd path_RSR = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, -1.);
-  if (!std::isinf(path_RSR(0))) {
-    l_m = std::min(l_m, path_RSR(3));
-    l_RSR = path_RSR(3);
+  DubinsPath path_RSR;
+  dubins_error = dubins_path(&path_RSR, q_0, q_f, rho, DubinsPathType::RSR);
+  if (!dubins_error) {
+    l_RSR = dubins_path_length(&path_RSR);
+    l_m = std::min(l_m, l_RSR);
   }
 
   // RSL
   double l_RSL = std::numeric_limits<double>::infinity();
-  VectorXd path_RSL = csc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, rho, 1.);
-  if (!std::isinf(path_RSL(0))) {
-    l_m = std::min(l_m, path_RSL(3));
-    l_RSL = path_RSL(3);
+  DubinsPath path_RSL;
+  dubins_error = dubins_path(&path_RSL, q_0, q_f, rho, DubinsPathType::RSL);
+  if (!dubins_error) {
+    l_RSL = dubins_path_length(&path_RSL);
+    l_m = std::min(l_m, l_RSL);
   }
 
   if (l_m > s) {
@@ -604,12 +624,13 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
 
     // LRL
-    VectorXd path_LRL = ccc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, 1., rho, -1., rho, 1.);
-    assert(!std::isinf(path_LRL(0)));
+    DubinsPath path_LRL;
+    dubins_error = dubins_path(&path_LRL, q_0, q_f, rho, DubinsPathType::LRL);
+    assert(!dubins_error);
 
     // Left turn
     turns(0, 0) = 1.;
-    turns(0, 1) = path_LRL(0)*rho;
+    turns(0, 1) = path_LRL.param[0]*rho;
 
     // Straight (this is a choice I made, we could also turn right for a bit)
     turns(1, 0) = 0.;
@@ -625,11 +646,11 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
     // Right turn
     turns(4, 0) = -1.;
-    turns(4, 1) = path_LRL(1)*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
+    turns(4, 1) = path_LRL.param[1]*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
 
     // Left turn
     turns(5, 0) = 1.;
-    turns(5, 1) = path_LRL(2)*rho;
+    turns(5, 1) = path_LRL.param[2]*rho;
 
     return turns;
   }
@@ -641,12 +662,13 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
 
     // RLR
-    VectorXd path_RLR = ccc_inverse(x_0, y_0, theta_0, x_f, y_f, theta_f, rho, -1., rho, 1., rho, -1.);
-    assert(!std::isinf(path_RLR(0)));
+    DubinsPath path_RLR;
+    dubins_error = dubins_path(&path_RLR, q_0, q_f, rho, DubinsPathType::RLR);
+    assert(!dubins_error);
 
     // Right turn
     turns(0, 0) = -1.;
-    turns(0, 1) = path_RLR(0)*rho;
+    turns(0, 1) = path_RLR.param[0]*rho;
 
     // Straight (this is a choice I made, we could also turn left for a bit)
     turns(1, 0) = 0.;
@@ -662,11 +684,11 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
     // Left turn
     turns(4, 0) = 1.;
-    turns(4, 1) = path_RLR(1)*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
+    turns(4, 1) = path_RLR.param[1]*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
 
     // Right turn
     turns(5, 0) = -1.;
-    turns(5, 1) = path_RLR(2)*rho;
+    turns(5, 1) = path_RLR.param[2]*rho;
 
     return turns;
   }
@@ -680,29 +702,29 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     double second_C_angle = 0.;
     double S_dist = 0.;
     if (l_m == l_LSL) {
-      first_C_angle = path_LSL(0);
+      first_C_angle = path_LSL.param[0];
       first_C_sign = 1.;
-      second_C_angle = path_LSL(2);
+      second_C_angle = path_LSL.param[2];
       second_C_sign = 1.;
-      S_dist = path_LSL(1)*rho;
+      S_dist = path_LSL.param[1]*rho;
     } else if (l_m == l_LSR) {
-      first_C_angle = path_LSR(0);
+      first_C_angle = path_LSR.param[0];
       first_C_sign = 1.;
-      second_C_angle = path_LSR(2);
+      second_C_angle = path_LSR.param[2];
       second_C_sign = -1.;
-      S_dist = path_LSR(1)*rho;
+      S_dist = path_LSR.param[1]*rho;
     } else if (l_m == l_RSR) {
-      first_C_angle = path_RSR(0);
+      first_C_angle = path_RSR.param[0];
       first_C_sign = -1.;
-      second_C_angle = path_RSR(2);
+      second_C_angle = path_RSR.param[2];
       second_C_sign = -1.;
-      S_dist = path_RSR(1)*rho;
+      S_dist = path_RSR.param[1]*rho;
     } else {
-      first_C_angle = path_RSL(0);
+      first_C_angle = path_RSL.param[0];
       first_C_sign = -1.;
-      second_C_angle = path_RSL(2);
+      second_C_angle = path_RSL.param[2];
       second_C_sign = 1.;
-      S_dist = path_RSL(1)*rho;
+      S_dist = path_RSL.param[1]*rho;
     }
 
     if (first_C_angle >= M_PI) { // Tested
@@ -991,18 +1013,18 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     if (s <= l_RLR_s) {
       first_C_sign = -1.;
       if (l_m == l_RSR) {
-        first_C_dist_low = path_RSR(0);
+        first_C_dist_low = path_RSR.param[0]*rho;
       } else if (l_m == l_RSL) {
-        first_C_dist_low = path_RSL(0);
+        first_C_dist_low = path_RSL.param[0]*rho;
       }
 
       first_C_dist_high = RLR_s_dist1;
     } else { // s <= l_LRL_s
       first_C_sign = 1.;
       if (l_m == l_LSL) {
-        first_C_dist_low = path_LSL(0);
+        first_C_dist_low = path_LSL.param[0]*rho;
       } else if (l_m == l_LSR) {
-        first_C_dist_low = path_LSR(0);
+        first_C_dist_low = path_LSR.param[0]*rho;
       }
 
       first_C_dist_high = LRL_s_dist1;
@@ -1070,29 +1092,29 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     double second_C_angle = 0.;
     double S_dist = 0.;
     if (l_m == l_LSL) {
-      first_C_angle = path_LSL(0);
+      first_C_angle = path_LSL.param[0];
       first_C_sign = 1.;
-      second_C_angle = path_LSL(2);
+      second_C_angle = path_LSL.param[2];
       second_C_sign = 1.;
-      S_dist = path_LSL(1)*rho;
+      S_dist = path_LSL.param[1]*rho;
     } else if (l_m == l_LSR) {
-      first_C_angle = path_LSR(0);
+      first_C_angle = path_LSR.param[0];
       first_C_sign = 1.;
-      second_C_angle = path_LSR(2);
+      second_C_angle = path_LSR.param[2];
       second_C_sign = -1.;
-      S_dist = path_LSR(1)*rho;
+      S_dist = path_LSR.param[1]*rho;
     } else if (l_m == l_RSR) {
-      first_C_angle = path_RSR(0);
+      first_C_angle = path_RSR.param[0];
       first_C_sign = -1.;
-      second_C_angle = path_RSR(2);
+      second_C_angle = path_RSR.param[2];
       second_C_sign = -1.;
-      S_dist = path_RSR(1)*rho;
+      S_dist = path_RSR.param[1]*rho;
     } else {
-      first_C_angle = path_RSL(0);
+      first_C_angle = path_RSL.param[0];
       first_C_sign = -1.;
-      second_C_angle = path_RSL(2);
+      second_C_angle = path_RSL.param[2];
       second_C_sign = 1.;
-      S_dist = path_RSL(1)*rho;
+      S_dist = path_RSL.param[1]*rho;
     }
 
     RowMatrixXd turns = RowMatrixXd::Zero(7, 2);
@@ -1210,29 +1232,29 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     double S_dist = 0.;
 
     if (l2 == l_RSR) {
-      first_C_angle = path_RSR(0);
+      first_C_angle = path_RSR.param[0];
       first_C_sign = -1.;
-      second_C_angle = path_RSR(2);
+      second_C_angle = path_RSR.param[2];
       second_C_sign = -1.;
-      S_dist = path_RSR(1)*rho;
+      S_dist = path_RSR.param[1]*rho;
     } else if (l2 == l_RSL) {
-      first_C_angle = path_RSL(0);
+      first_C_angle = path_RSL.param[0];
       first_C_sign = -1.;
-      second_C_angle = path_RSL(2);
+      second_C_angle = path_RSL.param[2];
       second_C_sign = 1.;
-      S_dist = path_RSL(1)*rho;
+      S_dist = path_RSL.param[1]*rho;
     } else if (l2 == l_LSR) {
-      first_C_angle = path_LSR(0);
+      first_C_angle = path_LSR.param[0];
       first_C_sign = 1.;
-      second_C_angle = path_LSR(2);
+      second_C_angle = path_LSR.param[2];
       second_C_sign = -1.;
-      S_dist = path_LSR(1)*rho;
+      S_dist = path_LSR.param[1]*rho;
     } else if (l2 == l_LSL) {
-      first_C_angle = path_LSL(0);
+      first_C_angle = path_LSL.param[0];
       first_C_sign = 1.;
-      second_C_angle = path_LSL(2);
+      second_C_angle = path_LSL.param[2];
       second_C_sign = 1.;
-      S_dist = path_LSL(1)*rho;
+      S_dist = path_LSL.param[1]*rho;
     }
 
     if (first_C_angle >= M_PI) {
