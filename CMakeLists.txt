@@ -126,6 +126,13 @@ install(TARGETS polyanya_wrapper
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(implicit_grid_astar
+  src/bind_implicit_grid_astar.cpp
+)
+install(TARGETS implicit_grid_astar
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -19,10 +19,10 @@ using namespace std::chrono;
 // the partial solution ending with the best h-value.
 bool arastar(AStarPath &path, std::shared_ptr<ARAStarData> data,
              double start_eps,
-             int acceptable_millis, int timeout_millis) {
+             int acceptable_millis, int timeout_millis, double end_eps = 1.0) {
   auto start_time = std::chrono::high_resolution_clock::now();
 
-  for (double eps = start_eps; eps >= 1.0; eps = (eps == 1.0) ? 0 : std::max(1.0, eps / 2)) {
+  for (double eps = start_eps; eps >= end_eps; eps = (eps == end_eps) ? 0 : std::max(end_eps, eps / 2)) {
     data->reset(eps);
     while (!data->open_list_empty() &&
            data->get_f_goal() >

@@ -306,7 +306,8 @@ class ARAStarData {
           }
         }
       } else {
-        // std::cout << "Goal node has path cost " << goal_node->get_g() << std::endl;
+        std::cout << "Goal node has path cost " << goal_node->get_g() << std::endl;
+        assert(goal_node->get_g() == goal_node->get_f());
       }
 
       AStarCell cell = terminal_node->get_cell();
