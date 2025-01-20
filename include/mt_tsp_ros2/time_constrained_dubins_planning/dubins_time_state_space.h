@@ -97,7 +97,7 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
 
       double path_length = turns.col(1).sum();
 
-      for (int turn_idx = 0; turn_idx < turns.size(); ++turn_idx) {
+      for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
 

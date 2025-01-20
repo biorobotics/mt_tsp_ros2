@@ -52,7 +52,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
 
       double valid_path_length = 0.;
 
-      for (int turn_idx = 0; turn_idx < turns.size(); ++turn_idx) {
+      for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
         double rho_times_turn_dir = rho*turn_dir;
