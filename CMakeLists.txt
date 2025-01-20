@@ -18,6 +18,7 @@ find_package(pluginlib REQUIRED)
 find_package(rviz_common REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(OpenMP REQUIRED)
+find_package(ompl REQUIRED)
 
 # The following is for TFTrajectoryDisplay
 
@@ -134,6 +135,16 @@ pybind11_add_module(implicit_grid_astar
   src/bind_implicit_grid_astar.cpp
 )
 install(TARGETS implicit_grid_astar
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
+pybind11_add_module(time_constrained_dubins_planning
+  src/bind_time_constrained_dubins_planning.cpp
+  src/dubins.cpp
+)
+target_include_directories(time_constrained_dubins_planning PRIVATE ${OMPL_INCLUDE_DIRS})
+target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES} OpenMP::OpenMP_CXX)
+install(TARGETS time_constrained_dubins_planning
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
