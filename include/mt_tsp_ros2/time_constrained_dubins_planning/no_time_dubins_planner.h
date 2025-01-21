@@ -1,8 +1,6 @@
 #pragma once
-#include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_time_state_space.h"
-#include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
-#include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_state_sampler.h"
-#include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_state_validity_checker.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_motion_validator.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_state_validity_checker.h"
 #include <ompl/base/spaces/RealVectorBounds.h>
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/geometric/SimpleSetup.h>
@@ -16,24 +14,23 @@ namespace og = ompl::geometric;
 
 typedef Ref<VectorXd> VectorXdRef;
 
-class TimeConstrainedDubinsPlanner {
+class NoTimeDubinsPlanner {
   public:
-    TimeConstrainedDubinsPlanner(double vmax, double rho, RowMatrixXbRef_const occupancy, Vector2dRef_const map_lb, Vector2dRef_const map_ub) {
-      std::shared_ptr<ob::SE2StateSpace> cspace = std::make_shared<ob::SE2StateSpace>();
+    NoTimeDubinsPlanner(double rho, RowMatrixXbRef_const occupancy, Vector2dRef_const map_lb, Vector2dRef_const map_ub) {
+      space = std::make_shared<ob::SE2StateSpace>();
       ob::RealVectorBounds bounds(2);
       bounds.setLow(0, map_lb(0));
       bounds.setLow(1, map_lb(1));
       bounds.setHigh(0, map_ub(0));
       bounds.setHigh(1, map_ub(1));
-      cspace->setBounds(bounds);
-      space = std::make_shared<DubinsTimeStateSpace>(cspace, vmax, rho);
+      space->setBounds(bounds);
 
       si = std::make_shared<ob::SpaceInformation>(space);
 
-      state_checker = std::make_shared<DubinsStateValidityChecker>(si, occupancy, map_lb, map_ub);
+      state_checker = std::make_shared<NoTimeDubinsStateValidityChecker>(si, occupancy, map_lb, map_ub);
       si->setStateValidityChecker(state_checker);
 
-      motion_validator = std::make_shared<DubinsMotionValidator>(si, vmax, rho);
+      motion_validator = std::make_shared<NoTimeDubinsMotionValidator>(si, rho);
       si->setMotionValidator(motion_validator);
 
       ss = std::make_shared<og::SimpleSetup>(si);
@@ -42,9 +39,6 @@ class TimeConstrainedDubinsPlanner {
     }
 
     RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter) {
-      space->set_start_and_goal(start(0), start(1), start(2), start(3), 
-                                goal(0), goal(1), goal(2), goal(3));
-
       ob::ScopedState<> start_state(space);
       ob::ScopedState<> goal_state(space);
       for (int state_idx = 0; state_idx < start.size(); ++state_idx) {
@@ -61,19 +55,18 @@ class TimeConstrainedDubinsPlanner {
         // std::cout << "Found solution:" << std::endl;
         og::PathGeometric &solutionPath = ss->getSolutionPath();
         int num_steps = solutionPath.getStateCount();
-        RowMatrixXd ret(num_steps, 4);
+        RowMatrixXd ret(num_steps, 3);
         for (int step = 0; step < num_steps; ++step) {
           const ob::State* state = solutionPath.getState(step);
-          ret(step, 0) = state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
-          ret(step, 1) = state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
-          ret(step, 2) = state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
-          ret(step, 3) = state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+          ret(step, 0) = state->as<ob::SE2StateSpace::StateType>()->getX();
+          ret(step, 1) = state->as<ob::SE2StateSpace::StateType>()->getY();
+          ret(step, 2) = state->as<ob::SE2StateSpace::StateType>()->getYaw();
         }
         return ret;
         // ss->getSolutionPath().print(std::cout);
       } else {
-        std::cout << "No solution found" << std::endl;
-        return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 4);
+        // std::cout << "No solution found" << std::endl;
+        return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 3);
       }
     }
 
@@ -84,21 +77,6 @@ class TimeConstrainedDubinsPlanner {
         state[state_idx] = state_vec(state_idx);
       }
       return state_checker->isValid(state.get());
-    }
-
-    VectorXd sample_random_state(VectorXdRef_const start, VectorXdRef_const goal) {
-      space->set_start_and_goal(start(0), start(1), start(2), start(3), 
-                                goal(0), goal(1), goal(2), goal(3));
-      ob::StateSamplerPtr sampler = si->allocStateSampler();
-      ob::ScopedState<> sampled_state(space);
-      std::cout << "sampling state" << std::endl;
-      sampler->sampleUniform(sampled_state.get());
-      std::cout << "sampled state" << std::endl;
-      VectorXd ret(4);
-      for (int state_idx = 0; state_idx < ret.size(); ++state_idx) {
-        ret(state_idx) = sampled_state[state_idx];
-      }
-      return ret;
     }
 
     double checkMotion(VectorXdRef s_valid_vec, VectorXdRef_const s1_vec, VectorXdRef_const s2_vec) {
@@ -122,10 +100,10 @@ class TimeConstrainedDubinsPlanner {
     }
 
   private:
-    std::shared_ptr<DubinsTimeStateSpace> space;
+    std::shared_ptr<ob::SE2StateSpace> space;
     ob::SpaceInformationPtr si;
-    std::shared_ptr<DubinsStateValidityChecker> state_checker;
-    std::shared_ptr<DubinsMotionValidator> motion_validator;
+    std::shared_ptr<NoTimeDubinsStateValidityChecker> state_checker;
+    std::shared_ptr<NoTimeDubinsMotionValidator> motion_validator;
 
     std::shared_ptr<og::SimpleSetup> ss;
     std::shared_ptr<og::RRTConnect> rrt_connect;
