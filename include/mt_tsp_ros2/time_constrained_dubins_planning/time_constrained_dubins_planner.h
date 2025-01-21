@@ -3,8 +3,11 @@
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_state_sampler.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_state_validity_checker.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/custom_rrt_connect.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/custom_rrt.h"
 #include <ompl/base/spaces/RealVectorBounds.h>
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
+#include <ompl/geometric/planners/rrt/RRT.h>
 #include <ompl/geometric/SimpleSetup.h>
 #include <ompl/base/ScopedState.h>
 #include <ompl/base/PlannerStatus.h>
@@ -37,14 +40,16 @@ class TimeConstrainedDubinsPlanner {
       si->setMotionValidator(motion_validator);
 
       ss = std::make_shared<og::SimpleSetup>(si);
-      rrt_connect = std::make_shared<og::RRTConnect>(si);
-      ss->setPlanner(rrt_connect);
+      planner = std::make_shared<CustomRRTConnect>(si);
+      // planner = std::make_shared<og::RRTConnect>(si);
+      // planner = std::make_shared<og::RRT>(si);
+      // planner = std::make_shared<CustomRRT>(si);
+      ss->setPlanner(planner);
     }
 
     RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter) {
       space->set_start_and_goal(start(0), start(1), start(2), start(3), 
                                 goal(0), goal(1), goal(2), goal(3));
-
       ob::ScopedState<> start_state(space);
       ob::ScopedState<> goal_state(space);
       for (int state_idx = 0; state_idx < start.size(); ++state_idx) {
@@ -128,5 +133,5 @@ class TimeConstrainedDubinsPlanner {
     std::shared_ptr<DubinsMotionValidator> motion_validator;
 
     std::shared_ptr<og::SimpleSetup> ss;
-    std::shared_ptr<og::RRTConnect> rrt_connect;
+    std::shared_ptr<ob::Planner> planner;
 };

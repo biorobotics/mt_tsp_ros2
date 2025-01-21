@@ -34,6 +34,116 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
                                                       vmax, rho);
     }
 
+     bool isMetricSpace() const override {
+         return false;
+     }
+
+     bool hasSymmetricDistance() const override {
+         return false;
+     }
+
+     bool hasSymmetricInterpolate() const override {
+         return false;
+     }
+
+    double distance(const ob::State *state1, const ob::State *state2) const override {
+      double x1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t1 = state1->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      double x2 = state2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y2 = state2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta2 = state2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t2 = state2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      if (t1 > t2 || !check_elongation_possible(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho)) {
+        return std::numeric_limits<double>::infinity();
+      }
+      return t2 - t1;
+    }
+
+    void interpolate(const ob::State *s1, const ob::State *s2, double fraction, ob::State *interp_state) const override {
+      double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t1 = s1->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      double x2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
+      if (std::isinf(turns(0, 0))) {
+        interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(x1);
+        interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(y1);
+        interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(theta1);
+        interp_state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = t1;
+        return;
+      }
+
+      double x = x1;
+      double y = y1;
+      double theta = theta1;
+      double t = t1;
+
+      double path_length = turns.col(1).sum();
+
+      for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
+        double turn_dir = turns(turn_idx, 0);
+        double turn_dist = turns(turn_idx, 1);
+
+        bool interp_point_on_this_segment = turns.col(1).head(turn_idx).sum() + turn_dist >= fraction*path_length;
+
+        double dist;
+        if (interp_point_on_this_segment) {
+          // fraction*path_length = turns.col(1).head(turn_idx).sum() + dist
+          dist = fraction*path_length - turns.col(1).head(turn_idx).sum();
+        } else {
+          dist = turn_dist;
+        }
+
+        double rho_times_turn_dir = rho*turn_dir;
+
+        double ctheta = cos(theta);
+        double stheta = sin(theta);
+
+        double next_x;
+        double next_y;
+        double next_theta;
+        double next_t;
+
+        next_t = t + dist/vmax;
+        if (turn_dir == 0) {
+          // S segment
+          next_theta = theta;
+          next_x = x + dist*ctheta;
+          next_y = y + dist*stheta;
+        } else {
+          // C segment
+          next_theta = theta + dist/rho_times_turn_dir;
+          next_x = x + rho_times_turn_dir*(-stheta + sin(next_theta));
+          next_y = y + rho_times_turn_dir*(ctheta - cos(next_theta));
+        }
+
+        if (interp_point_on_this_segment) {
+          interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
+          interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
+          interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
+          interp_state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
+          return;
+        } else {
+          x = next_x;
+          y = next_y;
+          theta = next_theta;
+          t = next_t;
+        }
+      }
+
+      throw ompl::Exception("DubinsTimeStateSpace::interpolate", "reached line of code that should be impossible to reach");
+    }
+
   private:
     double vmax;
     double rho;

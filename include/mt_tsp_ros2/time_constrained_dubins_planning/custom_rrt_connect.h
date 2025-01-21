@@ -1,6 +1,7 @@
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/base/goals/GoalSampleableRegion.h>
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
+#include "ompl/tools/config/SelfConfig.h"
 
 namespace og = ompl::geometric;
 namespace ob = ompl::base;
@@ -10,6 +11,7 @@ class CustomRRTConnect : public og::RRTConnect {
   public:
     /** \brief Constructor */
     CustomRRTConnect(const ob::SpaceInformationPtr &si, bool addIntermediateStates = false) : og::RRTConnect(si, addIntermediateStates) {
+      rng_ = ompl::RNG(3);
     }
 
     ob::PlannerStatus solve(const ob::PlannerTerminationCondition &ptc) override {
@@ -109,7 +111,15 @@ class CustomRRTConnect : public og::RRTConnect {
                   gsc = growTree(otherTree, tgi, rmotion);
 
               /* update distance between trees */
-              const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
+              // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
+              // Anoop
+              double newDist;
+              if (tgi.start) {
+                newDist = tree->getDistanceFunction()(otherTree->nearest(addedMotion), addedMotion);
+              } else {
+                newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
+              }
+
               if (newDist < distanceBetweenTrees_)
               {
                   distanceBetweenTrees_ = newDist;
@@ -236,6 +246,40 @@ class CustomRRTConnect : public og::RRTConnect {
       bool validMotion = tgi.start ? si_->checkMotion(nmotion->state, dstate) :
                                      si_->isValid(dstate) && si_->checkMotion(dstate, nmotion->state);
       */
+
+      // Anoop
+      double d;
+      if (tgi.start) {
+        d = si_->distance(nmotion->state, rmotion->state);
+      } else {
+        d = si_->distance(rmotion->state, nmotion->state);
+      }
+
+      if (d > maxDistance_)
+      {
+          if (tgi.start) {
+            si_->getStateSpace()->interpolate(nmotion->state, rmotion->state, maxDistance_ / d, tgi.xstate);
+          } else {
+            si_->getStateSpace()->interpolate(rmotion->state, nmotion->state, (1 - maxDistance_ / d), tgi.xstate);
+          }
+
+          // Check if we have moved at all. Due to some stranger state spaces (e.g., the constrained state spaces),
+          // interpolate can fail and no progress is made. Without this check, the algorithm gets stuck in a loop as it
+          // thinks it is making progress, when none is actually occurring.
+          if (si_->equalStates(nmotion->state, tgi.xstate))
+              return TRAPPED;
+
+          dstate = tgi.xstate;
+          reach = false;
+      }
+
+      bool validMotion = tgi.start ? si_->checkMotion(nmotion->state, dstate) :
+                                     si_->isValid(dstate) && si_->checkMotion(dstate, nmotion->state);
+
+      // Anoop. Doesn't work because elongation can give a different path if you elongate to an intermediate point
+      // on an elongated path, and the different path may intersect obstacles. Need to store the subpath
+      // of the original elongated path
+      /*
       std::shared_ptr<DubinsMotionValidator> motionValidator = std::static_pointer_cast<DubinsMotionValidator>(si_->getMotionValidator());
 
       double minT = si_->getStateSpace()->as<DubinsTimeStateSpace>()->as<ob::TimeStateSpace>(1)->getMinTimeBound();
@@ -243,10 +287,20 @@ class CustomRRTConnect : public og::RRTConnect {
       bool validMotion;
       if (tgi.start) {
         validMotion = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach);
+        if (validMotion) {
+          std::cout << "here" << std::endl;
+          assert(motionValidator->checkMotion(nmotion->state, tgi.xstate));
+        }
       } else {
         validMotion = si_->isValid(dstate) && motionValidator->checkMotionBackward(dstate, nmotion->state, 0.2*(maxT - minT), tgi.xstate, reach);
+        if (validMotion) {
+          std::cout << "there" << std::endl;
+          assert(motionValidator->checkMotion(tgi.xstate, nmotion->state));
+        }
       }
       dstate = tgi.xstate;
+      assert(si_->isValid(dstate));
+      */
 
       if (!validMotion)
           return TRAPPED;
@@ -287,5 +341,18 @@ class CustomRRTConnect : public og::RRTConnect {
       }
 
       return reach ? REACHED : ADVANCED;
+    }
+
+    void setup() override {
+      RRTConnect::setup();
+      ompl::tools::SelfConfig sc(si_, getName());
+      sc.configurePlannerRange(maxDistance_);
+
+      if (!tStart_)
+          tStart_.reset(ompl::tools::SelfConfig::getDefaultNearestNeighbors<Motion *>(this));
+      if (!tGoal_)
+          tGoal_.reset(ompl::tools::SelfConfig::getDefaultNearestNeighbors<Motion *>(this));
+      tStart_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
+      tGoal_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(b, a); });
     }
 };
