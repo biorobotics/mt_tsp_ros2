@@ -617,6 +617,10 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     l_m = std::min(l_m, l_RSL);
   }
 
+  if (std::abs(l_m - s) < 1e-4) {
+    return turns_for_dubins_path(x_0, y_0, theta_0, x_f, y_f, theta_f, rho);
+  }
+
   if (l_m > s) {
     if (verbose) {
       std::cout << "Desired length is shorter than Dubins path length" << std::endl;
