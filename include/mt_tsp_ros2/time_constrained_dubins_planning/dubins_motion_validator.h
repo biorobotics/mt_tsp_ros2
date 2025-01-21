@@ -10,12 +10,235 @@ class DubinsMotionValidator : public ob::MotionValidator {
     explicit DubinsMotionValidator(const ob::SpaceInformationPtr si, double vmax, double rho) : ob::MotionValidator(si), vmax(vmax), rho(rho) {
     }
 
-    bool checkMotion(const ob::State *s1, const ob::State *s2, std::pair<ob::State*, double> &lastValid) const override {
-      // This function assumes s1 is valid, but not necessarily s2
-      if (!si_->isValid(s2)) {
+    bool checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach) const {
+      double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t1 = s1->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      double x2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
+      if (std::isinf(turns(0, 0))) {
+        reach = false;
+        stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(x1);
+        stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(y1);
+        stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(theta1);
+        stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = t1;
         return false;
       }
 
+      ob::State* next_s = si_->getStateSpace()->allocState();
+
+      double x = x1;
+      double y = y1;
+      double theta = theta1;
+      double t = t1;
+
+      double valid_x = x1;
+      double valid_y = y1;
+      double valid_theta = theta1;
+      double valid_t = t1;
+
+      double valid_path_length = 0.;
+
+      for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
+        double turn_dir = turns(turn_idx, 0);
+        double turn_dist = turns(turn_idx, 1);
+        double rho_times_turn_dir = rho*turn_dir;
+
+        double ctheta = cos(theta);
+        double stheta = sin(theta);
+
+        int num_checks = 100;
+        double next_x;
+        double next_y;
+        double next_theta;
+        double next_t;
+        for (int check_idx = 0; check_idx < num_checks; ++check_idx) {
+          double dist = (check_idx + 1)/(double)num_checks*turn_dist;
+          next_t = t + dist/vmax;
+          if (turn_dir == 0) {
+            // S segment
+            next_theta = theta;
+            next_x = x + dist*ctheta;
+            next_y = y + dist*stheta;
+          } else {
+            // C segment
+            next_theta = theta + dist/rho_times_turn_dir;
+            next_x = x + rho_times_turn_dir*(-stheta + sin(next_theta));
+            next_y = y + rho_times_turn_dir*(ctheta - cos(next_theta));
+          }
+
+          next_s->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
+          next_s->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
+          next_s->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
+          next_s->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
+
+          if (!si_->isValid(next_s)) {
+            reach = false;
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(valid_x);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(valid_y);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
+            stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
+            si_->getStateSpace()->freeState(next_s);
+            return false;
+          }
+
+          valid_x = next_x;
+          valid_y = next_y;
+          valid_theta = next_theta;
+          valid_t = next_t;
+
+          valid_path_length = turns.col(1).head(turn_idx).sum() + dist;
+
+          if (valid_path_length/vmax >= maxDuration) {
+            reach = false;
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(valid_x);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(valid_y);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
+            stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
+            si_->getStateSpace()->freeState(next_s);
+            return true;
+          }
+        }
+        x = next_x;
+        y = next_y;
+        theta = next_theta;
+        t = next_t;
+      }
+
+      reach = true;
+      stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(valid_x);
+      stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(valid_y);
+      stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
+      stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
+      si_->getStateSpace()->freeState(next_s);
+      return true;
+    }
+
+    bool checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach) const {
+      if (!si_->isValid(s2)) {
+        reach = false;
+        return false;
+      }
+      double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t1 = s1->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      double x2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
+      if (std::isinf(turns(0, 0))) {
+        reach = false;
+        stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(x2);
+        stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(y2);
+        stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(theta2);
+        stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = t2;
+        return false;
+      }
+
+      ob::State* next_s = si_->getStateSpace()->allocState();
+
+      double x = x2;
+      double y = y2;
+      double theta = theta2;
+      double t = t2;
+
+      double valid_x = x2;
+      double valid_y = y2;
+      double valid_theta = theta2;
+      double valid_t = t2;
+
+      double valid_path_length = 0.;
+
+      for (int turn_idx = turns.rows() - 1; turn_idx >= 0; --turn_idx) {
+        double turn_dir = turns(turn_idx, 0);
+        double turn_dist = turns(turn_idx, 1);
+        double rho_times_turn_dir = rho*turn_dir;
+
+        double ctheta = cos(theta);
+        double stheta = sin(theta);
+
+        int num_checks = 100;
+        double next_x;
+        double next_y;
+        double next_theta;
+        double next_t;
+        for (int check_idx = 0; check_idx < num_checks; ++check_idx) {
+          double dist = (check_idx + 1)/(double)num_checks*turn_dist;
+          next_t = t - dist/vmax;
+          if (turn_dir == 0) {
+            // S segment
+            next_theta = theta;
+            next_x = x - dist*ctheta;
+            next_y = y - dist*stheta;
+          } else {
+            // C segment
+            next_theta = theta - dist/rho_times_turn_dir;
+            /*
+            next_x = x + rho_times_turn_dir*(-stheta + sin(next_theta));
+            next_y = y + rho_times_turn_dir*(ctheta - cos(next_theta));
+            */
+            next_x = x - rho_times_turn_dir*(stheta - sin(next_theta));
+            next_y = y - rho_times_turn_dir*(-ctheta + cos(next_theta));
+          }
+
+          next_s->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
+          next_s->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
+          next_s->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
+          next_s->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
+
+          if (!si_->isValid(next_s)) {
+            reach = false;
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(valid_x);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(valid_y);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
+            stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
+            si_->getStateSpace()->freeState(next_s);
+            return false;
+          }
+
+          valid_x = next_x;
+          valid_y = next_y;
+          valid_theta = next_theta;
+          valid_t = next_t;
+
+          valid_path_length = turns.col(1).tail(turns.rows() - 1 - turn_idx).sum() + dist;
+
+          if (valid_path_length/vmax >= maxDuration) {
+            reach = false;
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(valid_x);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(valid_y);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
+            stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
+            si_->getStateSpace()->freeState(next_s);
+            return true;
+          }
+        }
+        x = next_x;
+        y = next_y;
+        theta = next_theta;
+        t = next_t;
+      }
+
+      reach = true;
+      stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(valid_x);
+      stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(valid_y);
+      stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
+      stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
+      si_->getStateSpace()->freeState(next_s);
+      return true;
+    }
+
+    bool checkMotion(const ob::State *s1, const ob::State *s2, std::pair<ob::State*, double> &lastValid) const override {
       double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
       double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
       double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();

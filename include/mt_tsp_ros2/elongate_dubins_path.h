@@ -49,7 +49,10 @@ RowMatrixXd turns_for_dubins_path(double x_0, double y_0, double theta_0, double
   DubinsPath path;
   double q_0[3] = {x_0, y_0, theta_0};
   double q_f[3] = {x_f, y_f, theta_f};
-  dubins_shortest_path(&path, q_0, q_f, rho);
+  int status = dubins_shortest_path(&path, q_0, q_f, rho);
+  if (status) {
+    throw std::runtime_error("Dubins path computation failed");
+  }
 
   RowMatrixXd turns = RowMatrixXd::Zero(3, 2);
   if (path.type == DubinsPathType::LSL) {
@@ -1155,6 +1158,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
   }
 
   if (l2 == l_LRL_l) { // Tested with non-unit rho
+    assert(D <= 4*rho);
     if (verbose) {
       std::cout << "Elongating nabla O path, with l2 == long LRL path length" << std::endl;
     }
@@ -1189,6 +1193,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
   }
 
   if (l2 == l_RLR_l) { // Tested
+    assert(D <= 4*rho);
     if (verbose) {
       std::cout << "Elongating nabla O path, with l2 == long RLR path length" << std::endl;
     }

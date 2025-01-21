@@ -2,6 +2,7 @@
 #include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_motion_validator.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_state_validity_checker.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_state_space_deterministic_sampling.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/custom_rrt_star.h"
 #include <ompl/base/spaces/RealVectorBounds.h>
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/geometric/planners/rrt/RRTstar.h>
@@ -11,6 +12,7 @@
 #include <ompl/base/PlannerStatus.h>
 #include <ompl/base/PlannerTerminationCondition.h>
 #include <ompl/base/terminationconditions/IterationTerminationCondition.h>
+#include <ompl/datastructures/NearestNeighborsSqrtApprox.h>
 
 namespace ob = ompl::base;
 namespace og = ompl::geometric;
@@ -37,8 +39,10 @@ class NoTimeDubinsPlanner {
       si->setMotionValidator(motion_validator);
 
       ss = std::make_shared<og::SimpleSetup>(si);
-      planner = std::make_shared<og::ABITstar>(si);
+      // planner = std::make_shared<og::ABITstar>(si);
       // planner = std::make_shared<og::RRTstar>(si);
+      planner = std::make_shared<CustomRRTstar>(si);
+      // planner->setNearestNeighbors<ompl::NearestNeighborsSqrtApprox>();
       // planner = std::make_shared<og::RRTConnect>(si);
       ss->setPlanner(planner);
     }
@@ -111,5 +115,6 @@ class NoTimeDubinsPlanner {
     std::shared_ptr<NoTimeDubinsMotionValidator> motion_validator;
 
     std::shared_ptr<og::SimpleSetup> ss;
-    std::shared_ptr<ob::Planner> planner;
+    std::shared_ptr<CustomRRTstar> planner;
+    // std::shared_ptr<og::RRTstar> planner;
 };
