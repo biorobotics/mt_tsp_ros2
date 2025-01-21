@@ -60,11 +60,22 @@ class TimeConstrainedDubinsPlanner {
       if (status == ob::PlannerStatus::StatusType::EXACT_SOLUTION) {
         std::cout << "Found solution:" << std::endl;
         // print the path to screen
-        ss->getSolutionPath().print(std::cout);
+        og::PathGeometric &solutionPath = ss->getSolutionPath();
+        int num_steps = solutionPath.getStateCount();
+        RowMatrixXd ret(num_steps, 4);
+        for (int step = 0; step < num_steps; ++step) {
+          const ob::State* state = solutionPath.getState(step);
+          ret(step, 0) = state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+          ret(step, 1) = state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+          ret(step, 2) = state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+          ret(step, 3) = state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+        }
+        return ret;
+        // ss->getSolutionPath().print(std::cout);
       } else {
         std::cout << "No solution found" << std::endl;
+        return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 4);
       }
-      return RowMatrixXd::Zero(1, 1);
     }
 
     // Test functions
