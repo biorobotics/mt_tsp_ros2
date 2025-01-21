@@ -55,9 +55,9 @@ class TimeConstrainedDubinsPlanner {
       ss->setStartAndGoalStates(start_state, goal_state);
 
       // attempt to solve the problem within one second of planning time
-      ob::PlannerStatus solved = ss->solve(ob::plannerOrTerminationCondition(ob::timedPlannerTerminationCondition(time_limit), ob::IterationTerminationCondition(max_iter)));
+      ob::PlannerStatus status = ss->solve(ob::plannerOrTerminationCondition(ob::timedPlannerTerminationCondition(time_limit), ob::IterationTerminationCondition(max_iter)));
 
-      if (solved) {
+      if (status == ob::PlannerStatus::StatusType::EXACT_SOLUTION) {
         std::cout << "Found solution:" << std::endl;
         // print the path to screen
         ss->getSolutionPath().print(std::cout);
@@ -89,25 +89,6 @@ class TimeConstrainedDubinsPlanner {
         ret(state_idx) = sampled_state[state_idx];
       }
       return ret;
-    }
-
-    VectorXd interpolate(VectorXdRef_const s1_vec, VectorXdRef_const s2_vec, double fraction) {
-      ob::ScopedState<> s1(space);
-      ob::ScopedState<> s2(space);
-      ob::ScopedState<> s_interp(space);
-
-      for (int state_idx = 0; state_idx < s1_vec.size(); ++state_idx) {
-        s1[state_idx] = s1_vec(state_idx);
-        s2[state_idx] = s2_vec(state_idx);
-      }
-
-      space->interpolate(s1.get(), s2.get(), fraction, s_interp.get());
-
-      VectorXd s_interp_vec(s1_vec.size());
-      for (int state_idx = 0; state_idx < s1_vec.size(); ++state_idx) {
-        s_interp_vec(state_idx) = s_interp[state_idx];
-      }
-      return s_interp_vec;
     }
 
     double checkMotion(VectorXdRef s_valid_vec, VectorXdRef_const s1_vec, VectorXdRef_const s2_vec) {

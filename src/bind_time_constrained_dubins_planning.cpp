@@ -11,7 +11,6 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
     .def("plan", &TimeConstrainedDubinsPlanner::plan)
     .def("is_state_valid", &TimeConstrainedDubinsPlanner::is_state_valid)
     .def("sample_random_state", &TimeConstrainedDubinsPlanner::sample_random_state)
-    .def("interpolate", &TimeConstrainedDubinsPlanner::interpolate)
     .def("checkMotion", &TimeConstrainedDubinsPlanner::checkMotion)
     ;
 }
