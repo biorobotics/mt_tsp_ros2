@@ -1,8 +1,11 @@
 #pragma once
 #include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_motion_validator.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_state_validity_checker.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/SE2_state_space_deterministic_sampling.h"
 #include <ompl/base/spaces/RealVectorBounds.h>
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
+#include <ompl/geometric/planners/rrt/RRTstar.h>
+#include <ompl/geometric/planners/informedtrees/ABITstar.h>
 #include <ompl/geometric/SimpleSetup.h>
 #include <ompl/base/ScopedState.h>
 #include <ompl/base/PlannerStatus.h>
@@ -14,10 +17,12 @@ namespace og = ompl::geometric;
 
 typedef Ref<VectorXd> VectorXdRef;
 
+typedef og::ABITstar planner_t;
+
 class NoTimeDubinsPlanner {
   public:
     NoTimeDubinsPlanner(double rho, RowMatrixXbRef_const occupancy, Vector2dRef_const map_lb, Vector2dRef_const map_ub) {
-      space = std::make_shared<ob::SE2StateSpace>();
+      space = std::make_shared<SE2StateSpaceDeterministicSampling>();
       ob::RealVectorBounds bounds(2);
       bounds.setLow(0, map_lb(0));
       bounds.setLow(1, map_lb(1));
@@ -34,8 +39,8 @@ class NoTimeDubinsPlanner {
       si->setMotionValidator(motion_validator);
 
       ss = std::make_shared<og::SimpleSetup>(si);
-      rrt_connect = std::make_shared<og::RRTConnect>(si);
-      ss->setPlanner(rrt_connect);
+      planner = std::make_shared<planner_t>(si);
+      ss->setPlanner(planner);
     }
 
     RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter) {
@@ -100,11 +105,11 @@ class NoTimeDubinsPlanner {
     }
 
   private:
-    std::shared_ptr<ob::SE2StateSpace> space;
+    std::shared_ptr<SE2StateSpaceDeterministicSampling> space;
     ob::SpaceInformationPtr si;
     std::shared_ptr<NoTimeDubinsStateValidityChecker> state_checker;
     std::shared_ptr<NoTimeDubinsMotionValidator> motion_validator;
 
     std::shared_ptr<og::SimpleSetup> ss;
-    std::shared_ptr<og::RRTConnect> rrt_connect;
+    std::shared_ptr<planner_t> planner;
 };
