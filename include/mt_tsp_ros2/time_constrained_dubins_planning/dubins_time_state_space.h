@@ -88,6 +88,7 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
         interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(y1);
         interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(theta1);
         interp_state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = t1;
+        return;
       }
 
       double x = x1;
@@ -147,6 +148,8 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
           t = next_t;
         }
       }
+
+      throw ompl::Exception("DubinsTimeStateSpace::interpolate", "reached line of code that should be impossible to reach");
     }
 
   private:
