@@ -6,6 +6,8 @@
 
 namespace py = pybind11;
 
+PYBIND11_MAKE_OPAQUE(std::vector<RowMatrixXd>)
+
 PYBIND11_MODULE(time_constrained_dubins_planning, m) {
   py::class_<TimeConstrainedDubinsPlanner>(m, "TimeConstrainedDubinsPlanner")
     .def(py::init<double, double, RowMatrixXbRef_const, Vector2dRef_const, Vector2dRef_const>())
@@ -21,4 +23,6 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
     .def("is_state_valid", &NoTimeDubinsPlanner::is_state_valid)
     .def("checkMotion", &NoTimeDubinsPlanner::checkMotion)
     ;
+
+  py::bind_vector<std::vector<RowMatrixXd>>(m, "VectorOfMatrices");
 }

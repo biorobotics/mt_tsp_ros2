@@ -937,6 +937,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
         }
       }
       if (!found_ub) {
+        return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
         throw std::runtime_error("Did not find upper bound for binary search");
       }
 
@@ -966,6 +967,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       }
 
       if (!success) {
+        return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
         throw std::runtime_error("Binary search failed");
       }
 
@@ -1071,6 +1073,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     }
 
     if (!success) {
+      return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
       throw std::runtime_error("Binary search failed");
     }
 

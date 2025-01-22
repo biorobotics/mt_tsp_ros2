@@ -7,6 +7,13 @@ namespace og = ompl::geometric;
 namespace ob = ompl::base;
 using namespace og;
 
+class DubinsSegmentChain : public og::PathGeometric {
+  public:
+    DubinsSegmentChain(const ob::SpaceInformationPtr &si) : og::PathGeometric(si) {
+    }
+    std::vector<RowMatrixXd> turns_chain;
+};
+
 class CustomRRTConnect : public og::RRTConnect {
   public:
     /** \brief Constructor */
@@ -26,7 +33,8 @@ class CustomRRTConnect : public og::RRTConnect {
 
       while (const ob::State *st = pis_.nextStart())
       {
-          auto *motion = new Motion(si_);
+          // Anoop: changed Motion to DubinsMotion
+          auto *motion = new DubinsMotion(si_);
           si_->copyState(motion->state, st);
           motion->root = motion->state;
           tStart_->add(motion);
@@ -55,7 +63,8 @@ class CustomRRTConnect : public og::RRTConnect {
 
       Motion *approxsol = nullptr;
       double approxdif = std::numeric_limits<double>::infinity();
-      auto *rmotion = new Motion(si_);
+      // Anoop: changed Motion to DubinsMotion
+      auto *rmotion = new DubinsMotion(si_);
       ob::State *rstate = rmotion->state;
       bool solved = false;
 
@@ -71,7 +80,8 @@ class CustomRRTConnect : public og::RRTConnect {
               const ob::State *st = tGoal_->size() == 0 ? pis_.nextGoal(ptc) : pis_.nextGoal();
               if (st != nullptr)
               {
-                  auto *motion = new Motion(si_);
+                  // Anoop: changed Motion to DubinsMotion
+                  auto *motion = new DubinsMotion(si_);
                   si_->copyState(motion->state, st);
                   motion->root = motion->state;
                   tGoal_->add(motion);
@@ -113,12 +123,7 @@ class CustomRRTConnect : public og::RRTConnect {
               /* update distance between trees */
               // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
               // Anoop
-              double newDist;
-              if (tgi.start) {
-                newDist = tree->getDistanceFunction()(otherTree->nearest(addedMotion), addedMotion);
-              } else {
-                newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
-              }
+              double newDist = tree->getDistanceFunction()(otherTree->nearest(addedMotion), addedMotion);
 
               if (newDist < distanceBetweenTrees_)
               {
@@ -135,10 +140,14 @@ class CustomRRTConnect : public og::RRTConnect {
                   // it must be the case that either the start tree or the goal tree has made some progress
                   // so one of the parents is not nullptr. We go one step 'back' to avoid having a duplicate state
                   // on the solution path
-                  if (startMotion->parent != nullptr)
+                  RowMatrixXd middle_turns;
+                  if (startMotion->parent != nullptr) {
+                      middle_turns = static_cast<DubinsMotion*>(startMotion)->turns;
                       startMotion = startMotion->parent;
-                  else
+                  } else {
+                      middle_turns = static_cast<DubinsMotion*>(goalMotion)->turns;
                       goalMotion = goalMotion->parent;
+                  }
 
                   connectionPoint_ = std::make_pair(startMotion->state, goalMotion->state);
 
@@ -159,12 +168,31 @@ class CustomRRTConnect : public og::RRTConnect {
                       solution = solution->parent;
                   }
 
+                  /*
                   auto path(std::make_shared<PathGeometric>(si_));
                   path->getStates().reserve(mpath1.size() + mpath2.size());
                   for (int i = mpath1.size() - 1; i >= 0; --i)
                       path->append(mpath1[i]->state);
                   for (auto &i : mpath2)
                       path->append(i->state);
+                  */
+
+                  // Anoop 
+                  auto path(std::make_shared<DubinsSegmentChain>(si_));
+                  path->getStates().reserve(mpath1.size() + mpath2.size());
+                  for (int i = mpath1.size() - 1; i >= 0; --i) {
+                      path->append(mpath1[i]->state);
+                      if (static_cast<DubinsMotion*>(mpath1[i])->turns(0, 1) != -1) {
+                        path->turns_chain.push_back(static_cast<DubinsMotion*>(mpath1[i])->turns);
+                      }
+                  }
+                  path->turns_chain.push_back(middle_turns);
+                  for (auto &i : mpath2) {
+                      path->append(i->state);
+                      if (static_cast<DubinsMotion*>(i)->turns(0, 1) != -1) {
+                        path->turns_chain.push_back(static_cast<DubinsMotion*>(i)->turns);
+                      }
+                  }
 
                   pdef_->addSolutionPath(path, false, 0.0, getName());
                   solved = true;
@@ -206,9 +234,17 @@ class CustomRRTConnect : public og::RRTConnect {
               approxsol = approxsol->parent;
           }
 
+          /*
           auto path(std::make_shared<PathGeometric>(si_));
           for (int i = mpath.size() - 1; i >= 0; --i)
               path->append(mpath[i]->state);
+          */
+
+          // Anoop
+          auto path(std::make_shared<DubinsSegmentChain>(si_));
+          for (int i = mpath.size() - 1; i >= 0; --i)
+              path->append(mpath[i]->state);
+
           pdef_->addSolutionPath(path, true, approxdif, getName());
           return ob::PlannerStatus::APPROXIMATE_SOLUTION;
       }
@@ -248,6 +284,7 @@ class CustomRRTConnect : public og::RRTConnect {
       */
 
       // Anoop
+      /*
       double d;
       if (tgi.start) {
         d = si_->distance(nmotion->state, rmotion->state);
@@ -271,74 +308,72 @@ class CustomRRTConnect : public og::RRTConnect {
 
           dstate = tgi.xstate;
           reach = false;
+          std::cout << "interpolated" << std::endl;
+          std::cout << tgi.start << std::endl;
+          double x1 = nmotion->state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+          double y1 = nmotion->state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+          double theta1 = nmotion->state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+          double t1 = nmotion->state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+          double x2 = rmotion->state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+          double y2 = rmotion->state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+          double theta2 = rmotion->state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+          double t2 = rmotion->state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+          double x3 = dstate->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+          double y3 = dstate->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+          double theta3 = dstate->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+          double t3 = dstate->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+          std::cout << x1 << " " << y1 << " " << theta1 << " " << t1 << std::endl;
+          std::cout << x2 << " " << y2 << " " << theta2 << " " << t2 << std::endl;
+          std::cout << x3 << " " << y3 << " " << theta3 << " " << t3 << std::endl;
       }
 
+      std::cout << "checking valid" << std::endl;
       bool validMotion = tgi.start ? si_->checkMotion(nmotion->state, dstate) :
                                      si_->isValid(dstate) && si_->checkMotion(dstate, nmotion->state);
+      std::cout << "done checking valid" << std::endl;
+      */
 
       // Anoop. Doesn't work because elongation can give a different path if you elongate to an intermediate point
       // on an elongated path, and the different path may intersect obstacles. Need to store the subpath
       // of the original elongated path
-      /*
+
       std::shared_ptr<DubinsMotionValidator> motionValidator = std::static_pointer_cast<DubinsMotionValidator>(si_->getMotionValidator());
 
       double minT = si_->getStateSpace()->as<DubinsTimeStateSpace>()->as<ob::TimeStateSpace>(1)->getMinTimeBound();
       double maxT = si_->getStateSpace()->as<DubinsTimeStateSpace>()->as<ob::TimeStateSpace>(1)->getMaxTimeBound();
       bool validMotion;
+      RowMatrixXd turns;
       if (tgi.start) {
-        validMotion = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach);
+        turns = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
         if (validMotion) {
-          std::cout << "here" << std::endl;
-          assert(motionValidator->checkMotion(nmotion->state, tgi.xstate));
+          // assert(motionValidator->checkMotion(nmotion->state, tgi.xstate));
         }
       } else {
-        validMotion = si_->isValid(dstate) && motionValidator->checkMotionBackward(dstate, nmotion->state, 0.2*(maxT - minT), tgi.xstate, reach);
+        turns = motionValidator->checkMotionBackward(dstate, nmotion->state, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
         if (validMotion) {
-          std::cout << "there" << std::endl;
-          assert(motionValidator->checkMotion(tgi.xstate, nmotion->state));
+          // assert(motionValidator->checkMotion(tgi.xstate, nmotion->state));
         }
       }
       dstate = tgi.xstate;
-      assert(si_->isValid(dstate));
-      */
 
       if (!validMotion)
           return TRAPPED;
 
-      if (addIntermediateStates_)
-      {
-          const ob::State *astate = tgi.start ? nmotion->state : dstate;
-          const ob::State *bstate = tgi.start ? dstate : nmotion->state;
+      assert(si_->isValid(dstate));
 
-          std::vector<ob::State *> states;
-          const unsigned int count = si_->getStateSpace()->validSegmentCount(astate, bstate);
+      // Anoop: took out addIntermediateStates_ case, and use DubinsMotion instead of Motion so I can add the turns
+      assert(!addIntermediateStates_);
+      auto *motion = new DubinsMotion(si_);
+      si_->copyState(motion->state, dstate);
+      motion->parent = nmotion;
+      motion->root = nmotion->root;
+      motion->turns = turns;
+      tree->add(motion);
 
-          if (si_->getMotionStates(astate, bstate, states, count, true, true))
-              si_->freeState(states[0]);
-
-          for (std::size_t i = 1; i < states.size(); ++i)
-          {
-              auto *motion = new Motion;
-              motion->state = states[i];
-              motion->parent = nmotion;
-              motion->root = nmotion->root;
-              tree->add(motion);
-
-              nmotion = motion;
-          }
-
-          tgi.xmotion = nmotion;
-      }
-      else
-      {
-          auto *motion = new Motion(si_);
-          si_->copyState(motion->state, dstate);
-          motion->parent = nmotion;
-          motion->root = nmotion->root;
-          tree->add(motion);
-
-          tgi.xmotion = motion;
-      }
+      tgi.xmotion = motion;
 
       return reach ? REACHED : ADVANCED;
     }
@@ -355,4 +390,20 @@ class CustomRRTConnect : public og::RRTConnect {
       tStart_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
       tGoal_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(b, a); });
     }
+
+  protected:
+     class DubinsMotion : public Motion
+     {
+     public:
+         DubinsMotion() {
+           turns = -RowMatrixXd::Ones(1, 2);
+         }
+
+         DubinsMotion(const ob::SpaceInformationPtr &si) : Motion(si)
+         {
+           turns = -RowMatrixXd::Ones(1, 2);
+         }
+
+         RowMatrixXd turns;
+     };
 };

@@ -10,7 +10,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
     explicit DubinsMotionValidator(const ob::SpaceInformationPtr si, double vmax, double rho) : ob::MotionValidator(si), vmax(vmax), rho(rho) {
     }
 
-    bool checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach) const {
+    RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
       double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
       double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
       double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
@@ -28,8 +28,16 @@ class DubinsMotionValidator : public ob::MotionValidator {
         stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(y1);
         stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(theta1);
         stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = t1;
-        return false;
+        validMotion = false;
+        return turns;
       }
+
+      /*
+      std::cout << "checking forward truncated" << std::endl;
+      std::cout << x1 << " " << y1 << " " << theta1 << " " << t1 << std::endl;
+      std::cout << x2 << " " << y2 << " " << theta2 << " " << t2 << std::endl;
+      std::cout << turns << std::endl;
+      */
 
       ob::State* next_s = si_->getStateSpace()->allocState();
 
@@ -53,7 +61,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
         double ctheta = cos(theta);
         double stheta = sin(theta);
 
-        int num_checks = 100;
+        int num_checks = 1000;
         double next_x;
         double next_y;
         double next_theta;
@@ -85,13 +93,21 @@ class DubinsMotionValidator : public ob::MotionValidator {
             stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
             stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
             si_->getStateSpace()->freeState(next_s);
-            return false;
+            validMotion = false;
+            turns(turn_idx, 1) = dist;
+            return turns.topRows(turn_idx + 1);
           }
 
           valid_x = next_x;
           valid_y = next_y;
           valid_theta = next_theta;
           valid_t = next_t;
+
+          /*
+          if (turn_idx == 2) {
+            std::cout << next_x << " " << next_y << " " << next_theta << " " << next_t << std::endl;
+          }
+          */
 
           valid_path_length = turns.col(1).head(turn_idx).sum() + dist;
 
@@ -102,7 +118,14 @@ class DubinsMotionValidator : public ob::MotionValidator {
             stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
             stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
             si_->getStateSpace()->freeState(next_s);
-            return true;
+            /*
+            std::cout << "advance" << std::endl;
+            std::cout << next_x << " " << next_y << " " << next_theta << " " << next_t << std::endl;
+            */
+            validMotion = true;
+            turns(turn_idx, 1) = dist;
+            return turns.topRows(turn_idx + 1);
+            return turns;
           }
         }
         x = next_x;
@@ -117,13 +140,15 @@ class DubinsMotionValidator : public ob::MotionValidator {
       stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
       stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
       si_->getStateSpace()->freeState(next_s);
-      return true;
+      validMotion = true;
+      return turns;
     }
 
-    bool checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach) const {
+    RowMatrixXd checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
       if (!si_->isValid(s2)) {
         reach = false;
-        return false;
+        validMotion = false;
+        return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
       }
       double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
       double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
@@ -142,7 +167,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
         stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(y2);
         stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(theta2);
         stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = t2;
-        return false;
+        validMotion = false;
+        return turns;
       }
 
       ob::State* next_s = si_->getStateSpace()->allocState();
@@ -159,6 +185,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
 
       double valid_path_length = 0.;
 
+      // std::cout << "checking backwards truncated" << std::endl;
       for (int turn_idx = turns.rows() - 1; turn_idx >= 0; --turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
@@ -167,7 +194,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
         double ctheta = cos(theta);
         double stheta = sin(theta);
 
-        int num_checks = 100;
+        int num_checks = 1000;
         double next_x;
         double next_y;
         double next_theta;
@@ -203,7 +230,9 @@ class DubinsMotionValidator : public ob::MotionValidator {
             stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
             stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
             si_->getStateSpace()->freeState(next_s);
-            return false;
+            validMotion = false;
+            turns(turn_idx, 1) = dist;
+            return turns.bottomRows(turns.rows() - turn_idx);
           }
 
           valid_x = next_x;
@@ -220,7 +249,9 @@ class DubinsMotionValidator : public ob::MotionValidator {
             stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
             stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
             si_->getStateSpace()->freeState(next_s);
-            return true;
+            validMotion = true;
+            turns(turn_idx, 1) = dist;
+            return turns.bottomRows(turns.rows() - turn_idx);
           }
         }
         x = next_x;
@@ -235,7 +266,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
       stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
       stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
       si_->getStateSpace()->freeState(next_s);
-      return true;
+      validMotion = true;
+      return turns;
     }
 
     bool checkMotion(const ob::State *s1, const ob::State *s2, std::pair<ob::State*, double> &lastValid) const override {
@@ -275,6 +307,13 @@ class DubinsMotionValidator : public ob::MotionValidator {
 
       double valid_path_length = 0.;
 
+      /*
+      std::cout << "checking forward" << std::endl;
+      std::cout << x1 << " " << y1 << " " << theta1 << " " << t1 << std::endl;
+      std::cout << x2 << " " << y2 << " " << theta2 << " " << t2 << std::endl;
+      std::cout << turns << std::endl;
+      */
+      // std::cout << turns << std::endl;
       for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
@@ -283,13 +322,13 @@ class DubinsMotionValidator : public ob::MotionValidator {
         double ctheta = cos(theta);
         double stheta = sin(theta);
 
-        int num_checks = 100;
+        int num_checks = 1000;
         double next_x;
         double next_y;
         double next_theta;
         double next_t;
         for (int check_idx = 0; check_idx < num_checks; ++check_idx) {
-          double dist = (check_idx + 1)/(double)num_checks*turn_dist;
+          double dist = (check_idx + 1)/(double)num_checks*turn_dist; // This is like doing np.linspace with num_checks + 1 points and ignoring the first element because we already checked it
           next_t = t + dist/vmax;
           if (turn_dir == 0) {
             // S segment
@@ -308,6 +347,18 @@ class DubinsMotionValidator : public ob::MotionValidator {
           next_s->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
           next_s->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
 
+          /*
+          if (turn_idx == 2) {
+            std::cout << next_x << " " << next_y << " " << next_theta << " " << next_t << std::endl;
+          }
+          */
+          // std::cout << next_x << " " << next_y << " " << next_theta << " " << next_t << " " << dist << std::endl;
+          /*
+          if (turn_idx == 3) {
+            std::cout << next_x << " " << next_y << " " << next_theta << " " << next_t << std::endl;
+          }
+          */
+
           if (!si_->isValid(next_s)) {
             if (lastValid.first != nullptr) {
               lastValid.first->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(valid_x);
@@ -318,6 +369,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
             double path_length = turns.col(1).sum();
             lastValid.second = valid_path_length/path_length;
             si_->getStateSpace()->freeState(next_s);
+            // std::cout << "failed at turn idx" << turn_idx << std::endl;
             return false;
           }
 

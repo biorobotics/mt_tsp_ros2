@@ -47,7 +47,10 @@ class TimeConstrainedDubinsPlanner {
       ss->setPlanner(planner);
     }
 
-    RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter) {
+    RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter, std::vector<RowMatrixXd> &turns_chain) {
+      ompl::msg::setLogLevel(ompl::msg::LogLevel::LOG_NONE);
+      planner = std::make_shared<CustomRRTConnect>(si);
+      ss->setPlanner(planner);
       space->set_start_and_goal(start(0), start(1), start(2), start(3), 
                                 goal(0), goal(1), goal(2), goal(3));
       ob::ScopedState<> start_state(space);
@@ -64,7 +67,7 @@ class TimeConstrainedDubinsPlanner {
 
       if (status == ob::PlannerStatus::StatusType::EXACT_SOLUTION) {
         // std::cout << "Found solution:" << std::endl;
-        og::PathGeometric &solutionPath = ss->getSolutionPath();
+        DubinsSegmentChain &solutionPath = static_cast<DubinsSegmentChain&>(ss->getSolutionPath());
         int num_steps = solutionPath.getStateCount();
         RowMatrixXd ret(num_steps, 4);
         for (int step = 0; step < num_steps; ++step) {
@@ -74,10 +77,11 @@ class TimeConstrainedDubinsPlanner {
           ret(step, 2) = state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
           ret(step, 3) = state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
         }
+        turns_chain = solutionPath.turns_chain;
         return ret;
         // ss->getSolutionPath().print(std::cout);
       } else {
-        std::cout << "No solution found" << std::endl;
+        // std::cout << "No solution found" << std::endl;
         return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 4);
       }
     }
