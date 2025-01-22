@@ -640,13 +640,9 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
 
     // LRL
-    DubinsPath path_LRL;
-    dubins_error = dubins_path(&path_LRL, q_0, q_f, rho, DubinsPathType::LRL);
-    assert(!dubins_error);
-
     // Left turn
     turns(0, 0) = 1.;
-    turns(0, 1) = path_LRL.param[0]*rho;
+    turns(0, 1) = LRL_s_dist1;
 
     // Straight (this is a choice I made, we could also turn right for a bit)
     turns(1, 0) = 0.;
@@ -662,11 +658,11 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
     // Right turn
     turns(4, 0) = -1.;
-    turns(4, 1) = path_LRL.param[1]*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
+    turns(4, 1) = LRL_s_dist2*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
 
     // Left turn
     turns(5, 0) = 1.;
-    turns(5, 1) = path_LRL.param[2]*rho;
+    turns(5, 1) = LRL_s_dist3;
 
     return turns;
   }
@@ -678,13 +674,10 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
 
     // RLR
-    DubinsPath path_RLR;
-    dubins_error = dubins_path(&path_RLR, q_0, q_f, rho, DubinsPathType::RLR);
-    assert(!dubins_error);
 
     // Right turn
     turns(0, 0) = -1.;
-    turns(0, 1) = path_RLR.param[0]*rho;
+    turns(0, 1) = RLR_s_dist1;
 
     // Straight (this is a choice I made, we could also turn left for a bit)
     turns(1, 0) = 0.;
@@ -700,11 +693,11 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
     // Left turn
     turns(4, 0) = 1.;
-    turns(4, 1) = path_RLR.param[1]*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
+    turns(4, 1) = RLR_s_dist2 - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
 
     // Right turn
     turns(5, 0) = -1.;
-    turns(5, 1) = path_RLR.param[2]*rho;
+    turns(5, 1) = RLR_s_dist3;
 
     return turns;
   }
