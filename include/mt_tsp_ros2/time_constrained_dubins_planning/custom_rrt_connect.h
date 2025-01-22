@@ -117,8 +117,9 @@ class CustomRRTConnect : public og::RRTConnect {
               if (gsc == TRAPPED)
                   tgi.start = !tgi.start;
 
-              while (gsc == ADVANCED)
+              while (gsc == ADVANCED) {
                   gsc = growTree(otherTree, tgi, rmotion);
+              }
 
               /* update distance between trees */
               // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
@@ -336,10 +337,6 @@ class CustomRRTConnect : public og::RRTConnect {
       std::cout << "done checking valid" << std::endl;
       */
 
-      // Anoop. Doesn't work because elongation can give a different path if you elongate to an intermediate point
-      // on an elongated path, and the different path may intersect obstacles. Need to store the subpath
-      // of the original elongated path
-
       std::shared_ptr<DubinsMotionValidator> motionValidator = std::static_pointer_cast<DubinsMotionValidator>(si_->getMotionValidator());
 
       double minT = si_->getStateSpace()->as<DubinsTimeStateSpace>()->as<ob::TimeStateSpace>(1)->getMinTimeBound();
@@ -348,6 +345,7 @@ class CustomRRTConnect : public og::RRTConnect {
       RowMatrixXd turns;
       if (tgi.start) {
         turns = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
+
         if (validMotion) {
           // assert(motionValidator->checkMotion(nmotion->state, tgi.xstate));
         }

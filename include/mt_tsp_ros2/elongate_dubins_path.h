@@ -214,6 +214,10 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
     l_m = std::min(l_m, l_RSL);
   }
 
+  if (std::abs(l_m - s) < 1e-4) {
+    return true;
+  }
+
   if (l_m > s) {
     return false; // We can't elongate a Dubins path to length s if the shortest Dubins path has length larger than s
   }
