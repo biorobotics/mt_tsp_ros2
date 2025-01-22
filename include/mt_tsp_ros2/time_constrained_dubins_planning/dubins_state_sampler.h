@@ -20,10 +20,16 @@ class DubinsTimeStateSampler : public ob::DeterministicStateSampler {
 
       config_sampler = std::make_shared<ob::SE2DeterministicStateSampler>(space->as<ob::CompoundStateSpace>()->as<ob::SE2StateSpace>(0));
       time_sequence_ptr = std::make_shared<ob::HaltonSequence1D>();
+      /*
+      std::cout << check_elongation_possible(start_x, start_y, start_theta, goal_x, goal_y, goal_theta, vmax*(goal_t - start_t), rho) << std::endl;;
+      std::cout << turns_for_dubins_path(start_x, start_y, start_theta, goal_x, goal_y, goal_theta, rho).col(1).sum() << std::endl;
+      std::cout << vmax*(goal_t - start_t) << std::endl;
+      */
     }
 
     void sampleUniform(ob::State *state) override {
-      while (true) {
+      int max_iter = 1000;
+      for (int i = 0; i < max_iter; ++i) {
         // Sample a configuration q = (x, y, t) uniformly at random
         config_sampler->sampleUniform(state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0));
 
@@ -106,8 +112,26 @@ class DubinsTimeStateSampler : public ob::DeterministicStateSampler {
 
         state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = t;
 
-        break;
+        return;
       }
+
+      double raw_sample = time_sequence_ptr->sample();
+
+      ob::State* start_state = space_->allocState();
+      start_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(start_x);
+      start_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(start_y);
+      start_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(start_theta);
+      start_state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = start_t;
+
+      ob::State* goal_state = space_->allocState();
+      goal_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(goal_x);
+      goal_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(goal_y);
+      goal_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(goal_theta);
+      goal_state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = goal_t;
+
+      space_->interpolate(start_state, goal_state, raw_sample, state);
+      space_->freeState(start_state);
+      space_->freeState(goal_state);
     }
 
     // We don't need this
