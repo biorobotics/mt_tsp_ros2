@@ -1235,7 +1235,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
   // l2 = l_LSR; // To test first segment elongation
   if (l2 == l_RSR || l2 == l_RSL || l2 == l_LSR || l2 == l_LSL) { // Tested
     if (verbose) {
-      std::cout << "Elongating nabla O path, with l2 == some CSC path length" << std::endl;
+      std::cout << "Elongating nabla O path, with l2 == some CSC path length that is not l_m" << std::endl;
     }
     assert(l2 != l_m);
 
@@ -1336,6 +1336,8 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
       return turns;
     } else {
+      // return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
+      // In some degenerate two-segment cases, the below does not hold
       throw std::runtime_error("One of the C segments in a CSC path should have parallel tangents");
     }
   }
