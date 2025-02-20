@@ -244,6 +244,46 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
     }
   }
 
+  // Endpoint pair is in nabla O and thus Dubins path must be CSC. Check if we have parallel tangents
+  if (l_m == l_RSR || l_m == l_LSL) {
+    double angle_traversed;
+    if (l_m == l_RSR) {
+      angle_traversed = path_RSR.param[0] + path_RSR.param[2];
+    } else if (l_m == l_LSL) {
+      angle_traversed = path_LSL.param[0] + path_LSL.param[2];
+    }
+    if (angle_traversed >= M_PI) {
+      // Parallel tangents
+
+      double l1 = std::max(l_LRL_s, l_RLR_s);
+      double l2 = l_m + 2*M_PI*rho;
+      if (l_LRL_l < l2) {
+        l2 = l_LRL_l;
+      }
+      if (l_RLR_l < l2) {
+        l2 = l_RLR_l;
+      }
+      if (l_RSR != l_m && l_RSR < l2) {
+        l2 = l_RSR;
+      }
+      if (l_RSL != l_m && l_RSL < l2) {
+        l2 = l_RSL;
+      }
+      if (l_LSR != l_m && l_LSR < l2) {
+        l2 = l_LSR;
+      }
+      if (l_LSL != l_m && l_LSL < l2) {
+        l2 = l_LSL;
+      }
+
+      if (l1 < l2) {
+        throw std::runtime_error("We should be able to elongate to an arbitrary length because we have parallel tangents");
+      }
+
+      return true;
+    }
+  }
+
   double l1 = std::max(l_LRL_s, l_RLR_s);
   double l2 = l_m + 2*M_PI*rho;
   if (l_LRL_l < l2) {
@@ -411,6 +451,45 @@ Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double
         (l_m == l_LSR && (path_LSR.param[0] >= M_PI || path_LSR.param[2] >= M_PI || path_LSR.param[1] >= 4)) ||
         (l_m == l_RSR && (path_RSR.param[0] >= M_PI || path_RSR.param[2] >= M_PI || path_RSR.param[1] >= 4)) ||
         (l_m == l_RSL && (path_RSL.param[0] >= M_PI || path_RSL.param[2] >= M_PI || path_RSL.param[1] >= 4))) {
+      return Vector3d(l_m, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
+    }
+  }
+
+  // Endpoint pair is in nabla O and thus Dubins path must be CSC. Check if we have parallel tangents
+  if (l_m == l_RSR || l_m == l_LSL) {
+    double angle_traversed;
+    if (l_m == l_RSR) {
+      angle_traversed = path_RSR.param[0] + path_RSR.param[2];
+    } else if (l_m == l_LSL) {
+      angle_traversed = path_LSL.param[0] + path_LSL.param[2];
+    }
+    if (angle_traversed >= M_PI) {
+      // Parallel tangents
+
+      double l1 = std::max(l_LRL_s, l_RLR_s);
+      double l2 = l_m + 2*M_PI*rho;
+      if (l_LRL_l < l2) {
+        l2 = l_LRL_l;
+      }
+      if (l_RLR_l < l2) {
+        l2 = l_RLR_l;
+      }
+      if (l_RSR != l_m && l_RSR < l2) {
+        l2 = l_RSR;
+      }
+      if (l_RSL != l_m && l_RSL < l2) {
+        l2 = l_RSL;
+      }
+      if (l_LSR != l_m && l_LSR < l2) {
+        l2 = l_LSR;
+      }
+      if (l_LSL != l_m && l_LSL < l2) {
+        l2 = l_LSL;
+      }
+      if (l1 < l2) {
+        throw std::runtime_error("We should be able to elongate to an arbitrary length because we have parallel tangents");
+      }
+
       return Vector3d(l_m, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
     }
   }
@@ -917,7 +996,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       double q_f[3] = {x_f, y_f, theta_f};
       DubinsPath path;
       for (int i = 0; i < max_iter; ++i) {
-        first_C_dist_high = first_C_dist_low + rho*(i + 1);
+        first_C_dist_high = first_C_dist_low + rho*pow(2, i + 1);
         double theta_high = theta_0 + first_C_sign*first_C_dist_high/rho;
         double c_high = cos(theta_high);
         double s_high = sin(theta_high);
@@ -981,6 +1060,62 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       double y_mid = y_0 + rho/first_C_sign*(c_0 - c_mid);
 
       turns.bottomRows(3) = turns_for_dubins_path(x_mid, y_mid, theta_mid, x_f, y_f, theta_f, rho);
+      return turns;
+    }
+  }
+
+  // Endpoint pair is in nabla O and thus Dubins path must be CSC. Check if we have parallel tangents
+  if (l_m == l_RSR || l_m == l_LSL) {
+    double angle_traversed;
+    double first_C_sign = 0.;
+    double first_C_dist = 0.;
+    double S_dist = 0.;
+    double last_C_sign = 0.;
+    double last_C_dist = 0.;
+    if (l_m == l_RSR) {
+      angle_traversed = path_RSR.param[0] + path_RSR.param[2];
+      first_C_sign = -1.;
+      first_C_dist = path_RSR.param[0]*rho;
+      S_dist = path_RSR.param[1]*rho;
+      last_C_sign = -1.;
+      last_C_dist = path_RSR.param[2]*rho;
+    } else if (l_m == l_LSL) {
+      angle_traversed = path_LSL.param[0] + path_LSL.param[2];
+      first_C_sign = 1.;
+      first_C_dist = path_LSL.param[0]*rho;
+      S_dist = path_LSL.param[1]*rho;
+      last_C_sign = 1.;
+      last_C_dist = path_LSL.param[2]*rho;
+    }
+    if (angle_traversed >= M_PI) {
+      // Parallel tangents
+
+      RowMatrixXd turns = RowMatrixXd::Zero(6, 2);
+
+      // Straight (this is a choice I made, we could also turn for a bit)
+      turns(0, 0) = 0.;
+      turns(0, 1) = (s - l_m)/2;
+
+      // Turn
+      turns(1, 0) = first_C_sign;
+      turns(1, 1) = first_C_dist;
+
+      // Straight
+      turns(2, 0) = 0.;
+      turns(2, 1) = S_dist;
+
+      // Turn until reaching parallel tangent
+      turns(3, 0) = last_C_sign;
+      turns(3, 1) = rho*M_PI - first_C_dist;
+
+      // Straight
+      turns(4, 0) = 0.;
+      turns(4, 1) = (s - l_m)/2;
+
+      // Turn
+      turns(5, 0) = last_C_sign;
+      turns(5, 1) = last_C_dist - turns(3, 1);
+
       return turns;
     }
   }
@@ -1374,4 +1509,174 @@ VectorXb batch_elongation_check(RowMatrixXdRef_const q0s, RowMatrixXdRef_const q
     }
   }
   return results;
+}
+
+RowMatrixXd get_ccc_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double rho, bool short_path, bool lrl) {
+  double c_0 = cos(theta_0);
+  double s_0 = sin(theta_0);
+  double c_f = cos(theta_f);
+  double s_f = sin(theta_f);
+  if (lrl) {
+    // LRL
+    double LRL_dist_A = std::numeric_limits<double>::infinity();
+    double LRL_dist_B = std::numeric_limits<double>::infinity();
+
+    Vector2d dir_0(c_0, s_0);
+    Vector2d perp_0(-s_0, c_0);
+    Vector2d center1_L = Vector2d(x_0, y_0) + perp_0*rho;
+
+    Vector2d dir_f(c_f, s_f);
+    Vector2d perp_f(-s_f, c_f);
+    Vector2d center3_L = Vector2d(x_f, y_f) + perp_f*rho;
+
+    Vector2d V = center3_L - center1_L;
+    double D = V.norm();
+
+    double LRL_l_dist1;
+    double LRL_l_dist2;
+    double LRL_l_dist3;
+
+    double LRL_s_dist1;
+    double LRL_s_dist2;
+    double LRL_s_dist3;
+    if (D <= 4*rho) {
+      double gamma = atan2(V(1), V(0));
+      double theta = acos(D/(4*rho));
+
+      double theta_A = gamma + theta;
+      double c_A = cos(theta_A);
+      double s_A = sin(theta_A);
+      Vector2d vec_A = Vector2d(c_A, s_A);
+      Vector2d center2 = center1_L + vec_A*rho*2;
+      double dist1_A = arclength(-perp_0, vec_A, true, rho);
+      double dist2_A = arclength(center1_L - center2, center3_L - center2, false, rho);
+      double dist3_A = arclength(center2 - center3_L, -perp_f, true, rho);
+      LRL_dist_A = dist1_A + dist2_A + dist3_A;
+
+      double theta_B = gamma - theta;
+      double c_B = cos(theta_B);
+      double s_B = sin(theta_B);
+      Vector2d vec_B = Vector2d(c_B, s_B);
+      center2 = center1_L + vec_B*rho*2;
+      double dist1_B = arclength(-perp_0, vec_B, true, rho);
+      double dist2_B = arclength(center1_L - center2, center3_L - center2, false, rho);
+      double dist3_B = arclength(center2 - center3_L, -perp_f, true, rho);
+      LRL_dist_B = dist1_B + dist2_B + dist3_B;
+
+      if (LRL_dist_A > LRL_dist_B) {
+        LRL_l_dist1 = dist1_A;
+        LRL_l_dist2 = dist2_A;
+        LRL_l_dist3 = dist3_A;
+
+        LRL_s_dist1 = dist1_B;
+        LRL_s_dist2 = dist2_B;
+        LRL_s_dist3 = dist3_B;
+      } else {
+        LRL_l_dist1 = dist1_B;
+        LRL_l_dist2 = dist2_B;
+        LRL_l_dist3 = dist3_B;
+
+        LRL_s_dist1 = dist1_A;
+        LRL_s_dist2 = dist2_A;
+        LRL_s_dist3 = dist3_A;
+      }
+
+      RowMatrixXd ret(3, 2);
+      ret(0, 0) = 1.;
+      ret(1, 0) = -1.;
+      ret(2, 0) = 1.;
+      if (short_path) {
+        ret(0, 1) = LRL_s_dist1;
+        ret(1, 1) = LRL_s_dist2;
+        ret(2, 1) = LRL_s_dist3;
+      } else {
+        ret(0, 1) = LRL_l_dist1;
+        ret(1, 1) = LRL_l_dist2;
+        ret(2, 1) = LRL_l_dist3;
+      }
+      return ret;
+    } else {
+      return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
+    }
+  } else {
+    // RLR
+    double RLR_dist_A = std::numeric_limits<double>::infinity();
+    double RLR_dist_B = std::numeric_limits<double>::infinity();
+
+    Vector2d perp_0(s_0, -c_0);
+    Vector2d center1_R = Vector2d(x_0, y_0) + perp_0*rho;
+
+    Vector2d perp_f(s_f, -c_f);
+    Vector2d center3_R = Vector2d(x_f, y_f) + perp_f*rho;
+
+    Vector2d V = center3_R - center1_R;
+    double D = V.norm();
+
+    double RLR_l_dist1;
+    double RLR_l_dist2;
+    double RLR_l_dist3;
+
+    double RLR_s_dist1;
+    double RLR_s_dist2;
+    double RLR_s_dist3;
+    if (D <= 4*rho) {
+      double gamma = atan2(V(1), V(0));
+      double theta = acos(D/(4*rho));
+
+      double theta_A = gamma + theta;
+      double c_A = cos(theta_A);
+      double s_A = sin(theta_A);
+      Vector2d vec_A = Vector2d(c_A, s_A);
+      Vector2d center2 = center1_R + vec_A*rho*2;
+      double dist1_A = arclength(-perp_0, vec_A, false, rho);
+      double dist2_A = arclength(center1_R - center2, center3_R - center2, true, rho);
+      double dist3_A = arclength(center2 - center3_R, -perp_f, false, rho);
+      RLR_dist_A = dist1_A + dist2_A + dist3_A;
+
+      double theta_B = gamma - theta;
+      double c_B = cos(theta_B);
+      double s_B = sin(theta_B);
+      Vector2d vec_B = Vector2d(c_B, s_B);
+      center2 = center1_R + Vector2d(c_B, s_B)*rho*2;
+      double dist1_B = arclength(-perp_0, vec_B, false, rho);
+      double dist2_B = arclength(center1_R - center2, center3_R - center2, true, rho);
+      double dist3_B = arclength(center2 - center3_R, -perp_f, false, rho);
+      RLR_dist_B = dist1_B + dist2_B + dist3_B;
+
+      if (RLR_dist_A > RLR_dist_B) {
+        RLR_l_dist1 = dist1_A;
+        RLR_l_dist2 = dist2_A;
+        RLR_l_dist3 = dist3_A;
+
+        RLR_s_dist1 = dist1_B;
+        RLR_s_dist2 = dist2_B;
+        RLR_s_dist3 = dist3_B;
+      } else {
+        RLR_l_dist1 = dist1_B;
+        RLR_l_dist2 = dist2_B;
+        RLR_l_dist3 = dist3_B;
+
+        RLR_s_dist1 = dist1_A;
+        RLR_s_dist2 = dist2_A;
+        RLR_s_dist3 = dist3_A;
+      }
+
+      RowMatrixXd ret(3, 2);
+      ret(0, 0) = -1.;
+      ret(1, 0) = 1.;
+      ret(2, 0) = -1.;
+      if (short_path) {
+        ret(0, 1) = RLR_s_dist1;
+        ret(1, 1) = RLR_s_dist2;
+        ret(2, 1) = RLR_s_dist3;
+      } else {
+        ret(0, 1) = RLR_l_dist1;
+        ret(1, 1) = RLR_l_dist2;
+        ret(2, 1) = RLR_l_dist3;
+      }
+      return ret;
+    } else {
+      return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
+    }
+  }
 }
