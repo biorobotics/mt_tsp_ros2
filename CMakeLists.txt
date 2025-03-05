@@ -19,6 +19,7 @@ find_package(rviz_common REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(ompl REQUIRED)
+find_package(CGAL REQUIRED)
 
 # The following is for TFTrajectoryDisplay
 
@@ -145,6 +146,32 @@ pybind11_add_module(time_constrained_dubins_planning
 target_include_directories(time_constrained_dubins_planning PRIVATE ${OMPL_INCLUDE_DIRS})
 target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES} OpenMP::OpenMP_CXX)
 install(TARGETS time_constrained_dubins_planning
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
+pybind11_add_module(box_qp
+  src/bind_box_qp.cpp
+  src/box-qp.cpp
+  src/box_qp_exception.cpp
+)
+install(TARGETS box_qp
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
+pybind11_add_module(visibility
+  src/visibility_wrapper.cpp
+  src/cgal_visibility_example.cpp
+  src/bind_visibility.cpp
+)
+target_link_libraries(visibility PRIVATE CGAL::CGAL)
+install(TARGETS visibility
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
+pybind11_add_module(mtvg_problem
+  src/bind_min_time_segment_interception_astar_problem.cpp
+)
+install(TARGETS mtvg_problem
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
