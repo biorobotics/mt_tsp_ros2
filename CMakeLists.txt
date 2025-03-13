@@ -139,6 +139,7 @@ install(TARGETS implicit_grid_astar
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+#[[
 pybind11_add_module(time_constrained_dubins_planning
   src/bind_time_constrained_dubins_planning.cpp
   src/dubins.cpp
@@ -148,6 +149,7 @@ target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES}
 install(TARGETS time_constrained_dubins_planning
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
+]]
 
 pybind11_add_module(box_qp
   src/bind_box_qp.cpp
@@ -172,6 +174,14 @@ pybind11_add_module(mtvg_problem
   src/bind_min_time_segment_interception_astar_problem.cpp
 )
 install(TARGETS mtvg_problem
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
+pybind11_add_module(parallel_squareform
+  src/bind_parallel_squareform.cpp
+)
+target_link_libraries(parallel_squareform PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS parallel_squareform
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
