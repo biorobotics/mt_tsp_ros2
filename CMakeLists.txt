@@ -61,6 +61,7 @@ install(DIRECTORY irb1600_aggregated DESTINATION share/${PROJECT_NAME})
 
 include_directories(
   include
+  $ENV{HOME}/Clarabel.cpp/include
   $ENV{HOME}/gurobi1103/linux64/include/
 )
 
@@ -174,6 +175,18 @@ pybind11_add_module(mtvg_problem
 install(TARGETS mtvg_problem
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
+
+pybind11_add_module(trajopt_gcs
+  src/mt_ixg_star.cpp
+  src/trajopt_through_convex_sets.cpp
+  src/bind_trajopt_gcs.cpp
+)
+target_link_directories(trajopt_gcs PRIVATE $ENV{HOME}/Clarabel.cpp/rust_wrapper/target/release/)
+target_link_libraries(trajopt_gcs PRIVATE clarabel_c)
+install(TARGETS trajopt_gcs
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 
 # There by default
 if(BUILD_TESTING)
