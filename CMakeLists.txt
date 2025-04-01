@@ -208,6 +208,7 @@ message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 pybind11_add_module(mt_cbss
   src/bind_cbss.cpp
 )
+target_link_libraries(mt_cbss PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS mt_cbss
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )

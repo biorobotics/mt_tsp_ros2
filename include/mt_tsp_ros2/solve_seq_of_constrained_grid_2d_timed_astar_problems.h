@@ -1,13 +1,21 @@
 #include "mt_tsp_ros2/constrained_grid_2d_timed_astar_problem.h"
 #include "mt_tsp_ros2/cbs_node.h"
 #include "mt_tsp_ros2/arastar.h"
+#include <omp.h>
 
 bool solve_seq_of_constrained_grid_2d_timed_astar_problems(GridPathPtr path, const Matrix<bool, Dynamic, Dynamic> &occupancy, const AStarConstraintList &constraints, Ref<RowMatrixXl> cell_seq, Ref<VectorXl> time_seq, double low_level_planner_timeout_millis, long T) {
   int dim_q = 2;
 
   int num_partial_paths = std::max((int)(time_seq.size() - 1), 1);
   std::vector<GridPathPtr> partial_paths(num_partial_paths);
+
+  volatile bool infeas = false;
+
+  #pragma omp parallel for
   for (int i = 0; i < num_partial_paths; ++i) {
+    if (infeas) {
+      continue;
+    }
     // Instantiate astar problem with constraints
     std::shared_ptr<ConstrainedGrid2dTimedAStarProblem> problem;
     if (time_seq.size() == 1) {
@@ -23,23 +31,29 @@ bool solve_seq_of_constrained_grid_2d_timed_astar_problems(GridPathPtr path, con
     // Run astar
     AStarPath astar_path;
     if (!arastar(astar_path, data, 1.0, 10, low_level_planner_timeout_millis)) {
-      return false;
+      infeas = true;
+      continue;
     }
     partial_paths[i] = std::make_shared<GridPath>();
     problem->get_grid_path(partial_paths[i]->path, astar_path);
   }
+  if (infeas) {
+    return false;
+  }
 
-  int total_path_length = 0;
+  // The -1's are important so we don't repeat time steps
+  int total_path_length = 1;
   for (auto partial_path : partial_paths) {
-    total_path_length += partial_path->path.rows();
+    total_path_length += partial_path->path.rows() - 1;
   }
 
   path->cost = 0;
   path->path = MatrixXi::Zero(total_path_length, dim_q);
-  int length_so_far = 0;
+  path->path.topRows(1) = partial_paths[0]->path.topRows(1);
+  int length_so_far = 1;
   for (auto partial_path : partial_paths) {
-    path->path.block(length_so_far, 0, partial_path->path.rows(), dim_q) = partial_path->path;
-    length_so_far += partial_path->path.rows();
+    path->path.block(length_so_far, 0, partial_path->path.rows() - 1, dim_q) = partial_path->path.bottomRows(partial_path->path.rows() - 1);
+    length_so_far += partial_path->path.rows() - 1;
     path->cost += partial_path->cost;
   }
   return true;
