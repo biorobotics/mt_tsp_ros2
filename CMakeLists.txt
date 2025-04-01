@@ -205,6 +205,14 @@ install(TARGETS grid_2d_astar
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
+pybind11_add_module(mt_cbss
+  src/bind_cbss.cpp
+)
+install(TARGETS mt_cbss
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

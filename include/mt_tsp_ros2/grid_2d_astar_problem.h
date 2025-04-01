@@ -77,7 +77,7 @@ MatrixXi solve_grid_2d_astar_problem(const Ref<const Matrix<bool, Dynamic, Dynam
     problem->get_grid_path(grid_path, path);
     return grid_path;
   } else {
-    std::cout << "No solution. Returning path where agent stays at start config" << std::endl;
-    return RowVector2i(sx, sy);
+    // std::cout << "No solution. Returning empty path" << std::endl;
+    return MatrixXi::Zero(0, 2);
   }
 }

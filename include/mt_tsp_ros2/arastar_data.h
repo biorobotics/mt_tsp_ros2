@@ -296,7 +296,7 @@ class ARAStarData {
 
       AStarNodePtr terminal_node = goal_node;
       if (terminal_node == nullptr) {
-        std::cout << "Did not reach goal" << std::endl;
+        // std::cout << "Did not reach goal" << std::endl;
         // If we didn't find the goal, get the path to the node with the best h-value
         double best_h = -1;
         for (auto it : seen_nodes) {
@@ -306,7 +306,7 @@ class ARAStarData {
           }
         }
       } else {
-        std::cout << "Goal node has path cost " << goal_node->get_g() << std::endl;
+        // std::cout << "Goal node has path cost " << goal_node->get_g() << std::endl;
         assert(goal_node->get_g() == goal_node->get_f());
       }
 
