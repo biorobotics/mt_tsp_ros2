@@ -470,21 +470,28 @@ Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double
       double l2 = l_m + 2*M_PI*rho;
       if (l_LRL_l < l2) {
         l2 = l_LRL_l;
+        std::cout << "LRL_l" << std::endl;
       }
       if (l_RLR_l < l2) {
         l2 = l_RLR_l;
+        std::cout << "RLR_l" << std::endl;
       }
       if (l_RSR != l_m && l_RSR < l2) {
         l2 = l_RSR;
+        std::cout << "RSR" << std::endl;
       }
       if (l_RSL != l_m && l_RSL < l2) {
         l2 = l_RSL;
+        std::cout << "RSL" << std::endl;
+        std::cout << (l_RSL < l_LRL_l) << " " << (l_RSL < l_RLR_l) << std::endl;
       }
       if (l_LSR != l_m && l_LSR < l2) {
         l2 = l_LSR;
+        std::cout << "LSR" << std::endl;
       }
       if (l_LSL != l_m && l_LSL < l2) {
         l2 = l_LSL;
+        std::cout << "LSL" << std::endl;
       }
       if (l1 < l2) {
         throw std::runtime_error("We should be able to elongate to an arbitrary length because we have parallel tangents");
@@ -737,7 +744,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
     // Right turn
     turns(4, 0) = -1.;
-    turns(4, 1) = LRL_s_dist2*rho - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
+    turns(4, 1) = LRL_s_dist2 - rho*M_PI; // Total distance for the original R segment minus distance we traveled in the first split-up R segment
 
     // Left turn
     turns(5, 0) = 1.;
@@ -1481,34 +1488,22 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
   return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2); // We shouldn't ever get here
 }
 
-VectorXb batch_elongation_check(RowMatrixXdRef_const q0s, RowMatrixXdRef_const qfs, VectorXdRef_const ss, double rho, bool use_openmp) {
+VectorXb batch_elongation_check(RowMatrixXdRef_const q0s, RowMatrixXdRef_const qfs, VectorXdRef_const ss, double rho, int num_openmp_threads) {
+  omp_set_num_threads(num_openmp_threads);
   int num_pairs = q0s.rows();
   assert(num_pairs == qfs.rows());
   assert(num_pairs == ss.size());
   VectorXb results(num_pairs);
-  if (use_openmp) {
-    #pragma omp parallel for
-    for (int pair_idx = 0; pair_idx < num_pairs; ++pair_idx) {
-      double x_0 = q0s(pair_idx, 0);
-      double y_0 = q0s(pair_idx, 1);
-      double theta_0 = q0s(pair_idx, 2);
-      double x_f = qfs(pair_idx, 0);
-      double y_f = qfs(pair_idx, 1);
-      double theta_f = qfs(pair_idx, 2);
-      double s = ss(pair_idx);
-      results(pair_idx) = check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho);
-    }
-  } else {
-    for (int pair_idx = 0; pair_idx < num_pairs; ++pair_idx) {
-      double x_0 = q0s(pair_idx, 0);
-      double y_0 = q0s(pair_idx, 1);
-      double theta_0 = q0s(pair_idx, 2);
-      double x_f = qfs(pair_idx, 0);
-      double y_f = qfs(pair_idx, 1);
-      double theta_f = qfs(pair_idx, 2);
-      double s = ss(pair_idx);
-      results(pair_idx) = check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho);
-    }
+  #pragma omp parallel for
+  for (int pair_idx = 0; pair_idx < num_pairs; ++pair_idx) {
+    double x_0 = q0s(pair_idx, 0);
+    double y_0 = q0s(pair_idx, 1);
+    double theta_0 = q0s(pair_idx, 2);
+    double x_f = qfs(pair_idx, 0);
+    double y_f = qfs(pair_idx, 1);
+    double theta_f = qfs(pair_idx, 2);
+    double s = ss(pair_idx);
+    results(pair_idx) = check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho);
   }
   return results;
 }
