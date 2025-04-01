@@ -140,6 +140,7 @@ install(TARGETS implicit_grid_astar
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+#[[
 pybind11_add_module(time_constrained_dubins_planning
   src/bind_time_constrained_dubins_planning.cpp
   src/dubins.cpp
@@ -149,6 +150,7 @@ target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES}
 install(TARGETS time_constrained_dubins_planning
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
+]]
 
 pybind11_add_module(box_qp
   src/bind_box_qp.cpp
@@ -187,6 +189,21 @@ install(TARGETS trajopt_gcs
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(parallel_squareform
+  src/bind_parallel_squareform.cpp
+)
+target_link_libraries(parallel_squareform PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS parallel_squareform
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
+pybind11_add_module(grid_2d_astar
+  src/bind_grid_2d_astar.cpp
+)
+install(TARGETS grid_2d_astar
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
 # There by default
 if(BUILD_TESTING)

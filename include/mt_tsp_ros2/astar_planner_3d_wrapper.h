@@ -8,6 +8,10 @@ class AStarPlanner3DWrapper {
 
     MatrixXd plan(const Ref<const Vector3d>& start_pos, const Ref<const Vector3d>& goal_pos);
 
+    void set_connected_26(bool connected26) {
+      planner->set_connected_26(connected26);
+    }
+
   private:
     std::unique_ptr<AStarPlanner3D> planner;
     std::vector<Vector3d> path;
