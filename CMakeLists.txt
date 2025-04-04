@@ -186,6 +186,8 @@ pybind11_add_module(trajopt_gcs
 target_link_directories(trajopt_gcs PRIVATE $ENV{HOME}/Clarabel.cpp/rust_wrapper/target/release/)
 target_link_libraries(trajopt_gcs PRIVATE clarabel_c)
 install(TARGETS trajopt_gcs
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
 
 pybind11_add_module(parallel_squareform
   src/bind_parallel_squareform.cpp
