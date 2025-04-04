@@ -185,6 +185,23 @@ install(TARGETS parallel_squareform
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(grid_2d_astar
+  src/bind_grid_2d_astar.cpp
+)
+install(TARGETS grid_2d_astar
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
+pybind11_add_module(mt_cbss
+  src/bind_cbss.cpp
+)
+target_link_libraries(mt_cbss PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS mt_cbss
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
