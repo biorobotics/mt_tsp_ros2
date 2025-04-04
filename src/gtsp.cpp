@@ -594,7 +594,7 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, RowMatrixXdRef soln_mat, py::object send
   stop_time = std::chrono::high_resolution_clock::now();
   auto solve_time = (double)(std::chrono::duration_cast<std::chrono::milliseconds>(stop_time - start_time).count())/1000;
 
-  VectorXd ret_vec = std::numeric_limits<double>::infinity()*VectorXd::Ones(4);
+  VectorXd ret_vec = std::numeric_limits<double>::infinity()*VectorXd::Ones(5); // Setup time, solve time, callback time, cost, cost lb
   ret_vec(0) = setup_time;
   ret_vec(1) = solve_time;
   if (solve_relaxed) {
@@ -621,6 +621,13 @@ VectorXd pcg_gtsp(VectorXlRef node_seq, RowMatrixXdRef soln_mat, py::object send
 
   error = GRBgetdblattr(model, GRB_DBL_ATTR_OBJVAL, &ret_vec(3));
   if (error) quit(env, model);
+
+  if (solve_relaxed) {
+    ret_vec(4) = ret_vec(3);
+  } else {
+    error = GRBgetdblattr(model, GRB_DBL_ATTR_OBJBOUND, &ret_vec(4));
+    if (error) quit(env, model);
+  }
 
   std::vector<double> soln(num_decision_vars);
   for (int i = 0; i < num_decision_vars; ++i) {

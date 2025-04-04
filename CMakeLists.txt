@@ -61,7 +61,6 @@ install(DIRECTORY irb1600_aggregated DESTINATION share/${PROJECT_NAME})
 
 include_directories(
   include
-  $ENV{HOME}/Clarabel.cpp/include
   $ENV{HOME}/gurobi1103/linux64/include/
 )
 
@@ -140,6 +139,7 @@ install(TARGETS implicit_grid_astar
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+#[[
 pybind11_add_module(time_constrained_dubins_planning
   src/bind_time_constrained_dubins_planning.cpp
   src/dubins.cpp
@@ -149,6 +149,7 @@ target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES}
 install(TARGETS time_constrained_dubins_planning
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
+]]
 
 pybind11_add_module(box_qp
   src/bind_box_qp.cpp
@@ -176,17 +177,13 @@ install(TARGETS mtvg_problem
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
-pybind11_add_module(trajopt_gcs
-  src/mt_ixg_star.cpp
-  src/trajopt_through_convex_sets.cpp
-  src/bind_trajopt_gcs.cpp
+pybind11_add_module(parallel_squareform
+  src/bind_parallel_squareform.cpp
 )
-target_link_directories(trajopt_gcs PRIVATE $ENV{HOME}/Clarabel.cpp/rust_wrapper/target/release/)
-target_link_libraries(trajopt_gcs PRIVATE clarabel_c)
-install(TARGETS trajopt_gcs
+target_link_libraries(parallel_squareform PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS parallel_squareform
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
-
 
 # There by default
 if(BUILD_TESTING)
