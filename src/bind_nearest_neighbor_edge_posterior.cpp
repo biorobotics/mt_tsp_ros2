@@ -6,7 +6,7 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(nearest_neighbor_edge_posterior, m) {
   py::class_<NearestNeighborEdgePosterior>(m, "NearestNeighborEdgePosterior")
-    .def(py::init<double, double, bool>())
+    .def(py::init<double, double, bool, int>())
     .def("sample", &NearestNeighborEdgePosterior::sample)
     .def("add_edge", &NearestNeighborEdgePosterior::add_edge)
     ;

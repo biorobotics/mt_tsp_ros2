@@ -30,7 +30,12 @@ typedef std::shared_ptr<NNItem> NNItemPtr;
 
 class NearestNeighborEdgePosterior {
   public:
-    NearestNeighborEdgePosterior(double eta, double cost_multiplier, bool ignore_last_elem) : eta(eta), cost_multiplier(cost_multiplier), ignore_last_elem(ignore_last_elem), uniform_dist(0, 1) {
+    NearestNeighborEdgePosterior(double eta, double cost_multiplier, bool ignore_last_elem, int num_threads) : eta(eta), cost_multiplier(cost_multiplier), ignore_last_elem(ignore_last_elem), uniform_dist(0, 1), num_threads(num_threads) {
+      std::vector<std::uint32_t> seeds(num_threads);
+      this_seed_seq.generate(seeds.begin(), seeds.end());
+      for (int thread_idx = 0; thread_idx < num_threads; ++thread_idx) {
+        rngs_per_thread.push_back(std::mt19937(seeds[thread_idx]));
+      }
       nn.setDistanceFunction([this](const NNItemPtr a, const NNItemPtr b) { return (a->get_pt_pair() - b->get_pt_pair()).norm(); });
     }
 
@@ -49,6 +54,7 @@ class NearestNeighborEdgePosterior {
                 const Ref<const Matrix<double, Dynamic, Dynamic, RowMajor>> &gtsp_cost_mat,
                 Ref<Matrix<long, Dynamic, Dynamic>> gtsp_cost_mat_no_inf,
                 long inf_sub) {
+      omp_set_num_threads(num_threads);
       int num_pts = all_pts.rows();
       #pragma omp parallel for
       for (int node_idx1 = 0; node_idx1 < num_pts; ++node_idx1) {
@@ -74,13 +80,13 @@ class NearestNeighborEdgePosterior {
           double nearest_neighbor_dist = (nearest_neighbor_pt_pair - pt_pair).norm();
           double prob_sample_from_neighbor = exp(-eta*nearest_neighbor_dist);
 
-          if (uniform_dist(rng) < prob_sample_from_neighbor) {
+          if (uniform_dist(rngs_per_thread[omp_get_thread_num()]) < prob_sample_from_neighbor) {
             if (std::isinf(nearest_neighbor_cost)) {
               gtsp_cost_mat_no_inf(node_idx1, node_idx2) = inf_sub;
               continue;
             }
             double scale = std::abs(nearest_neighbor_cost - gtsp_cost_mat(node_idx1, node_idx2))/3;
-            gtsp_cost_mat_no_inf(node_idx1, node_idx2) = std::round(cost_multiplier*(nearest_neighbor_cost + scale*normal_dist(rng)));
+            gtsp_cost_mat_no_inf(node_idx1, node_idx2) = std::round(cost_multiplier*(nearest_neighbor_cost + scale*normal_dist(rngs_per_thread[omp_get_thread_num()])));
           } else {
             gtsp_cost_mat_no_inf(node_idx1, node_idx2) = std::round(cost_multiplier*gtsp_cost_mat(node_idx1, node_idx2));
           }
@@ -91,7 +97,9 @@ class NearestNeighborEdgePosterior {
     double eta;
     double cost_multiplier;
     bool ignore_last_elem;
-    std::mt19937 rng;
+    std::seed_seq this_seed_seq;
+    int num_threads;
+    std::vector<std::mt19937> rngs_per_thread;
     std::uniform_real_distribution<> uniform_dist;
     std::uniform_real_distribution<> normal_dist;
     ompl::NearestNeighborsGNAT<NNItemPtr> nn;
