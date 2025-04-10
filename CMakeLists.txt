@@ -214,6 +214,16 @@ install(TARGETS mt_cbss
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
+pybind11_add_module(nearest_neighbor_edge_posterior
+  src/bind_nearest_neighbor_edge_posterior.cpp
+)
+target_include_directories(nearest_neighbor_edge_posterior PRIVATE ${OMPL_INCLUDE_DIRS})
+target_link_libraries(nearest_neighbor_edge_posterior PRIVATE ${OMPL_LIBRARIES} OpenMP::OpenMP_CXX)
+install(TARGETS nearest_neighbor_edge_posterior
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
