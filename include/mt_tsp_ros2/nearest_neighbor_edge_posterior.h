@@ -84,7 +84,7 @@ class NearestNeighborEdgePosterior {
               gtsp_cost_mat_no_inf(node_idx1, node_idx2) = inf_sub;
               continue;
             }
-            double scale = std::abs(nearest_neighbor_cost - gtsp_cost_mat(node_idx1, node_idx2))/3;
+            double scale = (nearest_neighbor_cost - gtsp_cost_mat(node_idx1, node_idx2))/3;
             gtsp_cost_mat_no_inf(node_idx1, node_idx2) = std::round(cost_multiplier*(nearest_neighbor_cost + scale*normal_dist(rngs_per_thread[omp_get_thread_num()])));
 
           } else {
