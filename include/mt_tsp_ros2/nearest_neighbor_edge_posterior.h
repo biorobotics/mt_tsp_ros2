@@ -56,9 +56,8 @@ class NearestNeighborEdgePosterior {
                 long inf_sub) {
       omp_set_num_threads(num_threads);
       int num_pts = all_pts.rows();
-      #pragma omp parallel for
+      #pragma omp parallel for collapse(2)
       for (int node_idx1 = 0; node_idx1 < num_pts; ++node_idx1) {
-        #pragma omp parallel for
         for (int node_idx2 = 0; node_idx2 < num_pts; ++node_idx2) {
           if (pt_to_target_ptr(node_idx1) == pt_to_target_ptr(node_idx2) || 
               evaluated_edge_mat(node_idx1*num_pts + node_idx2) ||
@@ -87,6 +86,7 @@ class NearestNeighborEdgePosterior {
             }
             double scale = std::abs(nearest_neighbor_cost - gtsp_cost_mat(node_idx1, node_idx2))/3;
             gtsp_cost_mat_no_inf(node_idx1, node_idx2) = std::round(cost_multiplier*(nearest_neighbor_cost + scale*normal_dist(rngs_per_thread[omp_get_thread_num()])));
+
           } else {
             gtsp_cost_mat_no_inf(node_idx1, node_idx2) = std::round(cost_multiplier*gtsp_cost_mat(node_idx1, node_idx2));
           }
