@@ -470,28 +470,21 @@ Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double
       double l2 = l_m + 2*M_PI*rho;
       if (l_LRL_l < l2) {
         l2 = l_LRL_l;
-        std::cout << "LRL_l" << std::endl;
       }
       if (l_RLR_l < l2) {
         l2 = l_RLR_l;
-        std::cout << "RLR_l" << std::endl;
       }
       if (l_RSR != l_m && l_RSR < l2) {
         l2 = l_RSR;
-        std::cout << "RSR" << std::endl;
       }
       if (l_RSL != l_m && l_RSL < l2) {
         l2 = l_RSL;
-        std::cout << "RSL" << std::endl;
-        std::cout << (l_RSL < l_LRL_l) << " " << (l_RSL < l_RLR_l) << std::endl;
       }
       if (l_LSR != l_m && l_LSR < l2) {
         l2 = l_LSR;
-        std::cout << "LSR" << std::endl;
       }
       if (l_LSL != l_m && l_LSL < l2) {
         l2 = l_LSL;
-        std::cout << "LSL" << std::endl;
       }
       if (l1 < l2) {
         throw std::runtime_error("We should be able to elongate to an arbitrary length because we have parallel tangents");
