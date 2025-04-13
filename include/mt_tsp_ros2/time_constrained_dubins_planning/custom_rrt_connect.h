@@ -1,7 +1,8 @@
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/base/goals/GoalSampleableRegion.h>
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
-#include "ompl/tools/config/SelfConfig.h"
+#include <ompl/tools/config/SelfConfig.h>
+#include <unordered_set>
 
 namespace og = ompl::geometric;
 namespace ob = ompl::base;
@@ -117,8 +118,16 @@ class CustomRRTConnect : public og::RRTConnect {
               if (gsc == TRAPPED)
                   tgi.start = !tgi.start;
 
+              
+              // Motion *prev_nearest = otherTree->nearest(rmotion);
               while (gsc == ADVANCED) {
                   gsc = growTree(otherTree, tgi, rmotion);
+                  /*
+                  if (otherTree->nearest(rmotion) == prev_nearest) {
+                    gsc = TRAPPED;
+                    break;
+                  }
+                  */
               }
 
               /* update distance between trees */
@@ -254,9 +263,24 @@ class CustomRRTConnect : public og::RRTConnect {
     }
 
   protected:
+    struct pair_hash {
+      std::size_t operator()(const std::pair<Motion*, Motion*> &p) const {
+        return (std::hash<Motion*>()(p.first) + 0x9e3779b9) ^ (std::hash<Motion*>()(p.second) + 0x9e3779b9);
+      }
+    };
+
+    // std::unordered_set<std::pair<Motion*, Motion*>, pair_hash> grow_pairs; // To stop advance from going in an infinite loop
+
     GrowState growTree(TreeData &tree, TreeGrowingInfo &tgi, Motion *rmotion) {
       /* find closest state in the tree */
       Motion *nmotion = tree->nearest(rmotion);
+
+      /*
+      if (grow_pairs.find(std::make_pair(nmotion, rmotion)) != grow_pairs.end()) {
+        return TRAPPED;
+      }
+      grow_pairs.insert(std::make_pair(nmotion, rmotion));
+      */
 
       /* assume we can reach the state we go towards */
       bool reach = true;

@@ -48,6 +48,7 @@ class NoTimeDubinsPlanner {
     }
 
     RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter) {
+      ompl::msg::setLogLevel(ompl::msg::LogLevel::LOG_NONE);
       ob::ScopedState<> start_state(space);
       ob::ScopedState<> goal_state(space);
       for (int state_idx = 0; state_idx < start.size(); ++state_idx) {
