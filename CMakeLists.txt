@@ -140,7 +140,6 @@ install(TARGETS implicit_grid_astar
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
-#[[
 pybind11_add_module(time_constrained_dubins_planning
   src/bind_time_constrained_dubins_planning.cpp
   src/dubins.cpp
@@ -150,7 +149,6 @@ target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES}
 install(TARGETS time_constrained_dubins_planning
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
-]]
 
 pybind11_add_module(box_qp
   src/bind_box_qp.cpp
