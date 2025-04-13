@@ -263,16 +263,17 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
       if (l_RLR_l < l2) {
         l2 = l_RLR_l;
       }
-      if (l_RSR != l_m && l_RSR < l2) {
+      // I added the 1e-4 because if the Dubins path is a degenerate two-segment path, there are a few paths types that are equivalent
+      if (l_RSR > l_m + 1e-4 && l_RSR < l2) {
         l2 = l_RSR;
       }
-      if (l_RSL != l_m && l_RSL < l2) {
+      if (l_RSL > l_m + 1e-4 && l_RSL < l2) {
         l2 = l_RSL;
       }
-      if (l_LSR != l_m && l_LSR < l2) {
+      if (l_LSR > l_m + 1e-4 && l_LSR < l2) {
         l2 = l_LSR;
       }
-      if (l_LSL != l_m && l_LSL < l2) {
+      if (l_LSL > l_m + 1e-4 && l_LSL < l2) {
         l2 = l_LSL;
       }
 
@@ -292,16 +293,17 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
   if (l_RLR_l < l2) {
     l2 = l_RLR_l;
   }
-  if (l_RSR != l_m && l_RSR < l2) {
+  // I added the 1e-4 because if the Dubins path is a degenerate two-segment path, there are a few paths types that are equivalent
+  if (l_RSR > l_m + 1e-4 && l_RSR < l2) {
     l2 = l_RSR;
   }
-  if (l_RSL != l_m && l_RSL < l2) {
+  if (l_RSL > l_m + 1e-4 && l_RSL < l2) {
     l2 = l_RSL;
   }
-  if (l_LSR != l_m && l_LSR < l2) {
+  if (l_LSR > l_m + 1e-4 && l_LSR < l2) {
     l2 = l_LSR;
   }
-  if (l_LSL != l_m && l_LSL < l2) {
+  if (l_LSL > l_m + 1e-4 && l_LSL < l2) {
     l2 = l_LSL;
   }
 
@@ -474,16 +476,17 @@ Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double
       if (l_RLR_l < l2) {
         l2 = l_RLR_l;
       }
-      if (l_RSR != l_m && l_RSR < l2) {
+      // I added the 1e-4 because if the Dubins path is a degenerate two-segment path, there are a few paths types that are equivalent
+      if (l_RSR > l_m + 1e-4 && l_RSR < l2) {
         l2 = l_RSR;
       }
-      if (l_RSL != l_m && l_RSL < l2) {
+      if (l_RSL > l_m + 1e-4 && l_RSL < l2) {
         l2 = l_RSL;
       }
-      if (l_LSR != l_m && l_LSR < l2) {
+      if (l_LSR > l_m + 1e-4 && l_LSR < l2) {
         l2 = l_LSR;
       }
-      if (l_LSL != l_m && l_LSL < l2) {
+      if (l_LSL > l_m + 1e-4 && l_LSL < l2) {
         l2 = l_LSL;
       }
       if (l1 < l2) {
@@ -502,16 +505,17 @@ Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double
   if (l_RLR_l < l2) {
     l2 = l_RLR_l;
   }
-  if (l_RSR != l_m && l_RSR < l2) {
+  // I added the 1e-4 because if the Dubins path is a degenerate two-segment path, there are a few paths types that are equivalent
+  if (l_RSR > l_m + 1e-4 && l_RSR < l2) {
     l2 = l_RSR;
   }
-  if (l_RSL != l_m && l_RSL < l2) {
+  if (l_RSL > l_m + 1e-4 && l_RSL < l2) {
     l2 = l_RSL;
   }
-  if (l_LSR != l_m && l_LSR < l2) {
+  if (l_LSR > l_m + 1e-4 && l_LSR < l2) {
     l2 = l_LSR;
   }
-  if (l_LSL != l_m && l_LSL < l2) {
+  if (l_LSL > l_m + 1e-4 && l_LSL < l2) {
     l2 = l_LSL;
   }
 
@@ -1128,16 +1132,17 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
   if (l_RLR_l < l2) {
     l2 = l_RLR_l;
   }
-  if (l_RSR != l_m && l_RSR < l2) {
+  // I added the 1e-4 because if the Dubins path is a degenerate two-segment path, there are a few paths types that are equivalent
+  if (l_RSR > l_m + 1e-4 && l_RSR < l2) {
     l2 = l_RSR;
   }
-  if (l_RSL != l_m && l_RSL < l2) {
+  if (l_RSL > l_m + 1e-4 && l_RSL < l2) {
     l2 = l_RSL;
   }
-  if (l_LSR != l_m && l_LSR < l2) {
+  if (l_LSR > l_m + 1e-4 && l_LSR < l2) {
     l2 = l_LSR;
   }
-  if (l_LSL != l_m && l_LSL < l2) {
+  if (l_LSL > l_m + 1e-4 && l_LSL < l2) {
     l2 = l_LSL;
   }
 
@@ -1471,8 +1476,6 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
       return turns;
     } else {
-      // return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
-      // In some degenerate two-segment cases, the below does not hold
       throw std::runtime_error("One of the C segments in a CSC path should have parallel tangents");
     }
   }
