@@ -254,33 +254,6 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
     }
     if (angle_traversed >= M_PI) {
       // Parallel tangents
-
-      double l1 = std::max(l_LRL_s, l_RLR_s);
-      double l2 = l_m + 2*M_PI*rho;
-      if (l_LRL_l < l2) {
-        l2 = l_LRL_l;
-      }
-      if (l_RLR_l < l2) {
-        l2 = l_RLR_l;
-      }
-      // I added the 1e-4 because if the Dubins path is a degenerate two-segment path, there are a few paths types that are equivalent
-      if (l_RSR > l_m + 1e-4 && l_RSR < l2) {
-        l2 = l_RSR;
-      }
-      if (l_RSL > l_m + 1e-4 && l_RSL < l2) {
-        l2 = l_RSL;
-      }
-      if (l_LSR > l_m + 1e-4 && l_LSR < l2) {
-        l2 = l_LSR;
-      }
-      if (l_LSL > l_m + 1e-4 && l_LSL < l2) {
-        l2 = l_LSL;
-      }
-
-      if (l1 < l2) {
-        throw std::runtime_error("We should be able to elongate to an arbitrary length because we have parallel tangents");
-      }
-
       return true;
     }
   }
@@ -467,32 +440,6 @@ Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double
     }
     if (angle_traversed >= M_PI) {
       // Parallel tangents
-
-      double l1 = std::max(l_LRL_s, l_RLR_s);
-      double l2 = l_m + 2*M_PI*rho;
-      if (l_LRL_l < l2) {
-        l2 = l_LRL_l;
-      }
-      if (l_RLR_l < l2) {
-        l2 = l_RLR_l;
-      }
-      // I added the 1e-4 because if the Dubins path is a degenerate two-segment path, there are a few paths types that are equivalent
-      if (l_RSR > l_m + 1e-4 && l_RSR < l2) {
-        l2 = l_RSR;
-      }
-      if (l_RSL > l_m + 1e-4 && l_RSL < l2) {
-        l2 = l_RSL;
-      }
-      if (l_LSR > l_m + 1e-4 && l_LSR < l2) {
-        l2 = l_LSR;
-      }
-      if (l_LSL > l_m + 1e-4 && l_LSL < l2) {
-        l2 = l_LSL;
-      }
-      if (l1 < l2) {
-        throw std::runtime_error("We should be able to elongate to an arbitrary length because we have parallel tangents");
-      }
-
       return Vector3d(l_m, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
     }
   }
