@@ -2,12 +2,15 @@
 #include <ompl/base/SpaceInformation.h>
 #include <ompl/base/MotionValidator.h>
 #include "mt_tsp_ros2/elongate_dubins_path.h"
+#include <chrono>
 
 namespace ob = ompl::base;
 
 class DubinsMotionValidator : public ob::MotionValidator {
   public:
     explicit DubinsMotionValidator(const ob::SpaceInformationPtr si, double vmax, double rho) : ob::MotionValidator(si), vmax(vmax), rho(rho) {
+      path_elongation_time = 0.;
+      collision_check_time = 0.;
     }
 
     RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
@@ -21,7 +24,11 @@ class DubinsMotionValidator : public ob::MotionValidator {
       double theta2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
       double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
 
+      auto timer_start = std::chrono::high_resolution_clock::now();
       RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
+      auto timer_stop = std::chrono::high_resolution_clock::now();
+      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+      path_elongation_time += ((double)micros)/1e6;
       if (std::isinf(turns(0, 0))) {
         reach = false;
         stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(x1);
@@ -38,6 +45,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
       std::cout << x2 << " " << y2 << " " << theta2 << " " << t2 << std::endl;
       std::cout << turns << std::endl;
       */
+
+      timer_start = std::chrono::high_resolution_clock::now();
 
       ob::State* next_s = si_->getStateSpace()->allocState();
 
@@ -95,6 +104,10 @@ class DubinsMotionValidator : public ob::MotionValidator {
             si_->getStateSpace()->freeState(next_s);
             validMotion = false;
             turns(turn_idx, 1) = dist;
+
+            timer_stop = std::chrono::high_resolution_clock::now();
+            micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)micros)/1e6;
             return turns.topRows(turn_idx + 1);
           }
 
@@ -124,8 +137,12 @@ class DubinsMotionValidator : public ob::MotionValidator {
             */
             validMotion = true;
             turns(turn_idx, 1) = dist;
+
+            timer_stop = std::chrono::high_resolution_clock::now();
+            micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)micros)/1e6;
+
             return turns.topRows(turn_idx + 1);
-            return turns;
           }
         }
         x = next_x;
@@ -141,6 +158,11 @@ class DubinsMotionValidator : public ob::MotionValidator {
       stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
       si_->getStateSpace()->freeState(next_s);
       validMotion = true;
+
+      timer_stop = std::chrono::high_resolution_clock::now();
+      micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+      collision_check_time += ((double)micros)/1e6;
+
       return turns;
     }
 
@@ -160,7 +182,10 @@ class DubinsMotionValidator : public ob::MotionValidator {
       double theta2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
       double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
 
+      auto timer_start = std::chrono::high_resolution_clock::now();
       RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
+      auto timer_stop = std::chrono::high_resolution_clock::now();
+      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
       if (std::isinf(turns(0, 0))) {
         reach = false;
         stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(x2);
@@ -170,6 +195,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
         validMotion = false;
         return turns;
       }
+
+      timer_start = std::chrono::high_resolution_clock::now();
 
       ob::State* next_s = si_->getStateSpace()->allocState();
 
@@ -232,6 +259,11 @@ class DubinsMotionValidator : public ob::MotionValidator {
             si_->getStateSpace()->freeState(next_s);
             validMotion = false;
             turns(turn_idx, 1) = dist;
+
+            timer_stop = std::chrono::high_resolution_clock::now();
+            micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)micros)/1e6;
+
             return turns.bottomRows(turns.rows() - turn_idx);
           }
 
@@ -251,6 +283,11 @@ class DubinsMotionValidator : public ob::MotionValidator {
             si_->getStateSpace()->freeState(next_s);
             validMotion = true;
             turns(turn_idx, 1) = dist;
+
+            timer_stop = std::chrono::high_resolution_clock::now();
+            micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)micros)/1e6;
+
             return turns.bottomRows(turns.rows() - turn_idx);
           }
         }
@@ -267,6 +304,11 @@ class DubinsMotionValidator : public ob::MotionValidator {
       stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
       si_->getStateSpace()->freeState(next_s);
       validMotion = true;
+
+      timer_stop = std::chrono::high_resolution_clock::now();
+      micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+      collision_check_time += ((double)micros)/1e6;
+
       return turns;
     }
 
@@ -395,7 +437,22 @@ class DubinsMotionValidator : public ob::MotionValidator {
       return checkMotion(s1, s2, lastValid);
     }
 
+    double get_path_elongation_time() const {
+      return path_elongation_time;
+    }
+
+    double get_collision_check_time() const {
+      return collision_check_time;
+    }
+
+    void reset_timing_info() {
+      path_elongation_time = 0.;
+      collision_check_time = 0.;
+    }
+
   private:
     double vmax;
     double rho;
+    mutable double path_elongation_time;
+    mutable double collision_check_time;
 };

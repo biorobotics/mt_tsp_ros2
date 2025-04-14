@@ -5,6 +5,7 @@
 #include <ompl/base/samplers/deterministic/HaltonSequence.h>
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_time_state_space.h"
 #include "mt_tsp_ros2/elongate_dubins_path.h"
+#include <chrono>
 
 namespace ob = ompl::base;
  
@@ -25,9 +26,17 @@ class DubinsTimeStateSampler : public ob::DeterministicStateSampler {
       std::cout << turns_for_dubins_path(start_x, start_y, start_theta, goal_x, goal_y, goal_theta, rho).col(1).sum() << std::endl;
       std::cout << vmax*(goal_t - start_t) << std::endl;
       */
+
+      path_elongation_intervals_time = 0.;
     }
 
     void sampleUniform(ob::State *state) override {
+      // Sample a configuration q = (x, y, t) uniformly at random
+      config_sampler->sampleUniform(state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0));
+      double raw_sample = time_sequence_ptr->sample();
+      state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = start_t + raw_sample*(goal_t - start_t);
+
+      /*
       int max_iter = 1000;
       for (int i = 0; i < max_iter; ++i) {
         // Sample a configuration q = (x, y, t) uniformly at random
@@ -37,8 +46,12 @@ class DubinsTimeStateSampler : public ob::DeterministicStateSampler {
         double y = state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
         double theta = state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
 
+        auto timer_start = std::chrono::high_resolution_clock::now();
         Vector3d start_elongation_intervals = start_t*Vector3d::Ones() + get_elongation_intervals(start_x, start_y, start_theta, x, y, theta, rho)/vmax;
         Vector3d goal_elongation_intervals = goal_t*Vector3d::Ones() - get_elongation_intervals(x, y, theta, goal_x, goal_y, goal_theta, rho).reverse()/vmax;
+        auto timer_stop = std::chrono::high_resolution_clock::now();
+        auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+        path_elongation_intervals_time += ((double)micros)/1e6;
 
         std::vector<Vector2d> valid_intervals;
 
@@ -132,6 +145,7 @@ class DubinsTimeStateSampler : public ob::DeterministicStateSampler {
       space_->interpolate(start_state, goal_state, raw_sample, state);
       space_->freeState(start_state);
       space_->freeState(goal_state);
+      */
     }
 
     // We don't need this
@@ -142,6 +156,14 @@ class DubinsTimeStateSampler : public ob::DeterministicStateSampler {
     // We don't need this
     void sampleGaussian(ob::State* state, const ob::State* mean, const double stdDev) override {
       throw ompl::Exception("DubinsTimeStateSampler::sampleGaussian", "not implemented");
+    }
+
+    double get_path_elongation_intervals_time() const {
+      return path_elongation_intervals_time;
+    }
+
+    void reset_timing_info() {
+      path_elongation_intervals_time = 0.;
     }
 
   private:
@@ -157,4 +179,5 @@ class DubinsTimeStateSampler : public ob::DeterministicStateSampler {
     double goal_t;
     double vmax;
     double rho;
+    mutable double path_elongation_intervals_time;
 };

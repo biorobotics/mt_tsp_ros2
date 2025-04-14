@@ -3,6 +3,7 @@
 #include <ompl/base/spaces/TimeStateSpace.h>
 #include "mt_tsp_ros2/elongate_dubins_path.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_state_sampler.h"
+#include <chrono>
 
 namespace ob = ompl::base;
 
@@ -12,6 +13,9 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       addSubspace(spaceComponent, 0.5); // space component
       addSubspace(std::make_shared<ob::TimeStateSpace>(), 0.5); // time component
       // lock();
+
+      path_elongation_check_time = 0.;
+      path_elongation_time = 0.;
     }
 
     void set_start_and_goal(double start_x, double start_y, double start_theta, double start_t,
@@ -57,9 +61,17 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       double theta2 = state2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
       double t2 = state2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
 
+      auto timer_start = std::chrono::high_resolution_clock::now();
       if (t1 > t2 || !check_elongation_possible(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho)) {
+        auto timer_stop = std::chrono::high_resolution_clock::now();
+        auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+        path_elongation_check_time += ((double)micros)/1e6;
         return std::numeric_limits<double>::infinity();
       }
+
+      auto timer_stop = std::chrono::high_resolution_clock::now();
+      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+      path_elongation_check_time += ((double)micros)/1e6;
       return t2 - t1;
     }
 
@@ -74,7 +86,11 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       double theta2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
       double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
 
+      auto timer_start = std::chrono::high_resolution_clock::now();
       RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
+      auto timer_stop = std::chrono::high_resolution_clock::now();
+      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+      path_elongation_time += ((double)micros)/1e6;
       if (std::isinf(turns(0, 0))) {
         interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(x1);
         interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(y1);
@@ -144,6 +160,14 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       throw ompl::Exception("DubinsTimeStateSpace::interpolate", "reached line of code that should be impossible to reach");
     }
 
+    double get_path_elongation_check_time() const {
+      return path_elongation_check_time;
+    }
+
+    void reset_timing_info() {
+      path_elongation_check_time = 0.;
+    }
+
   private:
     double vmax;
     double rho;
@@ -155,4 +179,7 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
     double goal_y;
     double goal_theta;
     double goal_t;
+
+    mutable double path_elongation_check_time;
+    mutable double path_elongation_time;
 };

@@ -45,9 +45,15 @@ class TimeConstrainedDubinsPlanner {
       // planner = std::make_shared<og::RRT>(si);
       // planner = std::make_shared<CustomRRT>(si);
       ss->setPlanner(planner);
+
+      path_elongation_time = 0.;
+      collision_check_time = 0.;
     }
 
     RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter, std::vector<RowMatrixXd> &turns_chain) {
+      space->reset_timing_info();
+      motion_validator->reset_timing_info();
+
       ompl::msg::setLogLevel(ompl::msg::LogLevel::LOG_NONE);
       planner = std::make_shared<CustomRRTConnect>(si);
       ss->setPlanner(planner);
@@ -64,6 +70,11 @@ class TimeConstrainedDubinsPlanner {
       ss->setStartAndGoalStates(start_state, goal_state);
 
       ob::PlannerStatus status = ss->solve(ob::plannerOrTerminationCondition(ob::timedPlannerTerminationCondition(time_limit), ob::IterationTerminationCondition(max_iter)));
+
+      path_elongation_time = space->get_path_elongation_check_time() + 
+                             std::static_pointer_cast<CustomRRTConnect>(planner)->get_sampler_path_elongation_intervals_time() +
+                             motion_validator->get_path_elongation_time();
+      collision_check_time = motion_validator->get_collision_check_time();
 
       if (status == ob::PlannerStatus::StatusType::EXACT_SOLUTION) {
         // std::cout << "Found solution:" << std::endl;
@@ -84,6 +95,14 @@ class TimeConstrainedDubinsPlanner {
         // std::cout << "No solution found" << std::endl;
         return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 4);
       }
+    }
+
+    double get_path_elongation_time() const {
+      return path_elongation_time;
+    }
+
+    double get_collision_check_time() const {
+      return collision_check_time;
     }
 
     // Test functions
@@ -138,4 +157,7 @@ class TimeConstrainedDubinsPlanner {
 
     std::shared_ptr<og::SimpleSetup> ss;
     std::shared_ptr<ob::Planner> planner;
+
+    double path_elongation_time;
+    double collision_check_time;
 };

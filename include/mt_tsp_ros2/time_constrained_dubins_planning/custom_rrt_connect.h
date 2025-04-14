@@ -3,6 +3,7 @@
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
 #include <ompl/tools/config/SelfConfig.h>
 #include <unordered_set>
+#include <chrono>
 
 namespace og = ompl::geometric;
 namespace ob = ompl::base;
@@ -69,6 +70,9 @@ class CustomRRTConnect : public og::RRTConnect {
       ob::State *rstate = rmotion->state;
       bool solved = false;
 
+      double advance_time = 0.;
+      double sampling_time = 0.;
+
       while (!ptc)
       {
           TreeData &tree = startTree_ ? tStart_ : tGoal_;
@@ -96,7 +100,11 @@ class CustomRRTConnect : public og::RRTConnect {
           }
 
           /* sample random state */
+          auto timer_start = std::chrono::high_resolution_clock::now();
           sampler_->sampleUniform(rstate);
+          auto timer_stop = std::chrono::high_resolution_clock::now();
+          auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+          sampling_time += ((double)micros)/1e6;
 
           GrowState gs = growTree(tree, tgi, rmotion);
 
@@ -114,6 +122,8 @@ class CustomRRTConnect : public og::RRTConnect {
               tgi.start = startTree_;
 
               /* if initial progress cannot be done from the otherTree, restore tgi.start */
+
+              timer_start = std::chrono::high_resolution_clock::now();
               GrowState gsc = growTree(otherTree, tgi, rmotion);
               if (gsc == TRAPPED)
                   tgi.start = !tgi.start;
@@ -129,6 +139,10 @@ class CustomRRTConnect : public og::RRTConnect {
                   }
                   */
               }
+
+              timer_stop = std::chrono::high_resolution_clock::now();
+              micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+              advance_time += ((double)micros)/1e6;
 
               /* update distance between trees */
               // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
@@ -227,6 +241,8 @@ class CustomRRTConnect : public og::RRTConnect {
           }
       }
 
+      // std::cout << "Advance time: " << advance_time << " , Sampling time: " << sampling_time << std::endl;
+
       si_->freeState(tgi.xstate);
       si_->freeState(rstate);
       delete rmotion;
@@ -260,6 +276,10 @@ class CustomRRTConnect : public og::RRTConnect {
       }
 
       return solved ? ob::PlannerStatus::EXACT_SOLUTION : ob::PlannerStatus::TIMEOUT;
+    }
+
+    double get_sampler_path_elongation_intervals_time() {
+      return std::static_pointer_cast<DubinsTimeStateSampler>(sampler_)->get_path_elongation_intervals_time();
     }
 
   protected:
