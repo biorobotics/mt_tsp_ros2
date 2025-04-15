@@ -2,7 +2,8 @@
 #include <ompl/base/SpaceInformation.h>
 #include <ompl/base/MotionValidator.h>
 #include "mt_tsp_ros2/elongate_dubins_path.h"
-#include "mt_tsp_ros2/angle_mod.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/angle_mod.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
 #include <chrono>
 
 namespace ob = ompl::base;
@@ -169,7 +170,7 @@ bool arc_intersects_line_segment(double xai, double yai, double thetaai, double 
   double sai = sin(thetaai);
 
   Vector2d dirai(cai, sai);
-  Vector2d perpai(-sai, cai)*turn_dir;
+  Vector2d perpai(-sai*turn_dir, cai*turn_dir);
   Vector2d centerai = Vector2d(xai, yai) + perpai*r;
 
   Matrix2d intersections = line_segment_intersects_circle(x1, y1, x2, y2, centerai(0), centerai(1), r);
@@ -213,7 +214,7 @@ bool arc_intersects_line_segment(double xai, double yai, double thetaai, double 
 }
 
 bool arc_intersects_rect(double xai, double yai, double thetaai, double turn_dir, double turn_angle_magnitude, double r,
-                         double xaf, yaf,
+                         double xaf, double yaf,
                          double xir, double yir,
                          double xfr, double yfr) {
   return point_in_rect(xai, yai,
@@ -230,11 +231,9 @@ bool arc_intersects_rect(double xai, double yai, double thetaai, double turn_dir
                                      xfr, yir, xir, yir);
 }
 
-class DubinsMotionValidator : public ob::MotionValidator {
+class DubinsMotionValidatorRects : public DubinsMotionValidator {
   public:
-    explicit DubinsMotionValidator(const ob::SpaceInformationPtr si, double vmax, double rho, RowMatrixXdRef_const &rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub) : ob::MotionValidator(si), vmax(vmax), rho(rho), rects(rects), map_lb(map_lb), map_ub(map_ub) {
-      path_elongation_time = 0.;
-      collision_check_time = 0.;
+    explicit DubinsMotionValidatorRects(const ob::SpaceInformationPtr si, double vmax, double rho, RowMatrixXdRef_const &rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub) : DubinsMotionValidator(si, vmax, rho), rects(rects), map_lb(map_lb), map_ub(map_ub) {
     }
 
     bool collision_free(double x, double y, double theta, double turn_dir, double turn_dist, double next_x, double next_y) const {
@@ -253,11 +252,26 @@ class DubinsMotionValidator : public ob::MotionValidator {
           }
         }
       }
+
+      // Check intersection with map boundary
+      if (turn_dir == 0 && line_segment_intersects_rect(x, y, next_x, next_y, 
+                                                        map_lb(0), map_lb(1),
+                                                        map_ub(2), map_ub(3))) {
+        return false;
+      } else if (turn_dir == 1) {
+        if (arc_intersects_rect(x, y, theta, turn_dir, turn_dist/vmax, rho, 
+                                next_x, next_y,
+                                map_lb(0), map_lb(1),
+                                map_ub(2), map_ub(3))) {
+          return false;
+        }
+      }
+
       return true;
     }
 
     // If we set validMotion = false, stopState isn't used so we don't have to populate it. Same deal with turns
-    RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
+    RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const override {
       double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
       double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
       double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
@@ -298,7 +312,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
         double turn_dist = turns(turn_idx, 1);
         bool stop_on_this_turn = valid_path_length + turn_dist >= maxDuration*vmax;
         if (stop_on_this_turn) {
-          double turn_dist = maxDuration*vmax - valid_path_length;
+          turn_dist = maxDuration*vmax - valid_path_length;
         }
         double rho_times_turn_dir = rho*turn_dir;
 
@@ -322,7 +336,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
         if (!collision_free(x, y, theta, turn_dir, turn_dist, x, y)) {
           reach = false;
           validMotion = false;
-          turns(turn_idx, 1) = dist; // Not needed, I think
+          turns(turn_idx, 1) = turn_dist; // Not needed, I think
 
           timer_stop = std::chrono::high_resolution_clock::now();
           micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
@@ -368,7 +382,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
       return turns;
     }
 
-    RowMatrixXd checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
+    RowMatrixXd checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const override {
       if (!si_->isValid(s2)) {
         reach = false;
         validMotion = false;
@@ -414,7 +428,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
         double turn_dist = turns(turn_idx, 1);
         bool stop_on_this_turn = valid_path_length + turn_dist >= maxDuration*vmax;
         if (stop_on_this_turn) {
-          double turn_dist = maxDuration*vmax - valid_path_length;
+          turn_dist = maxDuration*vmax - valid_path_length;
         }
         double rho_times_turn_dir = rho*turn_dir;
 
@@ -438,7 +452,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
         if (!collision_free(next_x, next_y, next_theta, turn_dir, turn_dist, x, y)) {
           reach = false;
           validMotion = false;
-          turns(turn_idx, 1) = dist; // Not needed, I think
+          turns(turn_idx, 1) = turn_dist; // Not needed, I think
 
           timer_stop = std::chrono::high_resolution_clock::now();
           micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
@@ -455,7 +469,6 @@ class DubinsMotionValidator : public ob::MotionValidator {
           stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
           stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
           stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
-          si_->getStateSpace()->freeState(next_s);
           validMotion = true;
           turns(turn_idx, 1) = turn_dist;
 
@@ -485,149 +498,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
       return turns;
     }
 
-    bool checkMotion(const ob::State *s1, const ob::State *s2, std::pair<ob::State*, double> &lastValid) const override {
-      double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
-      double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
-      double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
-      double t1 = s1->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
-
-      double x2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
-      double y2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
-      double theta2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
-      double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
-
-      RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
-      if (std::isinf(turns(0, 0))) {
-        if (lastValid.first != nullptr) {
-          lastValid.first->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(x1);
-          lastValid.first->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(y1);
-          lastValid.first->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(theta1);
-          lastValid.first->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = t1;
-        }
-        lastValid.second = 0.;
-        return false;
-      }
-
-      ob::State* next_s = si_->getStateSpace()->allocState();
-
-      double x = x1;
-      double y = y1;
-      double theta = theta1;
-      double t = t1;
-
-      double valid_x = x1;
-      double valid_y = y1;
-      double valid_theta = theta1;
-      double valid_t = t1;
-
-      double valid_path_length = 0.;
-
-      /*
-      std::cout << "checking forward" << std::endl;
-      std::cout << x1 << " " << y1 << " " << theta1 << " " << t1 << std::endl;
-      std::cout << x2 << " " << y2 << " " << theta2 << " " << t2 << std::endl;
-      std::cout << turns << std::endl;
-      */
-      // std::cout << turns << std::endl;
-      for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
-        double turn_dir = turns(turn_idx, 0);
-        double turn_dist = turns(turn_idx, 1);
-        double rho_times_turn_dir = rho*turn_dir;
-
-        double ctheta = cos(theta);
-        double stheta = sin(theta);
-
-        int num_checks = 1000;
-        double next_x;
-        double next_y;
-        double next_theta;
-        double next_t;
-        for (int check_idx = 0; check_idx < num_checks; ++check_idx) {
-          double dist = (check_idx + 1)/(double)num_checks*turn_dist; // This is like doing np.linspace with num_checks + 1 points and ignoring the first element because we already checked it
-          next_t = t + dist/vmax;
-          if (turn_dir == 0) {
-            // S segment
-            next_theta = theta;
-            next_x = x + dist*ctheta;
-            next_y = y + dist*stheta;
-          } else {
-            // C segment
-            next_theta = theta + dist/rho_times_turn_dir;
-            next_x = x + rho_times_turn_dir*(-stheta + sin(next_theta));
-            next_y = y + rho_times_turn_dir*(ctheta - cos(next_theta));
-          }
-
-          next_s->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
-          next_s->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
-          next_s->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
-          next_s->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
-
-          /*
-          if (turn_idx == 2) {
-            std::cout << next_x << " " << next_y << " " << next_theta << " " << next_t << std::endl;
-          }
-          */
-          // std::cout << next_x << " " << next_y << " " << next_theta << " " << next_t << " " << dist << std::endl;
-          /*
-          if (turn_idx == 3) {
-            std::cout << next_x << " " << next_y << " " << next_theta << " " << next_t << std::endl;
-          }
-          */
-
-          if (!si_->isValid(next_s)) {
-            if (lastValid.first != nullptr) {
-              lastValid.first->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(valid_x);
-              lastValid.first->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(valid_y);
-              lastValid.first->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(valid_theta);
-              lastValid.first->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = valid_t;
-            }
-            double path_length = turns.col(1).sum();
-            lastValid.second = valid_path_length/path_length;
-            si_->getStateSpace()->freeState(next_s);
-            // std::cout << "failed at turn idx" << turn_idx << std::endl;
-            return false;
-          }
-
-          valid_x = next_x;
-          valid_y = next_y;
-          valid_theta = next_theta;
-          valid_t = next_t;
-
-          valid_path_length = turns.col(1).head(turn_idx).sum() + dist;
-        }
-        x = next_x;
-        y = next_y;
-        theta = next_theta;
-        t = next_t;
-      }
-
-      si_->getStateSpace()->freeState(next_s);
-      return true;
-    }
-
-    bool checkMotion(const ob::State *s1, const ob::State *s2) const override {
-      std::pair<ob::State*, double> lastValid;
-      return checkMotion(s1, s2, lastValid);
-    }
-
-    double get_path_elongation_time() const {
-      return path_elongation_time;
-    }
-
-    double get_collision_check_time() const {
-      return collision_check_time;
-    }
-
-    void reset_timing_info() {
-      path_elongation_time = 0.;
-      collision_check_time = 0.;
-    }
-
-  private:
-    double vmax;
-    double rho;
-    mutable double path_elongation_time;
-    mutable double collision_check_time;
+  protected:
     RowMatrixXd rects;
     Vector2d map_lb;
     Vector2d map_ub;
