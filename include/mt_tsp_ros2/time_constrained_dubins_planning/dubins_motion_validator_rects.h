@@ -177,10 +177,9 @@ bool arc_intersects_line_segment(double xai, double yai, double thetaai, double 
   if (std::isinf(intersections(0, 0))) {
     return false;
   }
+  double phiai = atan2(-perpai(1), -perpai(0));
 
-  double phiai = atan2(yai, xai);
-
-  double phi1 = atan2(intersections(0, 1), intersections(0, 0));
+  double phi1 = atan2(intersections(0, 1) - centerai(1), intersections(0, 0) - centerai(0));
 
   double diff1i = angdiff(phiai, phi1);
   if (diff1i < 0 && turn_dir == 1) {
@@ -197,7 +196,7 @@ bool arc_intersects_line_segment(double xai, double yai, double thetaai, double 
     return false;
   }
 
-  double phi2 = atan2(intersections(1, 1), intersections(1, 0));
+  double phi2 = atan2(intersections(1, 1) - centerai(1), intersections(1, 0) - centerai(0));
 
   double diff2i = angdiff(phiai, phi2);
   if (diff2i < 0 && turn_dir == 1) {
@@ -244,7 +243,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
                                                           rects(rect_idx, 2), rects(rect_idx, 3))) {
           return false;
         } else if (turn_dir != 0) {
-          if (arc_intersects_rect(x, y, theta, turn_dir, turn_dist/vmax, rho, 
+          if (arc_intersects_rect(x, y, theta, turn_dir, turn_dist/rho, rho, 
                                   next_x, next_y,
                                   rects(rect_idx, 0), rects(rect_idx, 1),
                                   rects(rect_idx, 2), rects(rect_idx, 3))) {

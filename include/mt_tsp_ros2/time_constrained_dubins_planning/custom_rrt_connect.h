@@ -390,14 +390,22 @@ class CustomRRTConnect : public og::RRTConnect {
       if (tgi.start) {
         turns = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
 
-        if (validMotion) {
-          // assert(motionValidator->checkMotion(nmotion->state, tgi.xstate));
+        /*
+        if (reach && validMotion) {
+          if (!motionValidator->checkMotion(nmotion->state, tgi.xstate)) {
+            throw std::runtime_error("checkMotionForward Incorrect");
+          }
         }
+        */
       } else {
         turns = motionValidator->checkMotionBackward(dstate, nmotion->state, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
-        if (validMotion) {
-          // assert(motionValidator->checkMotion(tgi.xstate, nmotion->state));
+        /*
+        if (reach && validMotion) {
+          if (!motionValidator->checkMotion(tgi.xstate, nmotion->state)) {
+            throw std::runtime_error("checkMotionBackward Incorrect");
+          }
         }
+        */
       }
       dstate = tgi.xstate;
 
