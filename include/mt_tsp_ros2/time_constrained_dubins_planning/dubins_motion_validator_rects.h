@@ -285,7 +285,8 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
     // If we set validMotion = false, stopState isn't used so we don't have to populate it. Same deal with turns
     RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, int num_checks = 1000) const override {
-      // return checkMotionForward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
+      return checkMotionForward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
+      /*
       RowMatrixXd turns1 = checkMotionForward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
       bool reach2;
       bool valid2;
@@ -298,6 +299,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         }
       }
       return turns1;
+      */
     }
 
     RowMatrixXd checkMotionForward_internal(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
@@ -415,7 +417,8 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
     }
 
     RowMatrixXd checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, int num_checks = 1000) const override {
-      // return checkMotionBackward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
+      return checkMotionBackward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
+      /*
       RowMatrixXd turns1 = checkMotionBackward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
       bool reach2;
       bool valid2;
@@ -428,6 +431,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         }
       }
       return turns1;
+      */
     }
 
     RowMatrixXd checkMotionBackward_internal(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
