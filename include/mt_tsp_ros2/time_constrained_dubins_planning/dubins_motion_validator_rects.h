@@ -243,7 +243,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
                                                           rects(rect_idx, 0), rects(rect_idx, 1),
                                                           rects(rect_idx, 2), rects(rect_idx, 3))) {
           return false;
-        } else if (turn_dir == 1) {
+        } else if (turn_dir != 0) {
           if (arc_intersects_rect(x, y, theta, turn_dir, turn_dist/vmax, rho, 
                                   next_x, next_y,
                                   rects(rect_idx, 0), rects(rect_idx, 1),
@@ -253,16 +253,29 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         }
       }
 
-      // Check intersection with map boundary
-      if (turn_dir == 0 && line_segment_intersects_rect(x, y, next_x, next_y, 
-                                                        map_lb(0), map_lb(1),
-                                                        map_ub(2), map_ub(3))) {
+      // Check if we exit the map
+      if (!point_in_rect(x, y, 
+                         map_lb(0), map_lb(1),
+                         map_ub(0), map_ub(1)) ||
+          !point_in_rect(next_x, next_y, 
+                         map_lb(0), map_lb(1),
+                         map_ub(0), map_ub(1))) {
         return false;
-      } else if (turn_dir == 1) {
-        if (arc_intersects_rect(x, y, theta, turn_dir, turn_dist/vmax, rho, 
-                                next_x, next_y,
-                                map_lb(0), map_lb(1),
-                                map_ub(2), map_ub(3))) {
+      }
+
+      if (turn_dir != 0) {
+        double xir = map_lb(0);
+        double xfr = map_ub(0);
+        double yir = map_lb(1);
+        double yfr = map_ub(1);
+        if (arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/vmax, rho,
+                                        xir, yir, xir, yfr) ||
+            arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/vmax, rho,
+                                        xir, yfr, xfr, yfr) ||
+            arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/vmax, rho,
+                                        xfr, yfr, xfr, yir) ||
+            arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/vmax, rho,
+                                        xfr, yir, xir, yir)) {
           return false;
         }
       }
