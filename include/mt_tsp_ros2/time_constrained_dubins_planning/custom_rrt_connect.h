@@ -45,12 +45,14 @@ class CustomRRTConnect : public og::RRTConnect {
       if (tStart_->size() == 0)
       {
           OMPL_ERROR("%s: Motion planning start tree could not be initialized!", getName().c_str());
+          throw std::runtime_error("Motion planning start tree could not be initialized!");
           return ob::PlannerStatus::INVALID_START;
       }
 
       if (!goal->couldSample())
       {
           OMPL_ERROR("%s: Insufficient states in sampleable goal region", getName().c_str());
+          throw std::runtime_error("Motion planning goal tree could not be initialized!");
           return ob::PlannerStatus::INVALID_GOAL;
       }
 

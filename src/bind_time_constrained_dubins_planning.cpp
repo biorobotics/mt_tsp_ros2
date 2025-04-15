@@ -18,6 +18,7 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
     .def("checkMotion", &TimeConstrainedDubinsPlanner::checkMotion)
     .def("checkMotionForwardBackward", &TimeConstrainedDubinsPlanner::checkMotionForwardBackward)
     .def("get_path_elongation_time", &TimeConstrainedDubinsPlanner::get_path_elongation_time)
+    .def("get_path_elongation_check_time", &TimeConstrainedDubinsPlanner::get_path_elongation_check_time)
     .def("get_collision_check_time", &TimeConstrainedDubinsPlanner::get_collision_check_time)
     ;
 

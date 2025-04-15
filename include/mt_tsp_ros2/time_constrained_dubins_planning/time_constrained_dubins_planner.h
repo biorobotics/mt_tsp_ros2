@@ -50,6 +50,7 @@ class TimeConstrainedDubinsPlanner {
       ss->setPlanner(planner);
 
       path_elongation_time = 0.;
+      path_elongation_check_time = 0.;
       collision_check_time = 0.;
     }
 
@@ -80,6 +81,7 @@ class TimeConstrainedDubinsPlanner {
       ss->setPlanner(planner);
 
       path_elongation_time = 0.;
+      path_elongation_check_time = 0.;
       collision_check_time = 0.;
     }
 
@@ -104,9 +106,8 @@ class TimeConstrainedDubinsPlanner {
 
       ob::PlannerStatus status = ss->solve(ob::plannerOrTerminationCondition(ob::timedPlannerTerminationCondition(time_limit), ob::IterationTerminationCondition(max_iter)));
 
-      path_elongation_time = space->get_path_elongation_check_time() + 
-                             std::static_pointer_cast<CustomRRTConnect>(planner)->get_sampler_path_elongation_intervals_time() +
-                             motion_validator->get_path_elongation_time();
+      path_elongation_time = motion_validator->get_path_elongation_time();
+      path_elongation_check_time = space->get_path_elongation_check_time();
       collision_check_time = motion_validator->get_collision_check_time();
 
       if (status == ob::PlannerStatus::StatusType::EXACT_SOLUTION) {
@@ -132,6 +133,10 @@ class TimeConstrainedDubinsPlanner {
 
     double get_path_elongation_time() const {
       return path_elongation_time;
+    }
+
+    double get_path_elongation_check_time() const {
+      return path_elongation_check_time;
     }
 
     double get_collision_check_time() const {
@@ -213,5 +218,6 @@ class TimeConstrainedDubinsPlanner {
     std::shared_ptr<ob::Planner> planner;
 
     double path_elongation_time;
+    double path_elongation_check_time;
     double collision_check_time;
 };
