@@ -333,7 +333,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
         next_t = t + turn_dist/vmax;
 
-        if (!collision_free(x, y, theta, turn_dir, turn_dist, x, y)) {
+        if (!collision_free(x, y, theta, turn_dir, turn_dist, next_x, next_y)) {
           reach = false;
           validMotion = false;
           turns(turn_idx, 1) = turn_dist; // Not needed, I think
