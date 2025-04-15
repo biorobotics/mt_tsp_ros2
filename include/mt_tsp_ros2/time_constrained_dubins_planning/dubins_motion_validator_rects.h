@@ -60,6 +60,7 @@ double lineSegmentsIntersect(double x1i, double y1i, double x1f, double y1f,
 
   if (det == 0) {
     // Segments are parallel
+    throw std::runtime_error("I think this code handling intersection of parallel line segments is incorrect");
     return onSegment(x1i, y1i, x2i, y2i, x1f, y1f) ||
            onSegment(x1i, y1i, x2f, y2f, x1f, y1f) ||
            onSegment(x2i, y2i, x1i, y1i, x2f, y2f) ||
@@ -267,13 +268,13 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         double xfr = map_ub(0);
         double yir = map_lb(1);
         double yfr = map_ub(1);
-        if (arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/vmax, rho,
+        if (arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/rho, rho,
                                         xir, yir, xir, yfr) ||
-            arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/vmax, rho,
+            arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/rho, rho,
                                         xir, yfr, xfr, yfr) ||
-            arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/vmax, rho,
+            arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/rho, rho,
                                         xfr, yfr, xfr, yir) ||
-            arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/vmax, rho,
+            arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/rho, rho,
                                         xfr, yir, xir, yir)) {
           return false;
         }
@@ -283,7 +284,23 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
     }
 
     // If we set validMotion = false, stopState isn't used so we don't have to populate it. Same deal with turns
-    RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const override {
+    RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, int num_checks = 1000) const override {
+      // return checkMotionForward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
+      RowMatrixXd turns1 = checkMotionForward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
+      bool reach2;
+      bool valid2;
+      RowMatrixXd turns2 = DubinsMotionValidator::checkMotionForward(s1, s2, maxDuration, stopState, reach2, valid2);
+      if (validMotion != valid2) {
+        std::cout << "mismatch, using finer collision check resolution" << std::endl;
+        DubinsMotionValidator::checkMotionForward(s1, s2, maxDuration, stopState, reach2, valid2, 100000);
+        if (validMotion != valid2) {
+          throw std::runtime_error("Mismatch on valid forward");
+        }
+      }
+      return turns1;
+    }
+
+    RowMatrixXd checkMotionForward_internal(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
       double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
       double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
       double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
@@ -312,16 +329,19 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       double theta = theta1;
       double t = t1;
 
-      double next_x;
-      double next_y;
-      double next_theta;
-      double next_t;
+      double next_x = x;
+      double next_y = y;
+      double next_theta = theta;
+      double next_t = t;
 
       double valid_path_length = 0.;
 
       for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
+        if (turn_dist == 0) {
+          continue;
+        }
         bool stop_on_this_turn = valid_path_length + turn_dist >= maxDuration*vmax;
         if (stop_on_this_turn) {
           turn_dist = maxDuration*vmax - valid_path_length;
@@ -394,7 +414,23 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       return turns;
     }
 
-    RowMatrixXd checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const override {
+    RowMatrixXd checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, int num_checks = 1000) const override {
+      // return checkMotionBackward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
+      RowMatrixXd turns1 = checkMotionBackward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
+      bool reach2;
+      bool valid2;
+      RowMatrixXd turns2 = DubinsMotionValidator::checkMotionBackward(s1, s2, maxDuration, stopState, reach2, valid2);
+      if (validMotion != valid2) {
+        DubinsMotionValidator::checkMotionBackward(s1, s2, maxDuration, stopState, reach2, valid2, 100000);
+        if (validMotion != valid2) {
+          std::cout << validMotion << " " << valid2 << std::endl;
+          throw std::runtime_error("Mismatch on valid backward");
+        }
+      }
+      return turns1;
+    }
+
+    RowMatrixXd checkMotionBackward_internal(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
       if (!si_->isValid(s2)) {
         reach = false;
         validMotion = false;
@@ -427,10 +463,10 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       double theta = theta2;
       double t = t2;
 
-      double next_x;
-      double next_y;
-      double next_theta;
-      double next_t;
+      double next_x = x;
+      double next_y = y;
+      double next_theta = theta;
+      double next_t = t;
 
       double valid_path_length = 0.;
 
@@ -438,6 +474,9 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       for (int turn_idx = turns.rows() - 1; turn_idx >= 0; --turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
+        if (turn_dist == 0) {
+          continue;
+        }
         bool stop_on_this_turn = valid_path_length + turn_dist >= maxDuration*vmax;
         if (stop_on_this_turn) {
           turn_dist = maxDuration*vmax - valid_path_length;

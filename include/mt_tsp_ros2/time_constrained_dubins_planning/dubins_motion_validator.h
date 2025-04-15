@@ -13,7 +13,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
       collision_check_time = 0.;
     }
 
-    virtual RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
+    virtual RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, int num_checks = 1000) const {
       double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
       double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
       double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
@@ -70,7 +70,6 @@ class DubinsMotionValidator : public ob::MotionValidator {
         double ctheta = cos(theta);
         double stheta = sin(theta);
 
-        int num_checks = 1000;
         double next_x;
         double next_y;
         double next_theta;
@@ -166,7 +165,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
       return turns;
     }
 
-    virtual RowMatrixXd checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
+    virtual RowMatrixXd checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, int num_checks = 1000) const {
       if (!si_->isValid(s2)) {
         reach = false;
         validMotion = false;
@@ -221,7 +220,6 @@ class DubinsMotionValidator : public ob::MotionValidator {
         double ctheta = cos(theta);
         double stheta = sin(theta);
 
-        int num_checks = 1000;
         double next_x;
         double next_y;
         double next_theta;
