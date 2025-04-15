@@ -60,11 +60,10 @@ double lineSegmentsIntersect(double x1i, double y1i, double x1f, double y1f,
 
   if (det == 0) {
     // Segments are parallel
-    throw std::runtime_error("I think this code handling intersection of parallel line segments is incorrect");
-    return onSegment(x1i, y1i, x2i, y2i, x1f, y1f) ||
-           onSegment(x1i, y1i, x2f, y2f, x1f, y1f) ||
-           onSegment(x2i, y2i, x1i, y1i, x2f, y2f) ||
-           onSegment(x2i, y2i, x1f, y1f, x2f, y2f);
+    return onSegment(x1i, y1i, x1f, y1f, x2f, y2f) ||
+           onSegment(x1i, y1i, x1f, y1f, x2i, y2i) ||
+           onSegment(x2i, y2i, x2f, y2f, x1i, y1i) ||
+           onSegment(x2i, y2i, x2f, y2f, x1f, y1f);
   }
 
   double lx = x2i - x1i;
