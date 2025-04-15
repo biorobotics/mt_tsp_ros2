@@ -1,6 +1,7 @@
 #pragma once
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_time_state_space.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator_rects.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_state_sampler.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_state_validity_checker.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/custom_rrt_connect.h"
@@ -18,6 +19,7 @@ namespace ob = ompl::base;
 namespace og = ompl::geometric;
 
 typedef Ref<VectorXd> VectorXdRef;
+typedef const Ref<const RowMatrixXd>& RowMatrixXdRef_const;
 
 class TimeConstrainedDubinsPlanner {
   public:
@@ -37,6 +39,37 @@ class TimeConstrainedDubinsPlanner {
       si->setStateValidityChecker(state_checker);
 
       motion_validator = std::make_shared<DubinsMotionValidator>(si, vmax, rho);
+      // motion_validator = std::make_shared<DubinsMotionValidatorRects>(si, vmax, rho, map_lb, map_ub);
+      si->setMotionValidator(motion_validator);
+
+      ss = std::make_shared<og::SimpleSetup>(si);
+      planner = std::make_shared<CustomRRTConnect>(si);
+      // planner = std::make_shared<og::RRTConnect>(si);
+      // planner = std::make_shared<og::RRT>(si);
+      // planner = std::make_shared<CustomRRT>(si);
+      ss->setPlanner(planner);
+
+      path_elongation_time = 0.;
+      collision_check_time = 0.;
+    }
+
+    // My occupancy grid to rectangle code is in python, otherwise I wouldn't have a separate constructor here
+    TimeConstrainedDubinsPlanner(double vmax, double rho, RowMatrixXbRef_const occupancy, RowMatrixXdRef_const rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub) {
+      std::shared_ptr<ob::SE2StateSpace> cspace = std::make_shared<ob::SE2StateSpace>();
+      ob::RealVectorBounds bounds(2);
+      bounds.setLow(0, map_lb(0));
+      bounds.setLow(1, map_lb(1));
+      bounds.setHigh(0, map_ub(0));
+      bounds.setHigh(1, map_ub(1));
+      cspace->setBounds(bounds);
+      space = std::make_shared<DubinsTimeStateSpace>(cspace, vmax, rho);
+
+      si = std::make_shared<ob::SpaceInformation>(space);
+
+      state_checker = std::make_shared<DubinsStateValidityChecker>(si, occupancy, map_lb, map_ub);
+      si->setStateValidityChecker(state_checker);
+
+      motion_validator = std::make_shared<DubinsMotionValidatorRects>(si, vmax, rho, rects, map_lb, map_ub);
       si->setMotionValidator(motion_validator);
 
       ss = std::make_shared<og::SimpleSetup>(si);
@@ -147,6 +180,27 @@ class TimeConstrainedDubinsPlanner {
         s_valid_vec[state_idx] = s_valid[state_idx];
       }
       return lastValid.second;
+    }
+
+    bool checkMotionForwardBackward(VectorXdRef s_valid_vec, VectorXdRef_const s1_vec, VectorXdRef_const s2_vec, double maxDuration, bool forward) {
+      ob::ScopedState<> s1(space);
+      ob::ScopedState<> s2(space);
+      ob::ScopedState<> s_valid(space);
+
+      for (int state_idx = 0; state_idx < s1_vec.size(); ++state_idx) {
+        s1[state_idx] = s1_vec(state_idx);
+        s2[state_idx] = s2_vec(state_idx);
+        s_valid[state_idx] = s2_vec(state_idx);
+      }
+      bool reach;
+      bool validMotion;
+      if (forward) {
+        motion_validator->checkMotionForward(s1.get(), s2.get(), maxDuration, s_valid.get(), reach, validMotion);
+        return validMotion;
+      } else {
+        motion_validator->checkMotionBackward(s1.get(), s2.get(), maxDuration, s_valid.get(), reach, validMotion);
+        return validMotion;
+      }
     }
 
   private:
