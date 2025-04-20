@@ -283,8 +283,8 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
     }
 
     bool collision_free(double x, double y, double theta, double turn_dir, double turn_dist, double next_x, double next_y) const {
-      // Line segment
       /*
+      // Line segment
       for (int rect_idx = 0; rect_idx < rects.rows(); ++rect_idx) {
         if (turn_dir == 0 && line_segment_intersects_rect(x, y, next_x, next_y, 
                                                           rects(rect_idx, 0), rects(rect_idx, 1),
@@ -326,6 +326,8 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
           return false;
         }
       }
+
+      return true;
       */
 
       // S segment
