@@ -6,6 +6,29 @@
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
 #include <chrono>
 
+#include <CGAL/Simple_cartesian.h>
+#include <CGAL/AABB_tree.h>
+#include <CGAL/Exact_circular_kernel_2.h>
+#include <CGAL/AABB_traits_2.h>
+#include <CGAL/AABB_segment_primitive_2.h>
+
+typedef CGAL::Exact_circular_kernel_2 Circular_k;
+typedef CGAL::Circular_arc_2<Circular_k> Circular_arc_2;
+typedef CGAL::Circle_2<Circular_k> Circle_2;
+typedef Circular_k::Point_2 Point_Circular_k;
+typedef Circular_k::FT FT_Circular_k;
+
+typedef CGAL::Simple_cartesian<double> K;
+
+typedef K::Point_2 Point;
+typedef K::Segment_2 Segment;
+
+typedef std::list<Segment>::iterator Iterator;
+typedef CGAL::AABB_segment_primitive_2<K, Iterator> Primitive;
+typedef CGAL::AABB_traits_2<K, Primitive> Traits;
+typedef CGAL::AABB_tree<Traits> Tree;
+typedef Tree::Primitive_id Primitive_id;
+
 namespace ob = ompl::base;
 
 // https://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment
@@ -141,10 +164,12 @@ Matrix2d line_segment_intersects_circle(double x1, double y1, double x2, double 
 
         ret(1, 0) = x1 + d(0)*t2;
         ret(1, 1) = y1 + d(1)*t2;
+        return ret;
       } else {
         // Poke
         ret(0, 0) = x1 + d(0)*t1;
         ret(0, 1) = y1 + d(1)*t1;
+        return ret;
       }
     }
 
@@ -155,6 +180,7 @@ Matrix2d line_segment_intersects_circle(double x1, double y1, double x2, double 
       // ExitWound
       ret(0, 0) = x1 + d(0)*t2;
       ret(0, 1) = y1 + d(1)*t2;
+      return ret;
     }
 
     // no intersection: FallShort, Past, CompletelyInside
@@ -233,10 +259,32 @@ bool arc_intersects_rect(double xai, double yai, double thetaai, double turn_dir
 class DubinsMotionValidatorRects : public DubinsMotionValidator {
   public:
     explicit DubinsMotionValidatorRects(const ob::SpaceInformationPtr si, double vmax, double rho, RowMatrixXdRef_const &rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub, const Ref<const VectorXd> &start, const Ref<const VectorXd> &goal) : DubinsMotionValidator(si, vmax, rho), rects(rects), map_lb(map_lb), map_ub(map_ub), start(start), goal(goal) {
+      for (int row = 0; row < rects.rows(); ++row) {
+        Point point1(rects(row, 0), rects(row, 1)); // xlow, ylow
+        Point point2(rects(row, 0), rects(row, 3)); // xlow, yhigh
+        Point point3(rects(row, 2), rects(row, 3)); // xhigh, yhigh
+        Point point4(rects(row, 2), rects(row, 1)); // xhigh, ylow
+        segments.push_back(Segment(point1, point2));
+        segments.push_back(Segment(point2, point3));
+        segments.push_back(Segment(point3, point4));
+        segments.push_back(Segment(point4, point1));
+      }
+      // Add the map boundaries
+      Point point1(map_lb(0), map_lb(1)); // xlow, ylow
+      Point point2(map_lb(0), map_ub(1)); // xlow, yhigh
+      Point point3(map_ub(0), map_ub(1)); // xhigh, yhigh
+      Point point4(map_ub(0), map_lb(1)); // xhigh, ylow
+      segments.push_back(Segment(point1, point2));
+      segments.push_back(Segment(point2, point3));
+      segments.push_back(Segment(point3, point4));
+      segments.push_back(Segment(point4, point1));
+
+      aabb_tree = Tree(segments.begin(), segments.end()); 
     }
 
     bool collision_free(double x, double y, double theta, double turn_dir, double turn_dist, double next_x, double next_y) const {
       // Line segment
+      /*
       for (int rect_idx = 0; rect_idx < rects.rows(); ++rect_idx) {
         if (turn_dir == 0 && line_segment_intersects_rect(x, y, next_x, next_y, 
                                                           rects(rect_idx, 0), rects(rect_idx, 1),
@@ -278,8 +326,81 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
           return false;
         }
       }
+      */
 
+      // S segment
+      if (turn_dir == 0) {
+        Point point1(x, y);
+        Point point2(next_x, next_y);
+        Segment segment(point1, point2);
+        return !aabb_tree.do_intersect(segment);
+      }
+
+      // C segment
+
+      double c = cos(theta);
+      double s = sin(theta);
+
+      Vector2d dir(c, s);
+      Vector2d perp(-s*turn_dir, c*turn_dir);
+      Vector2d center = Vector2d(x, y) + perp*rho;
+
+      Point_Circular_k center_CGAL(center(0), center(1));
+      Circle_2 circle_CGAL(center_CGAL, rho*rho);
+
+      std::list<Primitive_id> primitives;
+      aabb_tree.all_intersected_primitives(circle_CGAL.bbox(), std::back_inserter(primitives));
+
+      for (Primitive_id primitive : primitives) {
+        if (arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/rho, rho,
+                                        primitive->source().x(), primitive->source().y(), primitive->target().x(), primitive->target().y())) {
+          return false;
+        }
+      }
       return true;
+
+      // Below code doesn't work. I think it's becauseCGAL always assumes the arc goes counterclockwise from point1 to point3
+      /*
+      if (turn_dist >= 2*M_PI*rho) {
+        Vector2d dir(c, s);
+        Vector2d perp(-s*turn_dir, c*turn_dir);
+        Vector2d center = Vector2d(x, y) + perp*rho;
+
+        Point_Circular_k center_CGAL(center(0), center(1));
+        Circle_2 circle_CGAL(center_CGAL, rho*rho);
+
+        std::list<Primitive_id> primitives;
+        aabb_tree.all_intersected_primitives(circle_CGAL.bbox(), std::back_inserter(primitives));
+        for (Primitive_id primitive : primitives) {
+          Matrix2d intersections = line_segment_intersects_circle(primitive->source().x(), primitive->source().y(), primitive->target().x(), primitive->target().y(), center(0), center(1), rho);
+          if (std::isfinite(intersections(0, 0))) {
+            return false;
+          }
+        }
+        return true;
+      } else {
+        double rho_times_turn_dir = rho*turn_dir;
+        double theta_mid = theta + 0.5*turn_dist/rho_times_turn_dir;
+        double x_mid = x + rho_times_turn_dir*(-s + sin(theta_mid));
+        double y_mid = y + rho_times_turn_dir*(c - cos(theta_mid));
+
+        Point_Circular_k point1_CGAL(x, y);
+        Point_Circular_k point2_CGAL(x_mid, y_mid);
+        Point_Circular_k point3_CGAL(next_x, next_y);
+
+        Circular_arc_2 arc_CGAL(point1_CGAL, point2_CGAL, point3_CGAL);
+
+        std::list<Primitive_id> primitives;
+        aabb_tree.all_intersected_primitives(arc_CGAL.bbox(), std::back_inserter(primitives));
+        for (Primitive_id primitive : primitives) {
+          if (arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/rho, rho,
+                                          primitive->source().x(), primitive->source().y(), primitive->target().x(), primitive->target().y())) {
+            return false;
+          }
+        }
+        return true;
+      }
+      */
     }
 
     // If we set validMotion = false, stopState isn't used so we don't have to populate it. Same deal with turns
@@ -684,4 +805,8 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
     Vector2d map_ub;
     VectorXd start;
     VectorXd goal;
+
+    // Need segments to persist in memory while the tree is in use
+    std::list<Segment> segments;
+    Tree aabb_tree;
 };

@@ -145,7 +145,7 @@ pybind11_add_module(time_constrained_dubins_planning
   src/dubins.cpp
 )
 target_include_directories(time_constrained_dubins_planning PRIVATE ${OMPL_INCLUDE_DIRS})
-target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES} OpenMP::OpenMP_CXX)
+target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES} OpenMP::OpenMP_CXX CGAL::CGAL)
 install(TARGETS time_constrained_dubins_planning
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
