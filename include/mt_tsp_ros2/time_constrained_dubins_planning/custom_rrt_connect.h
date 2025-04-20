@@ -30,6 +30,7 @@ class CustomRRTConnect : public og::RRTConnect {
       if (goal == nullptr)
       {
           OMPL_ERROR("%s: Unknown type of goal", getName().c_str());
+          throw std::runtime_error("Unknown type of goal");
           return ob::PlannerStatus::UNRECOGNIZED_GOAL_TYPE;
       }
 
