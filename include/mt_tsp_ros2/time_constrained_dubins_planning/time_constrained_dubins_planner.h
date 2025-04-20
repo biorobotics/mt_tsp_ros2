@@ -23,7 +23,7 @@ typedef const Ref<const RowMatrixXd>& RowMatrixXdRef_const;
 
 class TimeConstrainedDubinsPlanner {
   public:
-    TimeConstrainedDubinsPlanner(double vmax, double rho, RowMatrixXbRef_const occupancy, Vector2dRef_const map_lb, Vector2dRef_const map_ub) {
+    TimeConstrainedDubinsPlanner(double vmax, double rho, RowMatrixXbRef_const occupancy, Vector2dRef_const map_lb, Vector2dRef_const map_ub) : vmax(vmax), rho(rho), do_rects(false), map_lb(map_lb), map_ub(map_ub) {
       std::shared_ptr<ob::SE2StateSpace> cspace = std::make_shared<ob::SE2StateSpace>();
       ob::RealVectorBounds bounds(2);
       bounds.setLow(0, map_lb(0));
@@ -55,7 +55,7 @@ class TimeConstrainedDubinsPlanner {
     }
 
     // My occupancy grid to rectangle code is in python, otherwise I wouldn't have a separate constructor here
-    TimeConstrainedDubinsPlanner(double vmax, double rho, RowMatrixXbRef_const occupancy, RowMatrixXdRef_const rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub) {
+    TimeConstrainedDubinsPlanner(double vmax, double rho, RowMatrixXbRef_const occupancy, RowMatrixXdRef_const rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub) : vmax(vmax), rho(rho), rects(rects), do_rects(true), map_lb(map_lb), map_ub(map_ub) {
       std::shared_ptr<ob::SE2StateSpace> cspace = std::make_shared<ob::SE2StateSpace>();
       ob::RealVectorBounds bounds(2);
       bounds.setLow(0, map_lb(0));
@@ -67,18 +67,10 @@ class TimeConstrainedDubinsPlanner {
 
       si = std::make_shared<ob::SpaceInformation>(space);
 
+      ss = std::make_shared<og::SimpleSetup>(si);
+
       state_checker = std::make_shared<DubinsStateValidityChecker>(si, occupancy, map_lb, map_ub);
       si->setStateValidityChecker(state_checker);
-
-      motion_validator = std::make_shared<DubinsMotionValidatorRects>(si, vmax, rho, rects, map_lb, map_ub);
-      si->setMotionValidator(motion_validator);
-
-      ss = std::make_shared<og::SimpleSetup>(si);
-      planner = std::make_shared<CustomRRTConnect>(si);
-      // planner = std::make_shared<og::RRTConnect>(si);
-      // planner = std::make_shared<og::RRT>(si);
-      // planner = std::make_shared<CustomRRT>(si);
-      ss->setPlanner(planner);
 
       path_elongation_time = 0.;
       path_elongation_check_time = 0.;
@@ -86,6 +78,11 @@ class TimeConstrainedDubinsPlanner {
     }
 
     RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter, std::vector<RowMatrixXd> &turns_chain) {
+      if (do_rects) {
+        motion_validator = std::make_shared<DubinsMotionValidatorRects>(si, vmax, rho, rects, map_lb, map_ub, start, goal);
+        si->setMotionValidator(motion_validator);
+      }
+
       space->reset_timing_info();
       motion_validator->reset_timing_info();
 
@@ -104,13 +101,18 @@ class TimeConstrainedDubinsPlanner {
       ss->clear();
       ss->setStartAndGoalStates(start_state, goal_state);
 
+      // std::cout << "Solve" << std::endl;
       ob::PlannerStatus status = ss->solve(ob::plannerOrTerminationCondition(ob::timedPlannerTerminationCondition(time_limit), ob::IterationTerminationCondition(max_iter)));
+      // std::cout << "Solved" << std::endl;
 
       path_elongation_time = motion_validator->get_path_elongation_time();
       path_elongation_check_time = space->get_path_elongation_check_time();
       collision_check_time = motion_validator->get_collision_check_time();
 
+      // std::cout << "got profiling data" << std::endl;
+
       if (status == ob::PlannerStatus::StatusType::EXACT_SOLUTION) {
+        // std::cout << "Got soln" << std::endl;
         // std::cout << "Found solution:" << std::endl;
         DubinsSegmentChain &solutionPath = static_cast<DubinsSegmentChain&>(ss->getSolutionPath());
         int num_steps = solutionPath.getStateCount();
@@ -123,10 +125,12 @@ class TimeConstrainedDubinsPlanner {
           ret(step, 3) = state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
         }
         turns_chain = solutionPath.turns_chain;
+        // std::cout << "returning soln" << std::endl;
         return ret;
         // ss->getSolutionPath().print(std::cout);
       } else {
         // std::cout << "No solution found" << std::endl;
+        // std::cout << "returning inf" << std::endl;
         return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 4);
       }
     }
@@ -209,6 +213,13 @@ class TimeConstrainedDubinsPlanner {
     }
 
   private:
+    double vmax;
+    double rho;
+    RowMatrixXd rects;
+    bool do_rects;
+    Vector2d map_lb;
+    Vector2d map_ub;
+
     std::shared_ptr<DubinsTimeStateSpace> space;
     ob::SpaceInformationPtr si;
     std::shared_ptr<DubinsStateValidityChecker> state_checker;

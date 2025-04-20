@@ -232,7 +232,7 @@ bool arc_intersects_rect(double xai, double yai, double thetaai, double turn_dir
 
 class DubinsMotionValidatorRects : public DubinsMotionValidator {
   public:
-    explicit DubinsMotionValidatorRects(const ob::SpaceInformationPtr si, double vmax, double rho, RowMatrixXdRef_const &rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub) : DubinsMotionValidator(si, vmax, rho), rects(rects), map_lb(map_lb), map_ub(map_ub) {
+    explicit DubinsMotionValidatorRects(const ob::SpaceInformationPtr si, double vmax, double rho, RowMatrixXdRef_const &rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub, const Ref<const VectorXd> &start, const Ref<const VectorXd> &goal) : DubinsMotionValidator(si, vmax, rho), rects(rects), map_lb(map_lb), map_ub(map_ub), start(start), goal(goal) {
     }
 
     bool collision_free(double x, double y, double theta, double turn_dir, double turn_dist, double next_x, double next_y) const {
@@ -320,11 +320,11 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       if (std::isinf(turns(0, 0))) {
         reach = false;
         validMotion = false;
+        // std::cout << "failed on initial forward elongation check" << std::endl;
         return turns;
       }
 
-      timer_start = std::chrono::high_resolution_clock::now();
-
+      // Check if the state reached after maxDuration can get to the goal (assuming no obstacles)
       double x = x1;
       double y = y1;
       double theta = theta1;
@@ -337,13 +337,77 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
       double valid_path_length = 0.;
 
+      /*
       for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
         if (turn_dist == 0) {
           continue;
         }
-        bool stop_on_this_turn = valid_path_length + turn_dist >= maxDuration*vmax;
+        bool stop_on_this_turn = t2 - t1 > maxDuration + 1e-2 && valid_path_length + turn_dist >= maxDuration*vmax;
+        if (stop_on_this_turn) {
+          turn_dist = maxDuration*vmax - valid_path_length;
+        }
+        double rho_times_turn_dir = rho*turn_dir;
+
+        double ctheta = cos(theta);
+        double stheta = sin(theta);
+
+        if (turn_dir == 0) {
+          // S segment
+          next_theta = theta;
+          next_x = x + turn_dist*ctheta;
+          next_y = y + turn_dist*stheta;
+        } else {
+          // C segment
+          next_theta = theta + turn_dist/rho_times_turn_dir;
+          next_x = x + rho_times_turn_dir*(-stheta + sin(next_theta));
+          next_y = y + rho_times_turn_dir*(ctheta - cos(next_theta));
+        }
+
+        next_t = t + turn_dist/vmax;
+
+        valid_path_length += turn_dist;
+
+        if (stop_on_this_turn) {
+          if (!check_elongation_possible(next_x, next_y, next_theta, goal(0), goal(1), goal(2), vmax*(goal(3) - next_t), rho)) {
+            reach = false;
+            validMotion = false;
+            // std::cout << "failed on forward elongation check" << std::endl;
+            return turns;
+          }
+          break;
+        }
+
+        x = next_x;
+        y = next_y;
+        theta = next_theta;
+        t = next_t;
+      }
+      */
+
+      // Now perform collision-checks
+      timer_start = std::chrono::high_resolution_clock::now();
+
+      x = x1;
+      y = y1;
+      theta = theta1;
+      t = t1;
+
+      next_x = x;
+      next_y = y;
+      next_theta = theta;
+      next_t = t;
+
+      valid_path_length = 0.;
+
+      for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
+        double turn_dir = turns(turn_idx, 0);
+        double turn_dist = turns(turn_idx, 1);
+        if (turn_dist == 0) {
+          continue;
+        }
+        bool stop_on_this_turn = t2 - t1 > maxDuration + 1e-2 && valid_path_length + turn_dist >= maxDuration*vmax;
         if (stop_on_this_turn) {
           turn_dist = maxDuration*vmax - valid_path_length;
         }
@@ -374,6 +438,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
           timer_stop = std::chrono::high_resolution_clock::now();
           micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
           collision_check_time += ((double)micros)/1e6;
+          // std::cout << "forward collision check failed" << std::endl;
           return turns.topRows(turn_idx + 1);
         }
 
@@ -456,11 +521,11 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       if (std::isinf(turns(0, 0))) {
         reach = false;
         validMotion = false;
+        // std::cout << "failed on initial backward elongation check" << std::endl;
         return turns;
       }
 
-      timer_start = std::chrono::high_resolution_clock::now();
-
+      // Check if the state reached after maxDuration can get to the start (assuming no obstacles)
       double x = x2;
       double y = y2;
       double theta = theta2;
@@ -473,6 +538,66 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
       double valid_path_length = 0.;
 
+      /*
+      for (int turn_idx = turns.rows() - 1; turn_idx >= 0; --turn_idx) {
+        double turn_dir = turns(turn_idx, 0);
+        double turn_dist = turns(turn_idx, 1);
+        if (turn_dist == 0) {
+          continue;
+        }
+        bool stop_on_this_turn = t2 - t1 > maxDuration + 1e-2 && valid_path_length + turn_dist >= maxDuration*vmax;
+        if (stop_on_this_turn) {
+          turn_dist = maxDuration*vmax - valid_path_length;
+        }
+        double rho_times_turn_dir = rho*turn_dir;
+
+        double ctheta = cos(theta);
+        double stheta = sin(theta);
+
+        next_t = t - turn_dist/vmax;
+        if (turn_dir == 0) {
+          // S segment
+          next_theta = theta;
+          next_x = x - turn_dist*ctheta;
+          next_y = y - turn_dist*stheta;
+        } else {
+          // C segment
+          next_theta = theta - turn_dist/rho_times_turn_dir;
+          next_x = x - rho_times_turn_dir*(stheta - sin(next_theta));
+          next_y = y - rho_times_turn_dir*(-ctheta + cos(next_theta));
+        }
+
+        valid_path_length += turn_dist;
+
+        if (stop_on_this_turn) {
+          if (!check_elongation_possible(start(0), start(1), start(2), next_x, next_y, next_theta, vmax*(next_t - start(3)), rho)) {
+            reach = false;
+            validMotion = false;
+            // std::cout << "failed on backward elongation check" << std::endl;
+            return turns;
+          }
+        }
+        x = next_x;
+        y = next_y;
+        theta = next_theta;
+        t = next_t;
+      }
+
+      timer_start = std::chrono::high_resolution_clock::now();
+
+      x = x2;
+      y = y2;
+      theta = theta2;
+      t = t2;
+
+      next_x = x;
+      next_y = y;
+      next_theta = theta;
+      next_t = t;
+
+      valid_path_length = 0.;
+      */
+
       // std::cout << "checking backwards truncated" << std::endl;
       for (int turn_idx = turns.rows() - 1; turn_idx >= 0; --turn_idx) {
         double turn_dir = turns(turn_idx, 0);
@@ -480,7 +605,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         if (turn_dist == 0) {
           continue;
         }
-        bool stop_on_this_turn = valid_path_length + turn_dist >= maxDuration*vmax;
+        bool stop_on_this_turn = t2 - t1 > maxDuration + 1e-2 && valid_path_length + turn_dist >= maxDuration*vmax;
         if (stop_on_this_turn) {
           turn_dist = maxDuration*vmax - valid_path_length;
         }
@@ -512,6 +637,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
           micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
           collision_check_time += ((double)micros)/1e6;
 
+          // std::cout << "backward collision check failed" << std::endl;
           return turns.bottomRows(turns.rows() - turn_idx);
         }
 
@@ -556,4 +682,6 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
     RowMatrixXd rects;
     Vector2d map_lb;
     Vector2d map_ub;
+    VectorXd start;
+    VectorXd goal;
 };
