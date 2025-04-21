@@ -222,6 +222,14 @@ install(TARGETS nearest_neighbor_edge_posterior
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
+pybind11_add_module(dag_dfs
+  src/bind_dag_dfs.cpp
+)
+install(TARGETS dag_dfs
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
