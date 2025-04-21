@@ -39,7 +39,6 @@ class TimeConstrainedDubinsPlanner {
       si->setStateValidityChecker(state_checker);
 
       motion_validator = std::make_shared<DubinsMotionValidator>(si, vmax, rho);
-      // motion_validator = std::make_shared<DubinsMotionValidatorRects>(si, vmax, rho, map_lb, map_ub);
       si->setMotionValidator(motion_validator);
 
       ss = std::make_shared<og::SimpleSetup>(si);
@@ -67,6 +66,9 @@ class TimeConstrainedDubinsPlanner {
 
       si = std::make_shared<ob::SpaceInformation>(space);
 
+      motion_validator = std::make_shared<DubinsMotionValidatorRects>(si, vmax, rho, rects, map_lb, map_ub, VectorXd::Zero(4), VectorXd::Zero(4));
+      si->setMotionValidator(motion_validator);
+
       ss = std::make_shared<og::SimpleSetup>(si);
 
       state_checker = std::make_shared<DubinsStateValidityChecker>(si, occupancy, map_lb, map_ub);
@@ -78,10 +80,13 @@ class TimeConstrainedDubinsPlanner {
     }
 
     RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter, std::vector<RowMatrixXd> &turns_chain) {
+      // I'm avoiding reconstructing the motion validator for now so we don't have to reconstruct the AABB tree
+      /*
       if (do_rects) {
         motion_validator = std::make_shared<DubinsMotionValidatorRects>(si, vmax, rho, rects, map_lb, map_ub, start, goal);
         si->setMotionValidator(motion_validator);
       }
+      */
 
       space->reset_timing_info();
       motion_validator->reset_timing_info();
