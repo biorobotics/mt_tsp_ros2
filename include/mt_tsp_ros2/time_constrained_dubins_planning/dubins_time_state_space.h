@@ -51,6 +51,25 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
      }
 
     double distance(const ob::State *state1, const ob::State *state2) const override {
+      /*
+      double x1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t1 = state1->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      double x2 = state2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y2 = state2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta2 = state2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t2 = state2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+      double delta_x = x2 - x1;
+      double delta_y = y2 - y1;
+      double travel_time_lb = sqrt(delta_x*delta_x + delta_y*delta_y)/vmax;
+      double delta_t = t2 - t1;
+      if (delta_t < travel_time_lb) {
+        return std::numeric_limits<double>::infinity();
+      }
+      return delta_t;
+      */
       double x1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
       double y1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
       double theta1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
