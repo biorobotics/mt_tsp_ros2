@@ -81,7 +81,11 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       double t2 = state2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
 
       auto timer_start = std::chrono::high_resolution_clock::now();
-      if (t1 > t2 || !check_elongation_possible(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho)) {
+      double delta_x = x2 - x1;
+      double delta_y = y2 - y1;
+      double travel_time_lb = sqrt(delta_x*delta_x + delta_y*delta_y)/vmax;
+      double delta_t = t2 - t1;
+      if (delta_t < travel_time_lb || !check_elongation_possible(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho)) {
         auto timer_stop = std::chrono::high_resolution_clock::now();
         auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
         path_elongation_check_time += ((double)nanos)/1e9;
