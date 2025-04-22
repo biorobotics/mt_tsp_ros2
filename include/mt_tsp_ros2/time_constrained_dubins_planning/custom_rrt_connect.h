@@ -1,6 +1,7 @@
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/base/goals/GoalSampleableRegion.h>
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/CustomNearestNeighborsSqrtApprox.h"
 #include <ompl/tools/config/SelfConfig.h>
 #include <unordered_set>
 #include <chrono>
@@ -73,8 +74,10 @@ class CustomRRTConnect : public og::RRTConnect {
       ob::State *rstate = rmotion->state;
       bool solved = false;
 
-      double advance_time = 0.;
-      double sampling_time = 0.;
+      sampling_time = 0.;
+      add_to_tree_time = 0.;
+      motion_check_time = 0.;
+      nn_time = 0.;
 
       while (!ptc)
       {
@@ -106,8 +109,8 @@ class CustomRRTConnect : public og::RRTConnect {
           auto timer_start = std::chrono::high_resolution_clock::now();
           sampler_->sampleUniform(rstate);
           auto timer_stop = std::chrono::high_resolution_clock::now();
-          auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-          sampling_time += ((double)micros)/1e6;
+          auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+          sampling_time += ((double)nanos)/1e9;
 
           GrowState gs = growTree(tree, tgi, rmotion);
 
@@ -126,7 +129,6 @@ class CustomRRTConnect : public og::RRTConnect {
 
               /* if initial progress cannot be done from the otherTree, restore tgi.start */
 
-              timer_start = std::chrono::high_resolution_clock::now();
               GrowState gsc = growTree(otherTree, tgi, rmotion);
               if (gsc == TRAPPED)
                   tgi.start = !tgi.start;
@@ -142,10 +144,6 @@ class CustomRRTConnect : public og::RRTConnect {
                   }
                   */
               }
-
-              timer_stop = std::chrono::high_resolution_clock::now();
-              micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-              advance_time += ((double)micros)/1e6;
 
               /* update distance between trees */
               // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
@@ -244,8 +242,6 @@ class CustomRRTConnect : public og::RRTConnect {
           }
       }
 
-      // std::cout << "Advance time: " << advance_time << " , Sampling time: " << sampling_time << std::endl;
-
       si_->freeState(tgi.xstate);
       si_->freeState(rstate);
       delete rmotion;
@@ -275,6 +271,8 @@ class CustomRRTConnect : public og::RRTConnect {
               path->append(mpath[i]->state);
 
           pdef_->addSolutionPath(path, true, approxdif, getName());
+          // std::cout << "motion check time " << motion_check_time << std::endl;
+          // std::cout << "nn time " << nn_time << std::endl;
           return ob::PlannerStatus::APPROXIMATE_SOLUTION;
       }
 
@@ -283,6 +281,14 @@ class CustomRRTConnect : public og::RRTConnect {
 
     double get_sampler_path_elongation_intervals_time() {
       return std::static_pointer_cast<DubinsTimeStateSampler>(sampler_)->get_path_elongation_intervals_time();
+    }
+
+    double get_sampling_time() {
+      return sampling_time;
+    }
+
+    double get_add_to_tree_time() {
+      return add_to_tree_time;
     }
 
   protected:
@@ -296,7 +302,11 @@ class CustomRRTConnect : public og::RRTConnect {
 
     GrowState growTree(TreeData &tree, TreeGrowingInfo &tgi, Motion *rmotion) {
       /* find closest state in the tree */
+      // auto timer_start2 = std::chrono::high_resolution_clock::now();
       Motion *nmotion = tree->nearest(rmotion);
+      // auto timer_stop2 = std::chrono::high_resolution_clock::now();
+      // auto nanos2 = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop2 - timer_start2).count();
+      // nn_time += ((double)nanos2)/1e9;
 
       /*
       if (grow_pairs.find(std::make_pair(nmotion, rmotion)) != grow_pairs.end()) {
@@ -390,6 +400,7 @@ class CustomRRTConnect : public og::RRTConnect {
       double maxT = si_->getStateSpace()->as<DubinsTimeStateSpace>()->as<ob::TimeStateSpace>(1)->getMaxTimeBound();
       bool validMotion;
       RowMatrixXd turns;
+      // auto timer_start1 = std::chrono::high_resolution_clock::now();
       if (tgi.start) {
         turns = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
 
@@ -410,21 +421,28 @@ class CustomRRTConnect : public og::RRTConnect {
         }
         */
       }
+      // auto timer_stop1 = std::chrono::high_resolution_clock::now();
+      // auto nanos1 = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop1 - timer_start1).count();
+      // motion_check_time += ((double)nanos1)/1e9;
       dstate = tgi.xstate;
 
       if (!validMotion)
           return TRAPPED;
 
-      assert(si_->isValid(dstate));
+      // assert(si_->isValid(dstate));
 
       // Anoop: took out addIntermediateStates_ case, and use DubinsMotion instead of Motion so I can add the turns
       assert(!addIntermediateStates_);
+      auto timer_start = std::chrono::high_resolution_clock::now();
       auto *motion = new DubinsMotion(si_);
       si_->copyState(motion->state, dstate);
       motion->parent = nmotion;
       motion->root = nmotion->root;
       motion->turns = turns;
       tree->add(motion);
+      auto timer_stop = std::chrono::high_resolution_clock::now();
+      auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      add_to_tree_time += ((double)nanos)/1e9;
 
       tgi.xmotion = motion;
 
@@ -432,7 +450,8 @@ class CustomRRTConnect : public og::RRTConnect {
     }
 
     void setup() override {
-      RRTConnect::setup();
+      // ompl::base::RRTConnect::setup();
+      ompl::base::Planner::setup();
       ompl::tools::SelfConfig sc(si_, getName());
       sc.configurePlannerRange(maxDistance_);
 
@@ -440,6 +459,12 @@ class CustomRRTConnect : public og::RRTConnect {
           tStart_.reset(ompl::tools::SelfConfig::getDefaultNearestNeighbors<Motion *>(this));
       if (!tGoal_)
           tGoal_.reset(ompl::tools::SelfConfig::getDefaultNearestNeighbors<Motion *>(this));
+      /*
+      if (!tStart_)
+          tStart_.reset(new CustomNearestNeighborsSqrtApprox<Motion*>());
+      if (!tGoal_)
+          tGoal_.reset(new CustomNearestNeighborsSqrtApprox<Motion*>());
+      */
       tStart_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
       tGoal_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(b, a); });
     }
@@ -459,4 +484,10 @@ class CustomRRTConnect : public og::RRTConnect {
 
          RowMatrixXd turns;
      };
+
+     double sampling_time;
+     double add_to_tree_time;
+     double grow_time;
+     double motion_check_time;
+     double nn_time;
 };

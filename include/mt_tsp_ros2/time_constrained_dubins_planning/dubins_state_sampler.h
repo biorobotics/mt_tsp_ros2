@@ -50,8 +50,8 @@ class DubinsTimeStateSampler : public ob::DeterministicStateSampler {
         Vector3d start_elongation_intervals = start_t*Vector3d::Ones() + get_elongation_intervals(start_x, start_y, start_theta, x, y, theta, rho)/vmax;
         Vector3d goal_elongation_intervals = goal_t*Vector3d::Ones() - get_elongation_intervals(x, y, theta, goal_x, goal_y, goal_theta, rho).reverse()/vmax;
         auto timer_stop = std::chrono::high_resolution_clock::now();
-        auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-        path_elongation_intervals_time += ((double)micros)/1e6;
+        auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+        path_elongation_intervals_time += ((double)nanos)/1e9;
 
         std::vector<Vector2d> valid_intervals;
 

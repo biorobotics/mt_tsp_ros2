@@ -20,6 +20,8 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
     .def("get_path_elongation_time", &TimeConstrainedDubinsPlanner::get_path_elongation_time)
     .def("get_path_elongation_check_time", &TimeConstrainedDubinsPlanner::get_path_elongation_check_time)
     .def("get_collision_check_time", &TimeConstrainedDubinsPlanner::get_collision_check_time)
+    .def("get_sampling_time", &TimeConstrainedDubinsPlanner::get_sampling_time)
+    .def("get_add_to_tree_time", &TimeConstrainedDubinsPlanner::get_add_to_tree_time)
     ;
 
   py::class_<NoTimeDubinsPlanner>(m, "NoTimeDubinsPlanner")

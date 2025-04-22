@@ -27,8 +27,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
       auto timer_start = std::chrono::high_resolution_clock::now();
       RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
       auto timer_stop = std::chrono::high_resolution_clock::now();
-      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-      path_elongation_time += ((double)micros)/1e6;
+      auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      path_elongation_time += ((double)nanos)/1e9;
       if (std::isinf(turns(0, 0))) {
         reach = false;
         stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(x1);
@@ -105,8 +105,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
             turns(turn_idx, 1) = dist;
 
             timer_stop = std::chrono::high_resolution_clock::now();
-            micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-            collision_check_time += ((double)micros)/1e6;
+            nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)nanos)/1e9;
             return turns.topRows(turn_idx + 1);
           }
 
@@ -138,8 +138,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
             turns(turn_idx, 1) = dist;
 
             timer_stop = std::chrono::high_resolution_clock::now();
-            micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-            collision_check_time += ((double)micros)/1e6;
+            nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)nanos)/1e9;
 
             return turns.topRows(turn_idx + 1);
           }
@@ -159,8 +159,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
       validMotion = true;
 
       timer_stop = std::chrono::high_resolution_clock::now();
-      micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-      collision_check_time += ((double)micros)/1e6;
+      nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      collision_check_time += ((double)nanos)/1e9;
 
       return turns;
     }
@@ -184,7 +184,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
       auto timer_start = std::chrono::high_resolution_clock::now();
       RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
       auto timer_stop = std::chrono::high_resolution_clock::now();
-      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
+      auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
       if (std::isinf(turns(0, 0))) {
         reach = false;
         stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(x2);
@@ -259,8 +259,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
             turns(turn_idx, 1) = dist;
 
             timer_stop = std::chrono::high_resolution_clock::now();
-            micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-            collision_check_time += ((double)micros)/1e6;
+            nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)nanos)/1e9;
 
             return turns.bottomRows(turns.rows() - turn_idx);
           }
@@ -283,8 +283,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
             turns(turn_idx, 1) = dist;
 
             timer_stop = std::chrono::high_resolution_clock::now();
-            micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-            collision_check_time += ((double)micros)/1e6;
+            nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)nanos)/1e9;
 
             return turns.bottomRows(turns.rows() - turn_idx);
           }
@@ -304,8 +304,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
       validMotion = true;
 
       timer_stop = std::chrono::high_resolution_clock::now();
-      micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-      collision_check_time += ((double)micros)/1e6;
+      nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      collision_check_time += ((double)nanos)/1e9;
 
       return turns;
     }

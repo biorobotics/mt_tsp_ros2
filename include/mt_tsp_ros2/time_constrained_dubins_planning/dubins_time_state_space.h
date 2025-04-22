@@ -64,14 +64,14 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       auto timer_start = std::chrono::high_resolution_clock::now();
       if (t1 > t2 || !check_elongation_possible(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho)) {
         auto timer_stop = std::chrono::high_resolution_clock::now();
-        auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-        path_elongation_check_time += ((double)micros)/1e6;
+        auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+        path_elongation_check_time += ((double)nanos)/1e9;
         return std::numeric_limits<double>::infinity();
       }
 
       auto timer_stop = std::chrono::high_resolution_clock::now();
-      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-      path_elongation_check_time += ((double)micros)/1e6;
+      auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      path_elongation_check_time += ((double)nanos)/1e9;
       return t2 - t1;
     }
 
@@ -89,8 +89,8 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       auto timer_start = std::chrono::high_resolution_clock::now();
       RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
       auto timer_stop = std::chrono::high_resolution_clock::now();
-      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-      path_elongation_time += ((double)micros)/1e6;
+      auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      path_elongation_time += ((double)nanos)/1e9;
       if (std::isinf(turns(0, 0))) {
         interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(x1);
         interp_state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(y1);

@@ -113,6 +113,8 @@ class TimeConstrainedDubinsPlanner {
       path_elongation_time = motion_validator->get_path_elongation_time();
       path_elongation_check_time = space->get_path_elongation_check_time();
       collision_check_time = motion_validator->get_collision_check_time();
+      sampling_time = std::static_pointer_cast<CustomRRTConnect>(planner)->get_sampling_time();
+      add_to_tree_time = std::static_pointer_cast<CustomRRTConnect>(planner)->get_add_to_tree_time();
 
       // std::cout << "got profiling data" << std::endl;
 
@@ -150,6 +152,14 @@ class TimeConstrainedDubinsPlanner {
 
     double get_collision_check_time() const {
       return collision_check_time;
+    }
+
+    double get_sampling_time() const {
+      return sampling_time;
+    }
+
+    double get_add_to_tree_time() const {
+      return add_to_tree_time;
     }
 
     // Test functions
@@ -236,4 +246,6 @@ class TimeConstrainedDubinsPlanner {
     double path_elongation_time;
     double path_elongation_check_time;
     double collision_check_time;
+    double sampling_time;
+    double add_to_tree_time;
 };
