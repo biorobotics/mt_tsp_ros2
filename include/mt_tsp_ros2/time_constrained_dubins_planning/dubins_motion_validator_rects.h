@@ -339,7 +339,6 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       }
 
       // C segment
-
       double c = cos(theta);
       double s = sin(theta);
 
@@ -347,11 +346,9 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       Vector2d perp(-s*turn_dir, c*turn_dir);
       Vector2d center = Vector2d(x, y) + perp*rho;
 
-      Point_Circular_k center_CGAL(center(0), center(1));
-      Circle_2 circle_CGAL(center_CGAL, rho*rho);
-
+      CGAL::Bbox_2 bbox(center(0) - rho, center(1) - rho, center(0) + rho, center(1) + rho);
       std::list<Primitive_id> primitives;
-      aabb_tree.all_intersected_primitives(circle_CGAL.bbox(), std::back_inserter(primitives));
+      aabb_tree.all_intersected_primitives(bbox, std::back_inserter(primitives));
 
       for (Primitive_id primitive : primitives) {
         if (arc_intersects_line_segment(x, y, theta, turn_dir, turn_dist/rho, rho,
@@ -447,20 +444,29 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         return turns;
       }
 
-      // Check if the state reached after maxDuration can get to the goal (assuming no obstacles)
+      double ctheta1 = cos(theta1);
+      double stheta1 = sin(theta1);
+
       double x = x1;
       double y = y1;
       double theta = theta1;
       double t = t1;
+
+      double ctheta = ctheta1;
+      double stheta = stheta1;
 
       double next_x = x;
       double next_y = y;
       double next_theta = theta;
       double next_t = t;
 
+      double next_ctheta = ctheta;
+      double next_stheta = stheta;
+
       double valid_path_length = 0.;
 
       /*
+      // Check if the state reached after maxDuration can get to the goal (assuming no obstacles)
       for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
@@ -473,9 +479,6 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         }
         double rho_times_turn_dir = rho*turn_dir;
 
-        double ctheta = cos(theta);
-        double stheta = sin(theta);
-
         if (turn_dir == 0) {
           // S segment
           next_theta = theta;
@@ -484,8 +487,10 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         } else {
           // C segment
           next_theta = theta + turn_dist/rho_times_turn_dir;
-          next_x = x + rho_times_turn_dir*(-stheta + sin(next_theta));
-          next_y = y + rho_times_turn_dir*(ctheta - cos(next_theta));
+          next_ctheta = cos(next_theta);
+          next_stheta = sin(next_theta);
+          next_x = x + rho_times_turn_dir*(-stheta + next_stheta);
+          next_y = y + rho_times_turn_dir*(ctheta - next_ctheta);
         }
 
         next_t = t + turn_dist/vmax;
@@ -506,23 +511,33 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         y = next_y;
         theta = next_theta;
         t = next_t;
-      }
-      */
 
-      // Now perform collision-checks
-      timer_start = std::chrono::high_resolution_clock::now();
+        ctheta = next_ctheta;
+        stheta = next_stheta;
+      }
 
       x = x1;
       y = y1;
       theta = theta1;
       t = t1;
 
+      ctheta = ctheta1;
+      stheta = stheta1;
+
       next_x = x;
       next_y = y;
       next_theta = theta;
       next_t = t;
 
+      next_ctheta = ctheta;
+      next_stheta = stheta;
+
       valid_path_length = 0.;
+
+      */
+
+      // Now perform collision-checks
+      timer_start = std::chrono::high_resolution_clock::now();
 
       for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
         double turn_dir = turns(turn_idx, 0);
@@ -536,9 +551,6 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         }
         double rho_times_turn_dir = rho*turn_dir;
 
-        double ctheta = cos(theta);
-        double stheta = sin(theta);
-
         if (turn_dir == 0) {
           // S segment
           next_theta = theta;
@@ -547,8 +559,10 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         } else {
           // C segment
           next_theta = theta + turn_dist/rho_times_turn_dir;
-          next_x = x + rho_times_turn_dir*(-stheta + sin(next_theta));
-          next_y = y + rho_times_turn_dir*(ctheta - cos(next_theta));
+          next_ctheta = cos(next_theta);
+          next_stheta = sin(next_theta);
+          next_x = x + rho_times_turn_dir*(-stheta + next_stheta);
+          next_y = y + rho_times_turn_dir*(ctheta - next_ctheta);
         }
 
         next_t = t + turn_dist/vmax;
@@ -587,6 +601,9 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         y = next_y;
         theta = next_theta;
         t = next_t;
+
+        ctheta = next_ctheta;
+        stheta = next_stheta;
       }
 
       reach = true;
@@ -649,20 +666,29 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         return turns;
       }
 
-      // Check if the state reached after maxDuration can get to the start (assuming no obstacles)
+      double ctheta2 = cos(theta2);
+      double stheta2 = sin(theta2);
+
       double x = x2;
       double y = y2;
       double theta = theta2;
       double t = t2;
+
+      double ctheta = ctheta2;
+      double stheta = stheta2;
 
       double next_x = x;
       double next_y = y;
       double next_theta = theta;
       double next_t = t;
 
+      double next_ctheta = ctheta;
+      double next_stheta = stheta;
+
       double valid_path_length = 0.;
 
       /*
+      // Check if the state reached after maxDuration can get to the start (assuming no obstacles)
       for (int turn_idx = turns.rows() - 1; turn_idx >= 0; --turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
@@ -675,9 +701,6 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         }
         double rho_times_turn_dir = rho*turn_dir;
 
-        double ctheta = cos(theta);
-        double stheta = sin(theta);
-
         next_t = t - turn_dist/vmax;
         if (turn_dir == 0) {
           // S segment
@@ -687,8 +710,10 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         } else {
           // C segment
           next_theta = theta - turn_dist/rho_times_turn_dir;
-          next_x = x - rho_times_turn_dir*(stheta - sin(next_theta));
-          next_y = y - rho_times_turn_dir*(-ctheta + cos(next_theta));
+          next_ctheta = cos(next_theta);
+          next_stheta = sin(next_theta);
+          next_x = x - rho_times_turn_dir*(stheta - next_stheta);
+          next_y = y - rho_times_turn_dir*(-ctheta + next_ctheta);
         }
 
         valid_path_length += turn_dist;
@@ -705,38 +730,46 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         y = next_y;
         theta = next_theta;
         t = next_t;
-      }
 
-      timer_start = std::chrono::high_resolution_clock::now();
+        ctheta = next_ctheta;
+        stheta = next_stheta;
+      }
 
       x = x2;
       y = y2;
       theta = theta2;
       t = t2;
 
+      ctheta = ctheta2;
+      stheta = stheta2;
+
       next_x = x;
       next_y = y;
       next_theta = theta;
       next_t = t;
 
+      next_ctheta = ctheta;
+      next_stheta = stheta;
+
       valid_path_length = 0.;
       */
 
-      // std::cout << "checking backwards truncated" << std::endl;
+      // Now perform collision-checks
+      timer_start = std::chrono::high_resolution_clock::now();
       for (int turn_idx = turns.rows() - 1; turn_idx >= 0; --turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
         if (turn_dist == 0) {
           continue;
         }
+
+        auto timer_start1 = std::chrono::high_resolution_clock::now();
+
         bool stop_on_this_turn = t2 - t1 > maxDuration + 1e-2 && valid_path_length + turn_dist >= maxDuration*vmax;
         if (stop_on_this_turn) {
           turn_dist = maxDuration*vmax - valid_path_length;
         }
         double rho_times_turn_dir = rho*turn_dir;
-
-        double ctheta = cos(theta);
-        double stheta = sin(theta);
 
         next_t = t - turn_dist/vmax;
         if (turn_dir == 0) {
@@ -747,8 +780,10 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         } else {
           // C segment
           next_theta = theta - turn_dist/rho_times_turn_dir;
-          next_x = x - rho_times_turn_dir*(stheta - sin(next_theta));
-          next_y = y - rho_times_turn_dir*(-ctheta + cos(next_theta));
+          next_ctheta = cos(next_theta);
+          next_stheta = sin(next_theta);
+          next_x = x - rho_times_turn_dir*(stheta - next_stheta);
+          next_y = y - rho_times_turn_dir*(-ctheta + next_ctheta);
         }
 
         // Use next_x etc because it's checkMotionBackward
@@ -786,6 +821,9 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         y = next_y;
         theta = next_theta;
         t = next_t;
+
+        ctheta = next_ctheta;
+        stheta = next_stheta;
       }
 
       reach = true;
