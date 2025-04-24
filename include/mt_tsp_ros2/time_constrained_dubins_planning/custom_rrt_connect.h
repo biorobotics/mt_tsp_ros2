@@ -1,7 +1,7 @@
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/base/goals/GoalSampleableRegion.h>
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
-#include "mt_tsp_ros2/time_constrained_dubins_planning/CustomNearestNeighborsSqrtApprox.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/NearestNeighborsSqrtApproxReturnDistance.h"
 #include <ompl/tools/config/SelfConfig.h>
 #include <unordered_set>
 #include <chrono>
@@ -148,7 +148,8 @@ class CustomRRTConnect : public og::RRTConnect {
               /* update distance between trees */
               // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
               // Anoop
-              double newDist = tree->getDistanceFunction()(otherTree->nearest(addedMotion), addedMotion);
+              double newDist;
+              std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist);
 
               if (newDist < distanceBetweenTrees_)
               {
@@ -303,7 +304,11 @@ class CustomRRTConnect : public og::RRTConnect {
     GrowState growTree(TreeData &tree, TreeGrowingInfo &tgi, Motion *rmotion) {
       /* find closest state in the tree */
       // auto timer_start2 = std::chrono::high_resolution_clock::now();
-      Motion *nmotion = tree->nearest(rmotion);
+      double dist;
+      Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist);
+      if (std::isinf(dist)) {
+        return TRAPPED;
+      }
       // auto timer_stop2 = std::chrono::high_resolution_clock::now();
       // auto nanos2 = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop2 - timer_start2).count();
       // nn_time += ((double)nanos2)/1e9;
@@ -455,16 +460,22 @@ class CustomRRTConnect : public og::RRTConnect {
       ompl::tools::SelfConfig sc(si_, getName());
       sc.configurePlannerRange(maxDistance_);
 
+      /*
       if (!tStart_)
           tStart_.reset(ompl::tools::SelfConfig::getDefaultNearestNeighbors<Motion *>(this));
       if (!tGoal_)
           tGoal_.reset(ompl::tools::SelfConfig::getDefaultNearestNeighbors<Motion *>(this));
+      */
       /*
       if (!tStart_)
           tStart_.reset(new CustomNearestNeighborsSqrtApprox<Motion*>());
       if (!tGoal_)
           tGoal_.reset(new CustomNearestNeighborsSqrtApprox<Motion*>());
       */
+      if (!tStart_)
+          tStart_.reset(new NearestNeighborsSqrtApproxReturnDistance<Motion*>());
+      if (!tGoal_)
+          tGoal_.reset(new NearestNeighborsSqrtApproxReturnDistance<Motion*>());
       tStart_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
       tGoal_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(b, a); });
     }
