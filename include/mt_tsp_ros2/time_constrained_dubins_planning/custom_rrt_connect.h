@@ -129,18 +129,21 @@ class CustomRRTConnect : public og::RRTConnect {
 
               /* if initial progress cannot be done from the otherTree, restore tgi.start */
 
-              GrowState gsc = growTree(otherTree, tgi, rmotion, true);
+              GrowState gsc = growTree(otherTree, tgi, rmotion);
               if (gsc == TRAPPED)
                   tgi.start = !tgi.start;
 
-              // Since we pass try_connect to growTree, we don't need to keep running EXTEND.
-              // growTree does so internally. This relies on the fact that extending the nearest neighbor to rstate
-              // can only produce closer states to rstate
-              /*
+              
+              // Motion *prev_nearest = otherTree->nearest(rmotion);
               while (gsc == ADVANCED) {
                   gsc = growTree(otherTree, tgi, rmotion);
+                  /*
+                  if (otherTree->nearest(rmotion) == prev_nearest) {
+                    gsc = TRAPPED;
+                    break;
+                  }
+                  */
               }
-              */
 
               /* update distance between trees */
               // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
@@ -298,7 +301,7 @@ class CustomRRTConnect : public og::RRTConnect {
 
     // std::unordered_set<std::pair<Motion*, Motion*>, pair_hash> grow_pairs; // To stop advance from going in an infinite loop
 
-    GrowState growTree(TreeData &tree, TreeGrowingInfo &tgi, Motion *rmotion, bool try_connect = false) {
+    GrowState growTree(TreeData &tree, TreeGrowingInfo &tgi, Motion *rmotion) {
       /* find closest state in the tree */
       // auto timer_start2 = std::chrono::high_resolution_clock::now();
       double dist;
@@ -404,7 +407,7 @@ class CustomRRTConnect : public og::RRTConnect {
       RowMatrixXd turns;
       // auto timer_start1 = std::chrono::high_resolution_clock::now();
       if (tgi.start) {
-        turns = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach, validMotion, try_connect);
+        turns = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
 
         /*
         if (reach && validMotion) {
@@ -414,7 +417,7 @@ class CustomRRTConnect : public og::RRTConnect {
         }
         */
       } else {
-        turns = motionValidator->checkMotionBackward(dstate, nmotion->state, 0.2*(maxT - minT), tgi.xstate, reach, validMotion, try_connect);
+        turns = motionValidator->checkMotionBackward(dstate, nmotion->state, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
         /*
         if (reach && validMotion) {
           if (!motionValidator->checkMotion(tgi.xstate, nmotion->state)) {
