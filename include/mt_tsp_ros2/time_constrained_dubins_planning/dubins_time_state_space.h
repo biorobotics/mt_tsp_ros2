@@ -4,12 +4,13 @@
 #include "mt_tsp_ros2/elongate_dubins_path.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_state_sampler.h"
 #include <chrono>
+#include "mt_tsp_ros2/time_constrained_dubins_planning/angle_mod.h"
 
 namespace ob = ompl::base;
 
 class DubinsTimeStateSpace : public ob::CompoundStateSpace {
   public:
-    explicit DubinsTimeStateSpace(const std::shared_ptr<ob::SE2StateSpace>& spaceComponent, double vmax, double rho) : vmax(vmax), rho(rho) {
+    explicit DubinsTimeStateSpace(const std::shared_ptr<ob::SE2StateSpace>& spaceComponent, double vmax, double rho) : vmax(vmax), rho(rho), wmax(vmax/rho) {
       addSubspace(spaceComponent, 0.5); // space component
       addSubspace(std::make_shared<ob::TimeStateSpace>(), 0.5); // time component
       // lock();
@@ -83,7 +84,8 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       auto timer_start = std::chrono::high_resolution_clock::now();
       double delta_x = x2 - x1;
       double delta_y = y2 - y1;
-      double travel_time_lb = sqrt(delta_x*delta_x + delta_y*delta_y)/vmax;
+      double delta_theta = angdiff(theta1, theta2);
+      double travel_time_lb = std::max(sqrt(delta_x*delta_x + delta_y*delta_y)/vmax, std::abs(delta_theta)/wmax);
       double delta_t = t2 - t1;
       if (delta_t < travel_time_lb || !check_elongation_possible(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho)) {
         auto timer_stop = std::chrono::high_resolution_clock::now();
@@ -194,6 +196,7 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
   private:
     double vmax;
     double rho;
+    double wmax;
     double start_x;
     double start_y;
     double start_theta;

@@ -1,3 +1,4 @@
+#pragma once
 #include <math.h>
 
 double fmodp(double x, double y) {
