@@ -403,8 +403,8 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
     }
 
     // If we set validMotion = false, stopState isn't used so we don't have to populate it. Same deal with turns
-    RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, int num_checks = 1000) const override {
-      return checkMotionForward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
+    RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, bool try_connect = false, int num_checks = 1000) const override {
+      return checkMotionForward_internal(s1, s2, maxDuration, stopState, reach, validMotion, try_connect);
       /*
       RowMatrixXd turns1 = checkMotionForward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
       bool reach2;
@@ -412,7 +412,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       RowMatrixXd turns2 = DubinsMotionValidator::checkMotionForward(s1, s2, maxDuration, stopState, reach2, valid2);
       if (validMotion != valid2) {
         std::cout << "mismatch, using finer collision check resolution" << std::endl;
-        DubinsMotionValidator::checkMotionForward(s1, s2, maxDuration, stopState, reach2, valid2, 100000);
+        DubinsMotionValidator::checkMotionForward(s1, s2, maxDuration, stopState, reach2, valid2, false, 100000);
         if (validMotion != valid2) {
           throw std::runtime_error("Mismatch on valid forward");
         }
@@ -421,7 +421,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       */
     }
 
-    RowMatrixXd checkMotionForward_internal(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
+    RowMatrixXd checkMotionForward_internal(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, bool try_connect) const {
       double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
       double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
       double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
@@ -539,15 +539,27 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       // Now perform collision-checks
       timer_start = std::chrono::high_resolution_clock::now();
 
+      double maxDist = maxDuration*vmax;
+      int stop_turn_idx = -1;
+      double stop_turn_x;
+      double stop_turn_y;
+      double stop_turn_theta;
+      double stop_turn_ctheta;
+      double stop_turn_stheta;
+      double stop_turn_t;
+      double stop_turn_dist;
+
       for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
         if (turn_dist == 0) {
           continue;
         }
-        bool stop_on_this_turn = t2 - t1 > maxDuration + 1e-2 && valid_path_length + turn_dist >= maxDuration*vmax;
-        if (stop_on_this_turn) {
-          turn_dist = maxDuration*vmax - valid_path_length;
+        double valid_path_length_mod_maxDist = fmod(valid_path_length, maxDist);
+        bool finishing_maxDist = valid_path_length_mod_maxDist + turn_dist >= maxDist;
+        if (finishing_maxDist && !try_connect) {
+          // If we're not trying to connect trees, we truncate the turn dist
+          turn_dist = maxDist - valid_path_length_mod_maxDist;
         }
         double rho_times_turn_dir = rho*turn_dir;
 
@@ -567,7 +579,67 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
         next_t = t + turn_dist/vmax;
 
-        if (!collision_free(x, y, theta, turn_dir, turn_dist, next_x, next_y)) {
+        bool collision = !collision_free(x, y, theta, turn_dir, turn_dist, next_x, next_y);
+        if (collision && try_connect && finishing_maxDist) {
+          // If we're trying to connect trees, check if truncation of this turn is collision-free
+          turn_dist = maxDist - valid_path_length_mod_maxDist;
+
+          if (turn_dir == 0) {
+            // S segment
+            next_theta = theta;
+            next_x = x + turn_dist*ctheta;
+            next_y = y + turn_dist*stheta;
+          } else {
+            // C segment
+            next_theta = theta + turn_dist/rho_times_turn_dir;
+            next_ctheta = cos(next_theta);
+            next_stheta = sin(next_theta);
+            next_x = x + rho_times_turn_dir*(-stheta + next_stheta);
+            next_y = y + rho_times_turn_dir*(ctheta - next_ctheta);
+          }
+
+          next_t = t + turn_dist/vmax;
+          collision = !collision_free(x, y, theta, turn_dir, turn_dist, next_x, next_y);
+        }
+
+        if (collision && try_connect && stop_turn_idx != -1) {
+          // This turn collides whether we truncate or not. But there is a previous segment of the path that's
+          // at least maxDist long and collision-free
+          turn_dir = turns(stop_turn_idx, 0);
+          turn_dist = stop_turn_dist;
+
+          if (turn_dir == 0) {
+            // S segment
+            next_theta = stop_turn_theta;
+            next_x = x + turn_dist*stop_turn_ctheta;
+            next_y = y + turn_dist*stop_turn_stheta;
+          } else {
+            // C segment
+            next_theta = stop_turn_theta + turn_dist/rho_times_turn_dir;
+            next_ctheta = cos(next_theta);
+            next_stheta = sin(next_theta);
+            next_x = stop_turn_x + rho_times_turn_dir*(-stop_turn_stheta + next_stheta);
+            next_y = stop_turn_y + rho_times_turn_dir*(stop_turn_ctheta - next_ctheta);
+          }
+
+          next_t = stop_turn_t + turn_dist/vmax;
+
+          reach = false;
+          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
+          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
+          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
+          stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
+          validMotion = true;
+          turns(stop_turn_idx, 1) = turn_dist;
+
+          timer_stop = std::chrono::high_resolution_clock::now();
+          nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+          collision_check_time += ((double)nanos)/1e9;
+
+          return turns.topRows(stop_turn_idx + 1);
+        }
+
+        if (collision) {
           reach = false;
           validMotion = false;
           turns(turn_idx, 1) = turn_dist; // Not needed, I think
@@ -581,20 +653,31 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
         valid_path_length += turn_dist;
 
-        if (stop_on_this_turn) {
-          reach = false;
-          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
-          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
-          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
-          stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
-          validMotion = true;
-          turns(turn_idx, 1) = turn_dist;
+        if (finishing_maxDist) {
+          if (try_connect) {
+            // The whole turn is collision-free, which means any truncation is collision-free
+            stop_turn_x = x;
+            stop_turn_y = y;
+            stop_turn_theta = theta;
+            stop_turn_ctheta = ctheta;
+            stop_turn_stheta = stheta;
+            stop_turn_t = t;
+            stop_turn_dist = maxDist - valid_path_length_mod_maxDist;
+          } else {
+            reach = false;
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
+            stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
+            validMotion = true;
+            turns(turn_idx, 1) = turn_dist;
 
-          timer_stop = std::chrono::high_resolution_clock::now();
-          nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
-          collision_check_time += ((double)nanos)/1e9;
+            timer_stop = std::chrono::high_resolution_clock::now();
+            nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)nanos)/1e9;
 
-          return turns.topRows(turn_idx + 1);
+            return turns.topRows(turn_idx + 1);
+          }
         }
 
         x = next_x;
@@ -620,15 +703,15 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       return turns;
     }
 
-    RowMatrixXd checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, int num_checks = 1000) const override {
-      return checkMotionBackward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
+    RowMatrixXd checkMotionBackward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, bool try_connect = false, int num_checks = 1000) const override {
+      return checkMotionBackward_internal(s1, s2, maxDuration, stopState, reach, validMotion, try_connect);
       /*
       RowMatrixXd turns1 = checkMotionBackward_internal(s1, s2, maxDuration, stopState, reach, validMotion);
       bool reach2;
       bool valid2;
       RowMatrixXd turns2 = DubinsMotionValidator::checkMotionBackward(s1, s2, maxDuration, stopState, reach2, valid2);
       if (validMotion != valid2) {
-        DubinsMotionValidator::checkMotionBackward(s1, s2, maxDuration, stopState, reach2, valid2, 100000);
+        DubinsMotionValidator::checkMotionBackward(s1, s2, maxDuration, stopState, reach2, valid2, false, 100000);
         if (validMotion != valid2) {
           std::cout << validMotion << " " << valid2 << std::endl;
           throw std::runtime_error("Mismatch on valid backward");
@@ -638,7 +721,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       */
     }
 
-    RowMatrixXd checkMotionBackward_internal(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
+    RowMatrixXd checkMotionBackward_internal(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, bool try_connect) const {
       if (!si_->isValid(s2)) {
         reach = false;
         validMotion = false;
@@ -756,6 +839,17 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
       // Now perform collision-checks
       timer_start = std::chrono::high_resolution_clock::now();
+
+      double maxDist = maxDuration*vmax;
+      int stop_turn_idx = -1;
+      double stop_turn_x;
+      double stop_turn_y;
+      double stop_turn_theta;
+      double stop_turn_ctheta;
+      double stop_turn_stheta;
+      double stop_turn_t;
+      double stop_turn_dist;
+
       for (int turn_idx = turns.rows() - 1; turn_idx >= 0; --turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
@@ -765,9 +859,11 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
         auto timer_start1 = std::chrono::high_resolution_clock::now();
 
+        double valid_path_length_mod_maxDist = fmod(valid_path_length, maxDist);
+        bool finishing_maxDist = valid_path_length_mod_maxDist + turn_dist >= maxDist;
         bool stop_on_this_turn = t2 - t1 > maxDuration + 1e-2 && valid_path_length + turn_dist >= maxDuration*vmax;
-        if (stop_on_this_turn) {
-          turn_dist = maxDuration*vmax - valid_path_length;
+        if (finishing_maxDist && !try_connect) {
+          turn_dist = maxDist - valid_path_length_mod_maxDist;
         }
         double rho_times_turn_dir = rho*turn_dir;
 
@@ -787,7 +883,66 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         }
 
         // Use next_x etc because it's checkMotionBackward
-        if (!collision_free(next_x, next_y, next_theta, turn_dir, turn_dist, x, y)) {
+        bool collision = !collision_free(next_x, next_y, next_theta, turn_dir, turn_dist, x, y);
+        if (collision && try_connect && finishing_maxDist) {
+          // If we're trying to connect trees, check if truncation of this turn is collision-free
+          turn_dist = maxDist - valid_path_length_mod_maxDist;
+
+          next_t = t - turn_dist/vmax;
+          if (turn_dir == 0) {
+            // S segment
+            next_theta = theta;
+            next_x = x - turn_dist*ctheta;
+            next_y = y - turn_dist*stheta;
+          } else {
+            // C segment
+            next_theta = theta - turn_dist/rho_times_turn_dir;
+            next_ctheta = cos(next_theta);
+            next_stheta = sin(next_theta);
+            next_x = x - rho_times_turn_dir*(stheta - next_stheta);
+            next_y = y - rho_times_turn_dir*(-ctheta + next_ctheta);
+          }
+
+          collision = !collision_free(next_x, next_y, next_theta, turn_dir, turn_dist, x, y);
+        }
+
+        if (collision && try_connect && stop_turn_idx != -1) {
+          // This turn collides whether we truncate or not. But there is a previous segment of the path that's
+          // at least maxDist long and collision-free
+          turn_dir = turns(stop_turn_idx, 0);
+          turn_dist = stop_turn_dist;
+
+          next_t = stop_turn_t - turn_dist/vmax;
+          if (turn_dir == 0) {
+            // S segment
+            next_theta = stop_turn_theta;
+            next_x = stop_turn_x - turn_dist*stop_turn_ctheta;
+            next_y = stop_turn_y - turn_dist*stop_turn_stheta;
+          } else {
+            // C segment
+            next_theta = stop_turn_theta - turn_dist/rho_times_turn_dir;
+            next_ctheta = cos(next_theta);
+            next_stheta = sin(next_theta);
+            next_x = stop_turn_x - rho_times_turn_dir*(stop_turn_stheta - next_stheta);
+            next_y = stop_turn_y - rho_times_turn_dir*(-stop_turn_ctheta + next_ctheta);
+          }
+
+          reach = false;
+          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
+          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
+          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
+          stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
+          validMotion = true;
+          turns(stop_turn_idx, 1) = turn_dist;
+
+          timer_stop = std::chrono::high_resolution_clock::now();
+          nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+          collision_check_time += ((double)nanos)/1e9;
+
+          return turns.bottomRows(turns.rows() - stop_turn_idx);
+        }
+
+        if (collision) {
           reach = false;
           validMotion = false;
           turns(turn_idx, 1) = turn_dist; // Not needed, I think
@@ -802,20 +957,31 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
         valid_path_length += turn_dist;
 
-        if (stop_on_this_turn) {
-          reach = false;
-          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
-          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
-          stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
-          stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
-          validMotion = true;
-          turns(turn_idx, 1) = turn_dist;
+        if (finishing_maxDist) {
+          if (try_connect) {
+            // The whole turn is collision-free, which means any truncation is collision-free
+            stop_turn_x = x;
+            stop_turn_y = y;
+            stop_turn_theta = theta;
+            stop_turn_ctheta = ctheta;
+            stop_turn_stheta = stheta;
+            stop_turn_t = t;
+            stop_turn_dist = maxDist - valid_path_length_mod_maxDist;
+          } else {
+            reach = false;
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
+            stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
+            validMotion = true;
+            turns(turn_idx, 1) = turn_dist;
 
-          timer_stop = std::chrono::high_resolution_clock::now();
-          nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
-          collision_check_time += ((double)nanos)/1e9;
+            timer_stop = std::chrono::high_resolution_clock::now();
+            nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)nanos)/1e9;
 
-          return turns.bottomRows(turns.rows() - turn_idx);
+            return turns.bottomRows(turns.rows() - turn_idx);
+          }
         }
         x = next_x;
         y = next_y;
