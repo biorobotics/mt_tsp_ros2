@@ -1,6 +1,7 @@
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/base/goals/GoalSampleableRegion.h>
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator_rects.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/NearestNeighborsSqrtApproxReturnDistance.h"
 #include <ompl/tools/config/SelfConfig.h>
 #include <unordered_set>
@@ -129,21 +130,18 @@ class CustomRRTConnect : public og::RRTConnect {
 
               /* if initial progress cannot be done from the otherTree, restore tgi.start */
 
-              GrowState gsc = growTree(otherTree, tgi, rmotion);
+              GrowState gsc = growTree(otherTree, tgi, rmotion, true);
               if (gsc == TRAPPED)
                   tgi.start = !tgi.start;
 
-              
-              // Motion *prev_nearest = otherTree->nearest(rmotion);
+              // Since we pass try_connect to growTree, we don't need to keep running EXTEND.
+              // growTree does so internally. This relies on the fact that extending the nearest neighbor to rstate
+              // can only produce closer states to rstate
+              /*
               while (gsc == ADVANCED) {
                   gsc = growTree(otherTree, tgi, rmotion);
-                  /*
-                  if (otherTree->nearest(rmotion) == prev_nearest) {
-                    gsc = TRAPPED;
-                    break;
-                  }
-                  */
               }
+              */
 
               /* update distance between trees */
               // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
@@ -301,7 +299,7 @@ class CustomRRTConnect : public og::RRTConnect {
 
     // std::unordered_set<std::pair<Motion*, Motion*>, pair_hash> grow_pairs; // To stop advance from going in an infinite loop
 
-    GrowState growTree(TreeData &tree, TreeGrowingInfo &tgi, Motion *rmotion) {
+    GrowState growTree(TreeData &tree, TreeGrowingInfo &tgi, Motion *rmotion, bool try_connect = false) {
       /* find closest state in the tree */
       // auto timer_start2 = std::chrono::high_resolution_clock::now();
       double dist;
@@ -403,54 +401,85 @@ class CustomRRTConnect : public og::RRTConnect {
 
       double minT = si_->getStateSpace()->as<DubinsTimeStateSpace>()->as<ob::TimeStateSpace>(1)->getMinTimeBound();
       double maxT = si_->getStateSpace()->as<DubinsTimeStateSpace>()->as<ob::TimeStateSpace>(1)->getMaxTimeBound();
-      bool validMotion;
-      RowMatrixXd turns;
-      // auto timer_start1 = std::chrono::high_resolution_clock::now();
-      if (tgi.start) {
-        turns = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
+      double maxDuration = 0.2*(maxT - minT);
 
-        /*
-        if (reach && validMotion) {
-          if (!motionValidator->checkMotion(nmotion->state, tgi.xstate)) {
-            throw std::runtime_error("checkMotionForward Incorrect");
-          }
+      if (try_connect) {
+        std::vector<RowMatrixXd> turns_vec;
+        std::vector<Vector4d> states_vec;
+        if (tgi.start) {
+          std::static_pointer_cast<DubinsMotionValidatorRects>(motionValidator)->checkMotionForward_connect(turns_vec, states_vec, nmotion->state, dstate, maxDuration, reach);
+        } else {
+          std::static_pointer_cast<DubinsMotionValidatorRects>(motionValidator)->checkMotionBackward_connect(turns_vec, states_vec, dstate, nmotion->state, maxDuration, reach);
         }
-        */
-      } else {
-        turns = motionValidator->checkMotionBackward(dstate, nmotion->state, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
-        /*
-        if (reach && validMotion) {
-          if (!motionValidator->checkMotion(tgi.xstate, nmotion->state)) {
-            throw std::runtime_error("checkMotionBackward Incorrect");
-          }
-        }
-        */
-      }
-      // auto timer_stop1 = std::chrono::high_resolution_clock::now();
-      // auto nanos1 = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop1 - timer_start1).count();
-      // motion_check_time += ((double)nanos1)/1e9;
-      dstate = tgi.xstate;
-
-      if (!validMotion)
+        if (turns_vec.size() == 0) {
           return TRAPPED;
+        }
 
-      // assert(si_->isValid(dstate));
+        auto timer_start = std::chrono::high_resolution_clock::now();
+        Motion *prev_motion = nmotion;
+        for (int i = 0; i < turns_vec.size(); ++i) {
+          auto *motion = new DubinsMotion(si_);
+          motion->state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(states_vec[i](0));
+          motion->state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(states_vec[i](1));
+          motion->state->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(states_vec[i](2));
+          motion->state->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = states_vec[i](3);
 
-      // Anoop: took out addIntermediateStates_ case, and use DubinsMotion instead of Motion so I can add the turns
-      assert(!addIntermediateStates_);
-      auto timer_start = std::chrono::high_resolution_clock::now();
-      auto *motion = new DubinsMotion(si_);
-      si_->copyState(motion->state, dstate);
-      motion->parent = nmotion;
-      motion->root = nmotion->root;
-      motion->turns = turns;
-      tree->add(motion);
-      auto timer_stop = std::chrono::high_resolution_clock::now();
-      auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
-      add_to_tree_time += ((double)nanos)/1e9;
+          motion->parent = prev_motion;
+          motion->root = nmotion->root;
+          motion->turns = turns_vec[i];
+          tree->add(motion);
+          prev_motion = motion;
+          /*
+          if ((reach && turns_vec[i].col(1).sum() > maxDuration*5) ||
+              (!reach && std::abs(turns_vec[i].col(1).sum() - maxDuration*5) > 1e-10)) {
+            throw std::runtime_error("Incorrect segment dist");
+          }
+          */
+        }
 
-      tgi.xmotion = motion;
+        // Need to use copyState as opposed to tgi.xstate = prev_motion->state,
+        // or else we'll overwrite something in the tree
+        // next time we update the elements of tgi.xstate
+        si_->copyState(tgi.xstate, prev_motion->state);
+        tgi.xmotion = prev_motion;
 
+        auto timer_stop = std::chrono::high_resolution_clock::now();
+        auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+        add_to_tree_time += ((double)nanos)/1e9;
+      } else {
+        bool validMotion;
+        RowMatrixXd turns;
+        // auto timer_start1 = std::chrono::high_resolution_clock::now();
+        if (tgi.start) {
+          turns = motionValidator->checkMotionForward(nmotion->state, dstate, maxDuration, tgi.xstate, reach, validMotion, try_connect);
+        } else {
+          turns = motionValidator->checkMotionBackward(dstate, nmotion->state, maxDuration, tgi.xstate, reach, validMotion, try_connect);
+        }
+        // auto timer_stop1 = std::chrono::high_resolution_clock::now();
+        // auto nanos1 = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop1 - timer_start1).count();
+        // motion_check_time += ((double)nanos1)/1e9;
+        dstate = tgi.xstate;
+
+        if (!validMotion)
+            return TRAPPED;
+
+        // assert(si_->isValid(dstate));
+
+        // Anoop: took out addIntermediateStates_ case, and use DubinsMotion instead of Motion so I can add the turns
+        assert(!addIntermediateStates_);
+        auto timer_start = std::chrono::high_resolution_clock::now();
+        auto *motion = new DubinsMotion(si_);
+        si_->copyState(motion->state, dstate);
+        motion->parent = nmotion;
+        motion->root = nmotion->root;
+        motion->turns = turns;
+        tree->add(motion);
+        auto timer_stop = std::chrono::high_resolution_clock::now();
+        auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+        add_to_tree_time += ((double)nanos)/1e9;
+
+        tgi.xmotion = motion;
+      }
       return reach ? REACHED : ADVANCED;
     }
 

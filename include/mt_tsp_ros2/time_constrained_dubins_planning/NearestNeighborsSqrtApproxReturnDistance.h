@@ -32,9 +32,28 @@ public:
            return ompl::NearestNeighborsLinear<_T>::data_[pos];
 
        throw ompl::Exception("No elements found in nearest neighbors data structure");
+       /*
+       const std::size_t sz = data_.size();
+       std::size_t pos = sz;
+       dmin = 0.0;
+       for (std::size_t i = 0; i < sz; ++i)
+       {
+           double distance = ompl::NearestNeighbors<_T>::distFun_(data_[i], data);
+           if (pos == sz || dmin > distance)
+           {
+               pos = i;
+               dmin = distance;
+           }
+       }
+       if (pos != sz)
+           return data_[pos];
+
+       throw ompl::Exception("No elements found in nearest neighbors data structure");
+       */
    }
 
 protected:
   using ompl::NearestNeighborsSqrtApprox<_T>::checks_;
   using ompl::NearestNeighborsSqrtApprox<_T>::offset_;
+  using ompl::NearestNeighborsLinear<_T>::data_;
 };

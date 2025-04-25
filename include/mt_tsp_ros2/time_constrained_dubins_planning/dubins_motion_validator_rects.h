@@ -538,14 +538,13 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
       // Now perform collision-checks
       timer_start = std::chrono::high_resolution_clock::now();
-
       for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
         double turn_dir = turns(turn_idx, 0);
         double turn_dist = turns(turn_idx, 1);
         if (turn_dist == 0) {
           continue;
         }
-        bool stop_on_this_turn = t2 - t1 > maxDuration + 1e-2 && valid_path_length + turn_dist >= maxDuration*vmax;
+        bool stop_on_this_turn = valid_path_length + turn_dist >= maxDuration*vmax;
         if (stop_on_this_turn) {
           turn_dist = maxDuration*vmax - valid_path_length;
         }
@@ -640,6 +639,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
     RowMatrixXd checkMotionBackward_internal(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion) const {
       if (!si_->isValid(s2)) {
+        // TODO: do I still need this?
         reach = false;
         validMotion = false;
         return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
@@ -763,9 +763,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
           continue;
         }
 
-        auto timer_start1 = std::chrono::high_resolution_clock::now();
-
-        bool stop_on_this_turn = t2 - t1 > maxDuration + 1e-2 && valid_path_length + turn_dist >= maxDuration*vmax;
+        bool stop_on_this_turn = valid_path_length + turn_dist >= maxDuration*vmax;
         if (stop_on_this_turn) {
           turn_dist = maxDuration*vmax - valid_path_length;
         }
@@ -838,6 +836,318 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       collision_check_time += ((double)nanos)/1e9;
 
       return turns;
+    }
+
+    void checkMotionForward_connect(std::vector<RowMatrixXd> &turns_vec, std::vector<Vector4d> &states_vec, const ob::State *s1, const ob::State *s2, double maxDuration, bool &reach) const {
+      double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t1 = s1->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      double x2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      auto timer_start = std::chrono::high_resolution_clock::now();
+      RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
+      auto timer_stop = std::chrono::high_resolution_clock::now();
+      auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      path_elongation_time += ((double)nanos)/1e9;
+      if (std::isinf(turns(0, 0))) {
+        reach = false;
+        return;
+      }
+
+      double ctheta1 = cos(theta1);
+      double stheta1 = sin(theta1);
+
+      double x = x1;
+      double y = y1;
+      double theta = theta1;
+      double t = t1;
+
+      double ctheta = ctheta1;
+      double stheta = stheta1;
+
+      double next_x = x;
+      double next_y = y;
+      double next_theta = theta;
+      double next_t = t;
+
+      double next_ctheta = ctheta;
+      double next_stheta = stheta;
+
+      double cur_segment_length = 0.;
+
+      timer_start = std::chrono::high_resolution_clock::now();
+
+      int start_turn_idx = 0;
+      double maxDist = maxDuration*vmax;
+
+      for (int turn_idx = 0; turn_idx < turns.rows(); ++turn_idx) {
+        double turn_dir = turns(turn_idx, 0);
+        double turn_dist = turns(turn_idx, 1);
+        if (turn_dist == 0) {
+          continue;
+        }
+        double rho_times_turn_dir = rho*turn_dir;
+
+        while (cur_segment_length + turn_dist >= maxDist) {
+          // Move only until we get to maxDist along current segment
+          turn_dist = maxDist - cur_segment_length;
+
+          if (turn_dir == 0) {
+            // S segment
+            next_theta = theta;
+            next_x = x + turn_dist*ctheta;
+            next_y = y + turn_dist*stheta;
+          } else {
+            // C segment
+            next_theta = theta + turn_dist/rho_times_turn_dir;
+            next_ctheta = cos(next_theta);
+            next_stheta = sin(next_theta);
+            next_x = x + rho_times_turn_dir*(-stheta + next_stheta);
+            next_y = y + rho_times_turn_dir*(ctheta - next_ctheta);
+          }
+
+          next_t = t + turn_dist/vmax;
+
+          if (!collision_free(x, y, theta, turn_dir, turn_dist, next_x, next_y)) {
+            // If we collide, return the states and turns we've already accumulated
+            reach = false;
+
+            timer_stop = std::chrono::high_resolution_clock::now();
+            nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)nanos)/1e9;
+            return;
+          }
+
+          // If we don't collide, add states and turns
+          turns_vec.push_back(turns.block(start_turn_idx, 0, turn_idx - start_turn_idx + 1, 2));
+          turns_vec.back()(turn_idx - start_turn_idx, 1) = turn_dist; // The last turn is too long. Shorten it
+          states_vec.push_back(Vector4d(next_x, next_y, next_theta, next_t));
+
+          x = next_x;
+          y = next_y;
+          theta = next_theta;
+          t = next_t;
+
+          ctheta = next_ctheta;
+          stheta = next_stheta;
+
+          cur_segment_length = 0.; // Start a new segment
+          turns(turn_idx, 1) -= turn_dist;
+          turn_dist = turns(turn_idx, 1);
+
+          start_turn_idx = turn_idx;
+        }
+
+        if (turn_dir == 0) {
+          // S segment
+          next_theta = theta;
+          next_x = x + turn_dist*ctheta;
+          next_y = y + turn_dist*stheta;
+        } else {
+          // C segment
+          next_theta = theta + turn_dist/rho_times_turn_dir;
+          next_ctheta = cos(next_theta);
+          next_stheta = sin(next_theta);
+          next_x = x + rho_times_turn_dir*(-stheta + next_stheta);
+          next_y = y + rho_times_turn_dir*(ctheta - next_ctheta);
+        }
+
+        next_t = t + turn_dist/vmax;
+
+        if (!collision_free(x, y, theta, turn_dir, turn_dist, next_x, next_y)) {
+          reach = false;
+
+          timer_stop = std::chrono::high_resolution_clock::now();
+          nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+          collision_check_time += ((double)nanos)/1e9;
+          return;
+        }
+
+        x = next_x;
+        y = next_y;
+        theta = next_theta;
+        t = next_t;
+
+        ctheta = next_ctheta;
+        stheta = next_stheta;
+
+        cur_segment_length += turn_dist;
+      }
+
+      reach = true;
+
+      // If we reach, need to add the final state and the final sequence of turns, add states and turns
+      turns_vec.push_back(turns.block(start_turn_idx, 0, turns.rows() - start_turn_idx, 2));
+      states_vec.push_back(Vector4d(next_x, next_y, next_theta, next_t));
+
+      timer_stop = std::chrono::high_resolution_clock::now();
+      nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      collision_check_time += ((double)nanos)/1e9;
+    }
+
+    void checkMotionBackward_connect(std::vector<RowMatrixXd> &turns_vec, std::vector<Vector4d> &states_vec, const ob::State *s1, const ob::State *s2, double maxDuration, bool &reach) const {
+      if (!si_->isValid(s2)) {
+        // TODO: do I still need this?
+        reach = false;
+        return;
+      }
+      double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t1 = s1->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      double x2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta2 = s2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      auto timer_start = std::chrono::high_resolution_clock::now();
+      RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
+      auto timer_stop = std::chrono::high_resolution_clock::now();
+      auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      path_elongation_time += ((double)nanos)/1e9;
+      if (std::isinf(turns(0, 0))) {
+        reach = false;
+        return;
+      }
+
+      double ctheta2 = cos(theta2);
+      double stheta2 = sin(theta2);
+
+      double x = x2;
+      double y = y2;
+      double theta = theta2;
+      double t = t2;
+
+      double ctheta = ctheta2;
+      double stheta = stheta2;
+
+      double next_x = x;
+      double next_y = y;
+      double next_theta = theta;
+      double next_t = t;
+
+      double next_ctheta = ctheta;
+      double next_stheta = stheta;
+
+      double cur_segment_length = 0.;
+
+      timer_start = std::chrono::high_resolution_clock::now();
+      
+      int start_turn_idx = turns.rows() - 1;
+      double maxDist = maxDuration*vmax;
+
+      for (int turn_idx = turns.rows() - 1; turn_idx >= 0; --turn_idx) {
+        double turn_dir = turns(turn_idx, 0);
+        double turn_dist = turns(turn_idx, 1);
+        if (turn_dist == 0) {
+          continue;
+        }
+        double rho_times_turn_dir = rho*turn_dir;
+
+        while (cur_segment_length + turn_dist >= maxDist) {
+          // Move only until we get to maxDist along current segment
+          turn_dist = maxDist - cur_segment_length;
+
+          next_t = t - turn_dist/vmax;
+          if (turn_dir == 0) {
+            // S segment
+            next_theta = theta;
+            next_x = x - turn_dist*ctheta;
+            next_y = y - turn_dist*stheta;
+          } else {
+            // C segment
+            next_theta = theta - turn_dist/rho_times_turn_dir;
+            next_ctheta = cos(next_theta);
+            next_stheta = sin(next_theta);
+            next_x = x - rho_times_turn_dir*(stheta - next_stheta);
+            next_y = y - rho_times_turn_dir*(-ctheta + next_ctheta);
+          }
+
+          // Use next_x etc because it's checkMotionBackward
+          if (!collision_free(next_x, next_y, next_theta, turn_dir, turn_dist, x, y)) {
+            // If we collide, return the states and turns we've already accumulated
+            reach = false;
+
+            timer_stop = std::chrono::high_resolution_clock::now();
+            nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)nanos)/1e9;
+
+            return;
+          }
+
+          // If we don't collide, add states and turns
+          turns_vec.push_back(turns.block(turn_idx, 0, start_turn_idx - turn_idx + 1, 2));
+          turns_vec.back()(0, 1) = turn_dist; // The last turn is too long. Shorten it
+          states_vec.push_back(Vector4d(next_x, next_y, next_theta, next_t));
+
+          x = next_x;
+          y = next_y;
+          theta = next_theta;
+          t = next_t;
+
+          ctheta = next_ctheta;
+          stheta = next_stheta;
+
+          cur_segment_length = 0.; // Start a new segment
+          turns(turn_idx, 1) -= turn_dist;
+          turn_dist = turns(turn_idx, 1);
+
+          start_turn_idx = turn_idx;
+        }
+
+        next_t = t - turn_dist/vmax;
+        if (turn_dir == 0) {
+          // S segment
+          next_theta = theta;
+          next_x = x - turn_dist*ctheta;
+          next_y = y - turn_dist*stheta;
+        } else {
+          // C segment
+          next_theta = theta - turn_dist/rho_times_turn_dir;
+          next_ctheta = cos(next_theta);
+          next_stheta = sin(next_theta);
+          next_x = x - rho_times_turn_dir*(stheta - next_stheta);
+          next_y = y - rho_times_turn_dir*(-ctheta + next_ctheta);
+        }
+
+        // Use next_x etc because it's checkMotionBackward
+        if (!collision_free(next_x, next_y, next_theta, turn_dir, turn_dist, x, y)) {
+          // If we collide, return the states and turns we've already accumulated
+          reach = false;
+
+          timer_stop = std::chrono::high_resolution_clock::now();
+          nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+          collision_check_time += ((double)nanos)/1e9;
+
+          return;
+        }
+
+        x = next_x;
+        y = next_y;
+        theta = next_theta;
+        t = next_t;
+
+        ctheta = next_ctheta;
+        stheta = next_stheta;
+
+        cur_segment_length += turn_dist;
+      }
+
+      reach = true;
+
+      // If we reach, need to add the final state and the final sequence of turns, add states and turns
+      turns_vec.push_back(turns.block(0, 0, start_turn_idx + 1, 2));
+      states_vec.push_back(Vector4d(next_x, next_y, next_theta, next_t));
+
+      timer_stop = std::chrono::high_resolution_clock::now();
+      nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      collision_check_time += ((double)nanos)/1e9;
     }
 
   protected:
