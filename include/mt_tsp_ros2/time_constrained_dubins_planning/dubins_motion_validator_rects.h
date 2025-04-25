@@ -600,6 +600,22 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
 
           next_t = t + turn_dist/vmax;
           collision = !collision_free(x, y, theta, turn_dir, turn_dist, next_x, next_y);
+
+          if (!collision) {
+            reach = false;
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
+            stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
+            validMotion = true;
+            turns(turn_idx, 1) = turn_dist;
+
+            timer_stop = std::chrono::high_resolution_clock::now();
+            nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)nanos)/1e9;
+
+            return turns.topRows(turn_idx + 1);
+          }
         }
 
         if (collision && try_connect && stop_turn_idx != -1) {
@@ -904,6 +920,22 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
           }
 
           collision = !collision_free(next_x, next_y, next_theta, turn_dir, turn_dist, x, y);
+
+          if (!collision) {
+            reach = false;
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
+            stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
+            stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = next_t;
+            validMotion = true;
+            turns(turn_idx, 1) = turn_dist;
+
+            timer_stop = std::chrono::high_resolution_clock::now();
+            nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+            collision_check_time += ((double)nanos)/1e9;
+
+            return turns.bottomRows(turns.rows() - turn_idx);
+          }
         }
 
         if (collision && try_connect && stop_turn_idx != -1) {

@@ -133,7 +133,6 @@ class CustomRRTConnect : public og::RRTConnect {
               if (gsc == TRAPPED)
                   tgi.start = !tgi.start;
 
-              
               // Since we pass try_connect to growTree, we don't need to keep running EXTEND.
               // growTree does so internally. This relies on the fact that extending the nearest neighbor to rstate
               // can only produce closer states to rstate
@@ -405,7 +404,7 @@ class CustomRRTConnect : public og::RRTConnect {
       RowMatrixXd turns;
       // auto timer_start1 = std::chrono::high_resolution_clock::now();
       if (tgi.start) {
-        turns = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
+        turns = motionValidator->checkMotionForward(nmotion->state, dstate, 0.2*(maxT - minT), tgi.xstate, reach, validMotion, try_connect);
 
         /*
         if (reach && validMotion) {
@@ -415,7 +414,7 @@ class CustomRRTConnect : public og::RRTConnect {
         }
         */
       } else {
-        turns = motionValidator->checkMotionBackward(dstate, nmotion->state, 0.2*(maxT - minT), tgi.xstate, reach, validMotion);
+        turns = motionValidator->checkMotionBackward(dstate, nmotion->state, 0.2*(maxT - minT), tgi.xstate, reach, validMotion, try_connect);
         /*
         if (reach && validMotion) {
           if (!motionValidator->checkMotion(tgi.xstate, nmotion->state)) {
