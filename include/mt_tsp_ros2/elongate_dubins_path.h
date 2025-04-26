@@ -5,6 +5,7 @@
 #include "mt_tsp_ros2/dubins.h"
 #include <stdexcept>
 #include <omp.h>
+#include <chrono>
 
 using namespace Eigen;
 typedef Ref<Matrix<double, Dynamic, 1>> VectorXdRef;
@@ -281,6 +282,235 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
   }
 
   return s <= l1 || s >= l2;
+}
+
+bool check_elongation_possible_with_profiling(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double s, double rho, double &CCC_time, double &CSC_time, double &check_time) {
+  auto timer_start = std::chrono::high_resolution_clock::now();
+  // LRL
+  double LRL_dist_A = std::numeric_limits<double>::infinity();
+  double LRL_dist_B = std::numeric_limits<double>::infinity();
+
+  double c_0 = cos(theta_0);
+  double s_0 = sin(theta_0);
+
+  Vector2d dir_0(c_0, s_0);
+  Vector2d perp_0(-s_0, c_0);
+  Vector2d center1_L = Vector2d(x_0, y_0) + perp_0*rho;
+
+  double c_f = cos(theta_f);
+  double s_f = sin(theta_f);
+  Vector2d dir_f(c_f, s_f);
+  Vector2d perp_f(-s_f, c_f);
+  Vector2d center3_L = Vector2d(x_f, y_f) + perp_f*rho;
+
+  Vector2d V = center3_L - center1_L;
+  double D = V.norm();
+  if (D <= 4*rho) {
+    double gamma = atan2(V(1), V(0));
+    double theta = acos(D/(4*rho));
+
+    double theta_A = gamma + theta;
+    double c_A = cos(theta_A);
+    double s_A = sin(theta_A);
+    Vector2d vec_A = Vector2d(c_A, s_A);
+    Vector2d center2 = center1_L + vec_A*rho*2;
+    LRL_dist_A = arclength(-perp_0, vec_A, true, rho);
+    LRL_dist_A += arclength(center1_L - center2, center3_L - center2, false, rho);
+    LRL_dist_A += arclength(center2 - center3_L, -perp_f, true, rho);
+
+    double theta_B = gamma - theta;
+    double c_B = cos(theta_B);
+    double s_B = sin(theta_B);
+    Vector2d vec_B = Vector2d(c_B, s_B);
+    center2 = center1_L + vec_B*rho*2;
+    LRL_dist_B = arclength(-perp_0, vec_B, true, rho);
+    LRL_dist_B += arclength(center1_L - center2, center3_L - center2, false, rho);
+    LRL_dist_B += arclength(center2 - center3_L, -perp_f, true, rho);
+  }
+
+  // RLR
+  double RLR_dist_A = std::numeric_limits<double>::infinity();
+  double RLR_dist_B = std::numeric_limits<double>::infinity();
+
+  perp_0 = Vector2d(s_0, -c_0);
+  Vector2d center1_R = Vector2d(x_0, y_0) + perp_0*rho;
+
+  perp_f = Vector2d(s_f, -c_f);
+  Vector2d center3_R = Vector2d(x_f, y_f) + perp_f*rho;
+
+  V = center3_R - center1_R;
+  D = V.norm();
+  if (D <= 4*rho) {
+    double gamma = atan2(V(1), V(0));
+    double theta = acos(D/(4*rho));
+
+    double theta_A = gamma + theta;
+    double c_A = cos(theta_A);
+    double s_A = sin(theta_A);
+    Vector2d vec_A = Vector2d(c_A, s_A);
+    Vector2d center2 = center1_R + vec_A*rho*2;
+    RLR_dist_A = arclength(-perp_0, vec_A, false, rho);
+    RLR_dist_A += arclength(center1_R - center2, center3_R - center2, true, rho);
+    RLR_dist_A += arclength(center2 - center3_R, -perp_f, false, rho);
+
+    double theta_B = gamma - theta;
+    double c_B = cos(theta_B);
+    double s_B = sin(theta_B);
+    Vector2d vec_B = Vector2d(c_B, s_B);
+    center2 = center1_R + Vector2d(c_B, s_B)*rho*2;
+    RLR_dist_B = arclength(-perp_0, vec_B, false, rho);
+    RLR_dist_B += arclength(center1_R - center2, center3_R - center2, true, rho);
+    RLR_dist_B += arclength(center2 - center3_R, -perp_f, false, rho);
+  }
+
+  double l_LRL_s = std::min(LRL_dist_A, LRL_dist_B);
+  double l_RLR_s = std::min(RLR_dist_A, RLR_dist_B);
+
+  double l_LRL_l = std::max(LRL_dist_A, LRL_dist_B);
+  double l_RLR_l = std::max(RLR_dist_A, RLR_dist_B);
+
+  double l_m = std::min(l_LRL_s, l_RLR_s);
+
+  auto timer_stop = std::chrono::high_resolution_clock::now();
+  auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+  CCC_time = ((double)nanos)/1e9;
+
+  timer_start = std::chrono::high_resolution_clock::now();
+
+  double q_0[3] = {x_0, y_0, theta_0};
+  double q_f[3] = {x_f, y_f, theta_f};
+
+  // LSL
+  double l_LSL = std::numeric_limits<double>::infinity();
+  DubinsPath path_LSL;
+  int dubins_error = dubins_path(&path_LSL, q_0, q_f, rho, DubinsPathType::LSL);
+  if (!dubins_error) {
+    l_LSL = dubins_path_length(&path_LSL);
+    l_m = std::min(l_m, l_LSL);
+  }
+
+  // LSR
+  double l_LSR = std::numeric_limits<double>::infinity();
+  DubinsPath path_LSR;
+  dubins_error = dubins_path(&path_LSR, q_0, q_f, rho, DubinsPathType::LSR);
+  if (!dubins_error) {
+    l_LSR = dubins_path_length(&path_LSR);
+    l_m = std::min(l_m, l_LSR);
+  }
+
+  // RSR
+  double l_RSR = std::numeric_limits<double>::infinity();
+  DubinsPath path_RSR;
+  dubins_error = dubins_path(&path_RSR, q_0, q_f, rho, DubinsPathType::RSR);
+  if (!dubins_error) {
+    l_RSR = dubins_path_length(&path_RSR);
+    l_m = std::min(l_m, l_RSR);
+  }
+
+  // RSL
+  double l_RSL = std::numeric_limits<double>::infinity();
+  DubinsPath path_RSL;
+  dubins_error = dubins_path(&path_RSL, q_0, q_f, rho, DubinsPathType::RSL);
+  if (!dubins_error) {
+    l_RSL = dubins_path_length(&path_RSL);
+    l_m = std::min(l_m, l_RSL);
+  }
+
+  timer_stop = std::chrono::high_resolution_clock::now();
+  nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+  CSC_time = ((double)nanos)/1e9;
+
+  timer_start = std::chrono::high_resolution_clock::now();
+
+  if (std::abs(l_m - s) < 1e-4) {
+    timer_stop = std::chrono::high_resolution_clock::now();
+    nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+    check_time = ((double)nanos)/1e9;
+    return true;
+  }
+
+  if (l_m > s) {
+    timer_stop = std::chrono::high_resolution_clock::now();
+    nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+    check_time = ((double)nanos)/1e9;
+    return false; // We can't elongate a Dubins path to length s if the shortest Dubins path has length larger than s
+  }
+
+  if (l_m == l_LRL_s || l_m == l_RLR_s) {
+    // If shortest path is CCC, we can always elongate it
+    timer_stop = std::chrono::high_resolution_clock::now();
+    nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+    check_time = ((double)nanos)/1e9;
+    return true;
+  }
+
+  // Check if path is in O
+  if (l_m == l_LSL || l_m == l_LSR || l_m == l_RSR || l_m == l_RSL) {
+    double ldist = (center3_L - center1_L).norm();
+    double rdist = (center3_R - center1_R).norm();
+    // O4 and O5
+    if (rdist >= 4*rho || ldist >= 4*rho) {
+      timer_stop = std::chrono::high_resolution_clock::now();
+      nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      check_time = ((double)nanos)/1e9;
+      return true;
+    }
+    // O1, O2, O3
+    if ((l_m == l_LSL && (path_LSL.param[0] >= M_PI || path_LSL.param[2] >= M_PI || path_LSL.param[1] >= 4)) ||
+        (l_m == l_LSR && (path_LSR.param[0] >= M_PI || path_LSR.param[2] >= M_PI || path_LSR.param[1] >= 4)) ||
+        (l_m == l_RSR && (path_RSR.param[0] >= M_PI || path_RSR.param[2] >= M_PI || path_RSR.param[1] >= 4)) ||
+        (l_m == l_RSL && (path_RSL.param[0] >= M_PI || path_RSL.param[2] >= M_PI || path_RSL.param[1] >= 4))) {
+      timer_stop = std::chrono::high_resolution_clock::now();
+      nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      check_time = ((double)nanos)/1e9;
+      return true;
+    }
+  }
+
+  // Endpoint pair is in nabla O and thus Dubins path must be CSC. Check if we have parallel tangents
+  if (l_m == l_RSR || l_m == l_LSL) {
+    double angle_traversed;
+    if (l_m == l_RSR) {
+      angle_traversed = path_RSR.param[0] + path_RSR.param[2];
+    } else if (l_m == l_LSL) {
+      angle_traversed = path_LSL.param[0] + path_LSL.param[2];
+    }
+    if (angle_traversed >= M_PI) {
+      // Parallel tangents
+      timer_stop = std::chrono::high_resolution_clock::now();
+      nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      check_time = ((double)nanos)/1e9;
+      return true;
+    }
+  }
+
+  double l1 = std::max(l_LRL_s, l_RLR_s);
+  double l2 = l_m + 2*M_PI*rho;
+  if (l_LRL_l < l2) {
+    l2 = l_LRL_l;
+  }
+  if (l_RLR_l < l2) {
+    l2 = l_RLR_l;
+  }
+  // I added the 1e-4 because if the Dubins path is a degenerate two-segment path, there are a few paths types that are equivalent
+  if (l_RSR > l_m + 1e-4 && l_RSR < l2) {
+    l2 = l_RSR;
+  }
+  if (l_RSL > l_m + 1e-4 && l_RSL < l2) {
+    l2 = l_RSL;
+  }
+  if (l_LSR > l_m + 1e-4 && l_LSR < l2) {
+    l2 = l_LSR;
+  }
+  if (l_LSL > l_m + 1e-4 && l_LSL < l2) {
+    l2 = l_LSL;
+  }
+
+  bool ret = s <= l1 || s >= l2;
+  timer_stop = std::chrono::high_resolution_clock::now();
+  nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+  check_time = ((double)nanos)/1e9;
+  return ret;
 }
 
 Vector3d get_elongation_intervals(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double rho) {
@@ -1429,6 +1659,45 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
 
   throw std::runtime_error("Should not reach the end of elongated_dubins_path function");
   return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2); // We shouldn't ever get here
+}
+
+VectorXb batch_elongation_check_with_profiling(RowMatrixXdRef_const q0s, RowMatrixXdRef_const qfs, VectorXdRef_const ss, double rho, int num_openmp_threads, Ref<Vector3d> profiling_info) {
+  omp_set_num_threads(num_openmp_threads);
+  int num_pairs = q0s.rows();
+  assert(num_pairs == qfs.rows());
+  assert(num_pairs == ss.size());
+  VectorXb results(num_pairs);
+  std::vector<Vector3d> profiling_info_per_thread(num_openmp_threads, Vector3d::Zero());
+  #pragma omp parallel for
+  for (int pair_idx = 0; pair_idx < num_pairs; ++pair_idx) {
+    double x_0 = q0s(pair_idx, 0);
+    double y_0 = q0s(pair_idx, 1);
+    double theta_0 = q0s(pair_idx, 2);
+    double x_f = qfs(pair_idx, 0);
+    double y_f = qfs(pair_idx, 1);
+    double theta_f = qfs(pair_idx, 2);
+    double s = ss(pair_idx);
+    int thread_idx = omp_get_thread_num();
+    double CCC_time;
+    double CSC_time;
+    double check_time;
+    results(pair_idx) = check_elongation_possible_with_profiling(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho, CCC_time, CSC_time, check_time);
+    profiling_info_per_thread[thread_idx](0) += CCC_time;
+    profiling_info_per_thread[thread_idx](1) += CSC_time;
+    profiling_info_per_thread[thread_idx](2) += check_time;
+  }
+  int max_thread_idx = 0;
+  double max_thread_time = 0;
+  for (int thread_idx = 0; thread_idx < num_openmp_threads; ++thread_idx) {
+    double this_thread_time = profiling_info_per_thread[thread_idx].sum();
+    if (this_thread_time > max_thread_time) {
+      max_thread_idx = thread_idx;
+      max_thread_time = this_thread_time;
+    }
+  }
+  profiling_info = profiling_info_per_thread[max_thread_idx];
+
+  return results;
 }
 
 VectorXb batch_elongation_check(RowMatrixXdRef_const q0s, RowMatrixXdRef_const qfs, VectorXdRef_const ss, double rho, int num_openmp_threads) {
