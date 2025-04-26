@@ -107,13 +107,13 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
     }
   }
   auto tmp_timer_stop = std::chrono::high_resolution_clock::now();
-  auto tmp_micros = std::chrono::duration_cast<std::chrono::microseconds>(tmp_timer_stop - tmp_timer_start).count();
-  profiling_data(0) = ((double)tmp_micros)/1e6; // before time
+  auto tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
+  profiling_data(0) = ((double)tmp_nanos)/1e9; // before time
 
   while (stack.size()) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
-    auto micros = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
-    if (((double)micros)/1e6 > time_limit) {
+    auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+    if (((double)nanos)/1e9 > time_limit) {
       break;
     }
 
