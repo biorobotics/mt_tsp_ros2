@@ -49,23 +49,27 @@ struct key_hash {
 struct DFSNode { 
   DFSNode(std::shared_ptr<DFSNode> parent, 
           int final_pt_idx,
-          int final_target_idx) : parent(parent), 
-                                  final_pt_idx(final_pt_idx) {
+          int final_target_idx,
+          int num_targets = 0) : parent(parent), 
+                                 final_pt_idx(final_pt_idx) {
     if (parent != nullptr) {
       visited_targets = parent->visited_targets;
-      visited_targets.insert(final_target_idx);
+      visited_targets(final_target_idx) = true;
+    } else {
+      if (num_targets == 0) {
+        throw std::runtime_error("num_targets can't be zero if parent == nullptr");
+      }
+      visited_targets = VectorXb::Zero(num_targets);
     }
-    std::vector<int> sorted_visited_targets(visited_targets.begin(), visited_targets.end());
-    std::sort(sorted_visited_targets.begin(), sorted_visited_targets.end());
     key = VectorXi::Zero(visited_targets.size() + 1);
     for (int i = 0; i < visited_targets.size(); ++i) {
-      key(i) = sorted_visited_targets[i];
+      key(i) = visited_targets(i);
     }
     key(visited_targets.size()) = final_pt_idx;
   }
 
   std::shared_ptr<DFSNode> parent;
-  std::unordered_set<int> visited_targets;
+  VectorXb visited_targets;
   int final_pt_idx;
   VectorXi key;
 };
@@ -75,13 +79,13 @@ typedef std::shared_ptr<DFSNode> DFSNodePtr;
 VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts) {
   auto timer_start = std::chrono::high_resolution_clock::now();
 
-  VectorXd profiling_data(1);
+  VectorXd profiling_data = VectorXd::Zero(4);
 
   int num_targets = target_to_pt_ptr.size() - 1; // -1 because we have a dummy target associated with the depot
 
   std::unordered_set<VectorXi, key_hash> closed_list;
   std::vector<DFSNodePtr> stack;
-  stack.push_back(std::make_shared<DFSNode>(nullptr, 0, -1));
+  stack.push_back(std::make_shared<DFSNode>(nullptr, 0, -1, num_targets));
 
   int num_nodes = gtsp_cost_mat.rows();
 
@@ -132,7 +136,7 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
 
     std::vector<int> neighbors;
     std::vector<double> neighbor_times;
-    if (pop->visited_targets.size() == num_targets) {
+    if (pop->visited_targets.all()) {
       std::vector<long> tour_vec;
       tour_vec.push_back(pop->final_pt_idx);
       DFSNodePtr node = pop->parent;
@@ -147,7 +151,7 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
       return profiling_data;
     } else {
       for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
-        if (pop->visited_targets.find(target_idx) != pop->visited_targets.end()) {
+        if (pop->visited_targets(target_idx)) {
           continue;
         }
         auto ptr = target_to_pt_ptr[target_idx].unchecked<1>();
@@ -167,7 +171,11 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
 
     std::vector<size_t> sort_idx;
     if (do_sort) {
+      // tmp_timer_start = std::chrono::high_resolution_clock::now();
       sort_idx = sort_indexes(neighbor_times);
+      // tmp_timer_stop = std::chrono::high_resolution_clock::now();
+      // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
+      // profiling_data(1) += ((double)tmp_nanos)/1e9; // sort time
       std::reverse(sort_idx.begin(), sort_idx.end());
     } else {
       throw std::runtime_error("Random successor ordering not implemented");
@@ -175,20 +183,31 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
     for (int neighbor_idx : sort_idx) {
       int pt_idx = neighbors[neighbor_idx];
       if (do_prune) {
+        // tmp_timer_start = std::chrono::high_resolution_clock::now();
         bool prune = false;
         for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
-          if (target_idx != pt_to_target_ptr(pt_idx) && before(pt_idx, target_idx) && pop->visited_targets.find(target_idx) == pop->visited_targets.end()) {
+          if (target_idx != pt_to_target_ptr(pt_idx) && before(pt_idx, target_idx) && !pop->visited_targets(target_idx)) {
             prune = true;
             break;
           }
         }
+
+        // tmp_timer_stop = std::chrono::high_resolution_clock::now();
+        // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
+        // profiling_data(2) += ((double)tmp_nanos)/1e9; // prune time
 
         if (prune) {
           continue;
         }
       }
 
+      // tmp_timer_start = std::chrono::high_resolution_clock::now();
+
       DFSNodePtr neighbor_node = std::make_shared<DFSNode>(pop, pt_idx, pt_to_target_ptr(pt_idx));
+
+      // tmp_timer_stop = std::chrono::high_resolution_clock::now();
+      // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
+      // profiling_data(3) += ((double)tmp_nanos)/1e9; // node gen time
 
       if (closed_list.find(neighbor_node->key) != closed_list.end()) {
         continue;
