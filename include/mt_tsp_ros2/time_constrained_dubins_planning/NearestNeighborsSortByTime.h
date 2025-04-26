@@ -48,10 +48,11 @@ public:
                }
            }
            offset_ = (offset_ + 1) % checks_;
+
+           _T ret = *std::prev(sorted_data_.end());
+           dmin = ompl::NearestNeighbors<_T>::distFun_(ret, data);
+           return ret;
        }
-       _T ret = *std::prev(sorted_data_.end());
-       dmin = ompl::NearestNeighbors<_T>::distFun_(ret, data);
-       return ret;
 
        throw ompl::Exception("No elements found in nearest neighbors data structure");
    }
