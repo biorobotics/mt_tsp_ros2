@@ -55,6 +55,25 @@ public:
        }
 
        throw ompl::Exception("No elements found in nearest neighbors data structure");
+
+       /*
+       for (auto it = sorted_data_.begin(); it != sorted_data_.end(); ++it)
+       {
+           double distance = ompl::NearestNeighbors<_T>::distFun_(*it, data);
+           if (std::isfinite(distance))
+           {
+               dmin = distance;
+               return *it;
+           }
+       }
+       if (sorted_data_.size()) {
+         _T ret = *std::prev(sorted_data_.end());
+         dmin = ompl::NearestNeighbors<_T>::distFun_(ret, data);
+         return ret;
+       }
+
+       throw ompl::Exception("No elements found in nearest neighbors data structure");
+       */
    }
 
 protected:
