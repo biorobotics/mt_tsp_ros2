@@ -81,8 +81,10 @@ struct DFSNode {
 
 typedef std::shared_ptr<DFSNode> DFSNodePtr;
 
-VectorXl dag_dfs(RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, const Ref<const VectorXl> &bias_tour) {
+VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, const Ref<const VectorXl> &bias_tour) {
   auto timer_start = std::chrono::high_resolution_clock::now();
+
+  VectorXd profiling_data(1);
 
   int num_targets = target_to_pt_ptr.size() - 1; // -1 because we have a dummy target associated with the depot
 
@@ -91,6 +93,8 @@ VectorXl dag_dfs(RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_tar
   stack.push_back(std::make_shared<DFSNode>(nullptr, 0, -1));
 
   int num_nodes = gtsp_cost_mat.rows();
+
+  auto tmp_timer_start = std::chrono::high_resolution_clock::now();
 
   MatrixXb before(1, 1);
   if (do_prune) {
@@ -112,6 +116,9 @@ VectorXl dag_dfs(RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_tar
       before(node_idx, pt_to_target_ptr(node_idx)) = false;
     }
   }
+  auto tmp_timer_stop = std::chrono::high_resolution_clock::now();
+  auto tmp_micros = std::chrono::duration_cast<std::chrono::microseconds>(tmp_timer_stop - tmp_timer_start).count();
+  profiling_data(0) = ((double)tmp_micros)/1e6; // before time
 
   std::unordered_set<std::pair<int,int>, int_pair_hash> bias_edges;
   for (int i = 0; i < bias_tour.size() - 1; ++i) {
@@ -141,17 +148,18 @@ VectorXl dag_dfs(RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_tar
     std::vector<int> neighbors;
     std::vector<double> neighbor_times;
     if (pop->visited_targets.size() == num_targets) {
-      std::vector<long> tour;
-      tour.push_back(pop->final_pt_idx);
+      std::vector<long> tour_vec;
+      tour_vec.push_back(pop->final_pt_idx);
       DFSNodePtr node = pop->parent;
       while (node != nullptr) {
-        tour.push_back(node->final_pt_idx);
+        tour_vec.push_back(node->final_pt_idx);
         node = node->parent;
       }
-      std::reverse(tour.begin(), tour.end());
+      std::reverse(tour_vec.begin(), tour_vec.end());
       // Assume open tsp
-      tour.push_back(0);
-      return Map<VectorXl>(tour.data(), tour.size());
+      tour_vec.push_back(0);
+      tour = Map<VectorXl>(tour_vec.data(), tour_vec.size());
+      return profiling_data;
     } else {
       for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
         if (pop->visited_targets.find(target_idx) != pop->visited_targets.end()) {
@@ -215,5 +223,6 @@ VectorXl dag_dfs(RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_tar
       stack.push_back(neighbor_node);
     }
   }
-  return -1*VectorXl::Ones(1);
+  tour(0) = -1;
+  return profiling_data;
 }
