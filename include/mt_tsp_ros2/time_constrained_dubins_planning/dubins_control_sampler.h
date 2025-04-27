@@ -15,6 +15,7 @@ public:
     DubinsControlSampler(const SpaceInformation *si, std::shared_ptr<DubinsMotionValidatorRects> motion_validator, double max_w, double max_delta_t) : DirectedControlSampler(si), motion_validator(motion_validator), max_w(max_w), max_delta_t(max_delta_t)
     {
       collision_check_time = 0.;
+      rng_ = ompl::RNG(1);
     }
 
     void reset_timing_info() {
