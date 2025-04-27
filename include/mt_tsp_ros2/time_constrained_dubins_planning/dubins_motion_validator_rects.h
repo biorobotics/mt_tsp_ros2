@@ -280,6 +280,8 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       segments.push_back(Segment(point4, point1));
 
       aabb_tree = Tree(segments.begin(), segments.end()); 
+
+      rng_ = ompl::RNG(1);
     }
 
     const Tree &get_aabb_tree() {
@@ -437,15 +439,34 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
 
       auto timer_start = std::chrono::high_resolution_clock::now();
-      RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
       auto timer_stop = std::chrono::high_resolution_clock::now();
       auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
-      path_elongation_time += ((double)nanos)/1e9;
-      if (std::isinf(turns(0, 0))) {
-        reach = false;
-        validMotion = false;
-        // std::cout << "failed on initial forward elongation check" << std::endl;
-        return turns;
+
+      bool compute_elongated_path = false; // t2 - t1 <= maxDuration;
+      RowMatrixXd turns(1, 2);
+      if (compute_elongated_path) {
+        timer_start = std::chrono::high_resolution_clock::now();
+        turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
+        timer_stop = std::chrono::high_resolution_clock::now();
+        nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+        path_elongation_time += ((double)nanos)/1e9;
+        if (std::isinf(turns(0, 0))) {
+          reach = false;
+          validMotion = false;
+          // std::cout << "failed on initial forward elongation check" << std::endl;
+          return turns;
+        }
+      } else {
+        double duration = rng_.uniformReal(0, maxDuration);
+        turns(0, 1) = duration*vmax;
+        double dir_tmp = rng_.uniformReal(0, 3);
+        if (dir_tmp < 1) {
+          turns(0, 0) = -1;
+        } else if (dir_tmp < 2) {
+          turns(0, 0) = 0;
+        } else {
+          turns(0, 0) = 1;
+        }
       }
 
       double ctheta1 = cos(theta1);
@@ -609,7 +630,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         stheta = next_stheta;
       }
 
-      reach = true;
+      reach = compute_elongated_path;
       stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
       stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
       stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
@@ -659,15 +680,34 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       double t2 = s2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
 
       auto timer_start = std::chrono::high_resolution_clock::now();
-      RowMatrixXd turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
       auto timer_stop = std::chrono::high_resolution_clock::now();
       auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
-      path_elongation_time += ((double)nanos)/1e9;
-      if (std::isinf(turns(0, 0))) {
-        reach = false;
-        validMotion = false;
-        // std::cout << "failed on initial backward elongation check" << std::endl;
-        return turns;
+
+      RowMatrixXd turns(1, 2);
+      bool compute_elongated_path = false; // t2 - t1 <= maxDuration;
+      if (compute_elongated_path) {
+        timer_start = std::chrono::high_resolution_clock::now();
+        turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
+        timer_stop = std::chrono::high_resolution_clock::now();
+        nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+        path_elongation_time += ((double)nanos)/1e9;
+        if (std::isinf(turns(0, 0))) {
+          reach = false;
+          validMotion = false;
+          // std::cout << "failed on initial backward elongation check" << std::endl;
+          return turns;
+        }
+      } else {
+        double duration = rng_.uniformReal(0, maxDuration);
+        turns(0, 1) = duration*vmax;
+        double dir_tmp = rng_.uniformReal(0, 3);
+        if (dir_tmp < 1) {
+          turns(0, 0) = -1;
+        } else if (dir_tmp < 2) {
+          turns(0, 0) = 0;
+        } else {
+          turns(0, 0) = 1;
+        }
       }
 
       double ctheta2 = cos(theta2);
@@ -828,7 +868,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
         stheta = next_stheta;
       }
 
-      reach = true;
+      reach = compute_elongated_path;
       stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setX(next_x);
       stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setY(next_y);
       stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(next_theta);
@@ -1164,4 +1204,5 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
     // Need segments to persist in memory while the tree is in use
     std::list<Segment> segments;
     Tree aabb_tree;
+    mutable ompl::RNG rng_;
 };
