@@ -7,7 +7,12 @@ template <typename _T>
 class NearestNeighborsSqrtApproxReturnDistance : public ompl::NearestNeighborsSqrtApprox<_T>
 {
 public:
-   _T nearest_and_distance(const _T &data, double &dmin) const
+   virtual void setApproxDistanceFunction(const typename ompl::NearestNeighborsSqrtApprox<_T>::DistanceFunction &approx_distFun)
+   {
+       approx_distFun_ = approx_distFun;
+   }
+
+   _T nearest_and_distance(const _T &data, double &dmin, bool use_approx_dist) const
    {
        const std::size_t n = ompl::NearestNeighborsLinear<_T>::data_.size();
        std::size_t pos = n;
@@ -19,7 +24,12 @@ public:
            {
                std::size_t i = (j * checks_ + offset_) % n;
 
-               double distance = ompl::NearestNeighbors<_T>::distFun_(ompl::NearestNeighborsLinear<_T>::data_[i], data);
+               double distance;
+               if (use_approx_dist) {
+                 distance = approx_distFun_(ompl::NearestNeighborsLinear<_T>::data_[i], data);
+               } else {
+                 distance = ompl::NearestNeighbors<_T>::distFun_(ompl::NearestNeighborsLinear<_T>::data_[i], data);
+               }
                if (pos == n || dmin > distance)
                {
                    pos = i;
@@ -56,4 +66,6 @@ protected:
   using ompl::NearestNeighborsSqrtApprox<_T>::checks_;
   using ompl::NearestNeighborsSqrtApprox<_T>::offset_;
   using ompl::NearestNeighborsLinear<_T>::data_;
+
+  typename ompl::NearestNeighborsSqrtApprox<_T>::DistanceFunction approx_distFun_;
 };

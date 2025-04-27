@@ -149,7 +149,7 @@ class CustomRRTConnect : public og::RRTConnect {
               // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
               // Anoop
               double newDist;
-              std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist);
+              std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
               // std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
 
               if (newDist < distanceBetweenTrees_)
@@ -306,7 +306,7 @@ class CustomRRTConnect : public og::RRTConnect {
       /* find closest state in the tree */
       // auto timer_start2 = std::chrono::high_resolution_clock::now();
       double dist;
-      Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist);
+      Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
       // Motion *nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
       if (std::isinf(dist)) {
         return TRAPPED;
@@ -523,8 +523,12 @@ class CustomRRTConnect : public og::RRTConnect {
       tStart_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
       tGoal_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(b, a); });
 
+      /*
       std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tStart_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(a, b); });
       std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tGoal_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(b, a); });
+      */
+      std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tStart_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(a, b); });
+      std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tGoal_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(b, a); });
     }
 
   protected:
