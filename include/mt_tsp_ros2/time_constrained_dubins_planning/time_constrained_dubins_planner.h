@@ -48,6 +48,7 @@ class TimeConstrainedDubinsPlanner {
       // planner = std::make_shared<CustomRRT>(si);
       ss->setPlanner(planner);
 
+      nearest_neighbor_time = 0.;
       path_elongation_time = 0.;
       path_elongation_check_time = 0.;
       collision_check_time = 0.;
@@ -110,6 +111,7 @@ class TimeConstrainedDubinsPlanner {
       ob::PlannerStatus status = ss->solve(ob::plannerOrTerminationCondition(ob::timedPlannerTerminationCondition(time_limit), ob::IterationTerminationCondition(max_iter)));
       // std::cout << "Solved" << std::endl;
 
+      nearest_neighbor_time = std::static_pointer_cast<CustomRRTConnect>(planner)->get_nearest_neighbor_time();
       path_elongation_time = motion_validator->get_path_elongation_time();
       path_elongation_check_time = space->get_path_elongation_check_time();
       collision_check_time = motion_validator->get_collision_check_time();
@@ -140,6 +142,10 @@ class TimeConstrainedDubinsPlanner {
         // std::cout << "returning inf" << std::endl;
         return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 4);
       }
+    }
+
+    double get_nearest_neighbor_time() const {
+      return nearest_neighbor_time;
     }
 
     double get_path_elongation_time() const {
@@ -243,6 +249,7 @@ class TimeConstrainedDubinsPlanner {
     std::shared_ptr<og::SimpleSetup> ss;
     std::shared_ptr<ob::Planner> planner;
 
+    double nearest_neighbor_time;
     double path_elongation_time;
     double path_elongation_check_time;
     double collision_check_time;

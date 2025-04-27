@@ -77,6 +77,7 @@ class CustomRRTConnect : public og::RRTConnect {
       ob::State *rstate = rmotion->state;
       bool solved = false;
 
+      nearest_neighbor_time = 0.;
       sampling_time = 0.;
       add_to_tree_time = 0.;
       motion_check_time = 0.;
@@ -291,6 +292,10 @@ class CustomRRTConnect : public og::RRTConnect {
       return sampling_time;
     }
 
+    double get_nearest_neighbor_time() {
+      return nearest_neighbor_time;
+    }
+
     double get_add_to_tree_time() {
       return add_to_tree_time;
     }
@@ -306,16 +311,16 @@ class CustomRRTConnect : public og::RRTConnect {
 
     GrowState growTree(TreeData &tree, TreeGrowingInfo &tgi, Motion *rmotion, bool try_connect = false) {
       /* find closest state in the tree */
-      // auto timer_start2 = std::chrono::high_resolution_clock::now();
+      auto timer_start2 = std::chrono::high_resolution_clock::now();
       double dist;
       Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
       // Motion *nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
       if (std::isinf(dist)) {
         return TRAPPED;
       }
-      // auto timer_stop2 = std::chrono::high_resolution_clock::now();
-      // auto nanos2 = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop2 - timer_start2).count();
-      // nn_time += ((double)nanos2)/1e9;
+      auto timer_stop2 = std::chrono::high_resolution_clock::now();
+      auto nanos2 = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop2 - timer_start2).count();
+      nn_time += ((double)nanos2)/1e9;
 
       /*
       if (grow_pairs.find(std::make_pair(nmotion, rmotion)) != grow_pairs.end()) {
@@ -549,6 +554,7 @@ class CustomRRTConnect : public og::RRTConnect {
          RowMatrixXd turns;
      };
 
+     double nearest_neighbor_time;
      double sampling_time;
      double add_to_tree_time;
      double grow_time;
