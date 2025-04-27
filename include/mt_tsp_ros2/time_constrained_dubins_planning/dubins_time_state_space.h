@@ -100,6 +100,29 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       return t2 - t1;
     }
 
+    double approx_distance(const ob::State *state1, const ob::State *state2) const {
+      double x1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta1 = state1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t1 = state1->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      double x2 = state2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
+      double y2 = state2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();
+      double theta2 = state2->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+      double t2 = state2->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position;
+
+      auto timer_start = std::chrono::high_resolution_clock::now();
+      double delta_x = x2 - x1;
+      double delta_y = y2 - y1;
+      double delta_theta = angdiff(theta1, theta2);
+      double travel_time_lb = std::max(sqrt(delta_x*delta_x + delta_y*delta_y)/vmax, std::abs(delta_theta)/wmax);
+      double delta_t = t2 - t1;
+      if (delta_t < travel_time_lb) {
+        return std::numeric_limits<double>::infinity();
+      }
+      return t2 - t1;
+    }
+
     void interpolate(const ob::State *s1, const ob::State *s2, double fraction, ob::State *interp_state) const override {
       double x1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getX();
       double y1 = s1->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->getY();

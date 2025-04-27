@@ -4,6 +4,7 @@
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator_rects.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/NearestNeighborsSqrtApproxReturnDistance.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/NearestNeighborsSortByTime.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_time_state_space.h"
 #include <ompl/tools/config/SelfConfig.h>
 #include <unordered_set>
 #include <chrono>
@@ -149,7 +150,7 @@ class CustomRRTConnect : public og::RRTConnect {
               // Anoop
               double newDist;
               // std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist);
-              std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist);
+              std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
 
               if (newDist < distanceBetweenTrees_)
               {
@@ -306,7 +307,7 @@ class CustomRRTConnect : public og::RRTConnect {
       // auto timer_start2 = std::chrono::high_resolution_clock::now();
       double dist;
       // Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist);
-      Motion *nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist);
+      Motion *nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
       if (std::isinf(dist)) {
         return TRAPPED;
       }
@@ -486,6 +487,11 @@ class CustomRRTConnect : public og::RRTConnect {
       return reach ? REACHED : ADVANCED;
     }
 
+    double approx_distanceFunction(const Motion *a, const Motion *b) const
+    {
+        return std::static_pointer_cast<DubinsTimeStateSpace>(si_->getStateSpace())->approx_distance(a->state, b->state);
+    }
+
     void setup() override {
       // ompl::base::RRTConnect::setup();
       ompl::base::Planner::setup();
@@ -516,6 +522,9 @@ class CustomRRTConnect : public og::RRTConnect {
           tGoal_.reset(new NearestNeighborsSortByTime<Motion*>(false));
       tStart_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
       tGoal_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(b, a); });
+
+      std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tStart_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(a, b); });
+      std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tGoal_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(b, a); });
     }
 
   protected:

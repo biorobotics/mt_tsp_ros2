@@ -26,7 +26,12 @@ public:
        return sorted_data_.size();
    }
 
-   _T nearest_and_distance(const _T &data, double &dmin) const
+   virtual void setApproxDistanceFunction(const typename ompl::NearestNeighborsSqrtApprox<_T>::DistanceFunction &approx_distFun)
+   {
+       approx_distFun_ = approx_distFun;
+   }
+
+   _T nearest_and_distance(const _T &data, double &dmin, bool use_approx_dist) const
    {
        const std::size_t n = sorted_data_.size();
 
@@ -41,7 +46,12 @@ public:
                  ++it;
                }
 
-               double distance = ompl::NearestNeighbors<_T>::distFun_(*it, data);
+               double distance;
+               if (use_approx_dist) {
+                 distance = approx_distFun_(*it, data);
+               } else {
+                 distance = ompl::NearestNeighbors<_T>::distFun_(*it, data);
+               }
                if (std::isfinite(distance)) {
                 dmin = distance;
                 return *it;
@@ -96,4 +106,6 @@ protected:
   };
 
   std::set<_T, cmp> sorted_data_;
+
+  typename ompl::NearestNeighborsSqrtApprox<_T>::DistanceFunction approx_distFun_;
 };
