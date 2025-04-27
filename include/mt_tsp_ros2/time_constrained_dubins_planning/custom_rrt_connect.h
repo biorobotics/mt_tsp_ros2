@@ -3,7 +3,7 @@
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator_rects.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/NearestNeighborsSqrtApproxReturnDistance.h"
-#include "mt_tsp_ros2/time_constrained_dubins_planning/NearestNeighborsSortByTime.h"
+//#include "mt_tsp_ros2/time_constrained_dubins_planning/NearestNeighborsSortByTime.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_time_state_space.h"
 #include <ompl/tools/config/SelfConfig.h>
 #include <unordered_set>
@@ -149,8 +149,8 @@ class CustomRRTConnect : public og::RRTConnect {
               // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
               // Anoop
               double newDist;
-              // std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist);
-              std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
+              std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist);
+              // std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
 
               if (newDist < distanceBetweenTrees_)
               {
@@ -306,8 +306,8 @@ class CustomRRTConnect : public og::RRTConnect {
       /* find closest state in the tree */
       // auto timer_start2 = std::chrono::high_resolution_clock::now();
       double dist;
-      // Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist);
-      Motion *nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
+      Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist);
+      // Motion *nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
       if (std::isinf(dist)) {
         return TRAPPED;
       }
@@ -510,16 +510,16 @@ class CustomRRTConnect : public og::RRTConnect {
       if (!tGoal_)
           tGoal_.reset(new CustomNearestNeighborsSqrtApprox<Motion*>());
       */
-      /*
       if (!tStart_)
           tStart_.reset(new NearestNeighborsSqrtApproxReturnDistance<Motion*>());
       if (!tGoal_)
           tGoal_.reset(new NearestNeighborsSqrtApproxReturnDistance<Motion*>());
-      */
+      /*
       if (!tStart_)
           tStart_.reset(new NearestNeighborsSortByTime<Motion*>(true));
       if (!tGoal_)
           tGoal_.reset(new NearestNeighborsSortByTime<Motion*>(false));
+      */
       tStart_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
       tGoal_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(b, a); });
 
