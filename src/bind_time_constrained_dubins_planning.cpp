@@ -3,6 +3,7 @@
 #include <pybind11/stl_bind.h>
 #include "mt_tsp_ros2/time_constrained_dubins_planning/time_constrained_dubins_planner.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_planner.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/time_constrained_dubins_planner_forward_prop.h"
 
 namespace py = pybind11;
 
@@ -33,4 +34,12 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
     ;
 
   py::bind_vector<std::vector<RowMatrixXd>>(m, "VectorOfMatrices");
+
+  py::class_<TimeConstrainedDubinsPlannerForwardProp>(m, "TimeConstrainedDubinsPlannerForwardProp")
+    .def(py::init<double, double, RowMatrixXbRef_const, RowMatrixXdRef_const, Vector2dRef_const, Vector2dRef_const>())
+    .def("plan", &TimeConstrainedDubinsPlannerForwardProp::plan)
+    .def("get_path_elongation_time", &TimeConstrainedDubinsPlannerForwardProp::get_path_elongation_time)
+    .def("get_path_elongation_check_time", &TimeConstrainedDubinsPlannerForwardProp::get_path_elongation_check_time)
+    .def("get_collision_check_time", &TimeConstrainedDubinsPlannerForwardProp::get_collision_check_time)
+    ;
 }

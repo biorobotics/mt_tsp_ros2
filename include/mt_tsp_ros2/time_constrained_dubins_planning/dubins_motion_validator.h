@@ -447,6 +447,10 @@ class DubinsMotionValidator : public ob::MotionValidator {
       path_elongation_time = 0.;
       collision_check_time = 0.;
     }
+    
+    double get_vmax() const {
+      return vmax;
+    }
 
   protected:
     double vmax;

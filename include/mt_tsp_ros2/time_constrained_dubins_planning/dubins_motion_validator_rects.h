@@ -282,6 +282,10 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       aabb_tree = Tree(segments.begin(), segments.end()); 
     }
 
+    const Tree &get_aabb_tree() {
+      return aabb_tree;
+    }
+
     bool collision_free(double x, double y, double theta, double turn_dir, double turn_dist, double next_x, double next_y) const {
       /*
       // Line segment
