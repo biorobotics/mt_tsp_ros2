@@ -77,7 +77,6 @@ class CustomRRTConnect : public og::RRTConnect {
       ob::State *rstate = rmotion->state;
       bool solved = false;
 
-      nearest_neighbor_time = 0.;
       sampling_time = 0.;
       add_to_tree_time = 0.;
       motion_check_time = 0.;
@@ -293,7 +292,7 @@ class CustomRRTConnect : public og::RRTConnect {
     }
 
     double get_nearest_neighbor_time() {
-      return nearest_neighbor_time;
+      return nn_time;
     }
 
     double get_add_to_tree_time() {
@@ -314,6 +313,7 @@ class CustomRRTConnect : public og::RRTConnect {
       auto timer_start2 = std::chrono::high_resolution_clock::now();
       double dist;
       Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
+      // Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist, false);
       // Motion *nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
       if (std::isinf(dist)) {
         return TRAPPED;
@@ -554,7 +554,6 @@ class CustomRRTConnect : public og::RRTConnect {
          RowMatrixXd turns;
      };
 
-     double nearest_neighbor_time;
      double sampling_time;
      double add_to_tree_time;
      double grow_time;
