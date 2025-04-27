@@ -148,6 +148,7 @@ class CustomRRTConnect : public og::RRTConnect {
               /* update distance between trees */
               // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
               // Anoop
+              /*
               double newDist;
               std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
               // std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
@@ -157,6 +158,7 @@ class CustomRRTConnect : public og::RRTConnect {
                   distanceBetweenTrees_ = newDist;
                   // OMPL_INFORM("Estimated distance to go: %f", distanceBetweenTrees_);
               }
+              */
 
               Motion *startMotion = tgi.start ? tgi.xmotion : addedMotion;
               Motion *goalMotion = tgi.start ? addedMotion : tgi.xmotion;
