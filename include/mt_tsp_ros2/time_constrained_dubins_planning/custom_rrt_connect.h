@@ -145,6 +145,21 @@ class CustomRRTConnect : public og::RRTConnect {
               }
               */
 
+              /*
+              double newDist;
+              if (nn_sort_by_time) {
+                std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
+              } else {
+                std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
+              }
+
+              if (newDist < distanceBetweenTrees_)
+              {
+                  distanceBetweenTrees_ = newDist;
+                  // OMPL_INFORM("Estimated distance to go: %f", distanceBetweenTrees_);
+              }
+              */
+
               Motion *startMotion = tgi.start ? tgi.xmotion : addedMotion;
               Motion *goalMotion = tgi.start ? addedMotion : tgi.xmotion;
 
