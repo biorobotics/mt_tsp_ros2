@@ -3,7 +3,7 @@
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_motion_validator_rects.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/NearestNeighborsSqrtApproxReturnDistance.h"
-//#include "mt_tsp_ros2/time_constrained_dubins_planning/NearestNeighborsSortByTime.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/NearestNeighborsSortByTime.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_time_state_space.h"
 #include <ompl/tools/config/SelfConfig.h>
 #include <unordered_set>
@@ -23,7 +23,7 @@ class DubinsSegmentChain : public og::PathGeometric {
 class CustomRRTConnect : public og::RRTConnect {
   public:
     /** \brief Constructor */
-    CustomRRTConnect(const ob::SpaceInformationPtr &si, bool addIntermediateStates = false) : og::RRTConnect(si, addIntermediateStates) {
+    CustomRRTConnect(const ob::SpaceInformationPtr &si, bool nn_sort_by_time, bool use_approx_dist, bool addIntermediateStates = false) : og::RRTConnect(si, addIntermediateStates), nn_sort_by_time(nn_sort_by_time), use_approx_dist(use_approx_dist) {
       rng_ = ompl::RNG(3);
     }
 
@@ -142,21 +142,6 @@ class CustomRRTConnect : public og::RRTConnect {
               /*
               while (gsc == ADVANCED) {
                   gsc = growTree(otherTree, tgi, rmotion);
-              }
-              */
-
-              /* update distance between trees */
-              // const double newDist = tree->getDistanceFunction()(addedMotion, otherTree->nearest(addedMotion));
-              // Anoop
-              /*
-              double newDist;
-              std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
-              // std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(otherTree)->nearest_and_distance(addedMotion, newDist, false);
-
-              if (newDist < distanceBetweenTrees_)
-              {
-                  distanceBetweenTrees_ = newDist;
-                  // OMPL_INFORM("Estimated distance to go: %f", distanceBetweenTrees_);
               }
               */
 
@@ -316,9 +301,13 @@ class CustomRRTConnect : public og::RRTConnect {
       /* find closest state in the tree */
       auto timer_start2 = std::chrono::high_resolution_clock::now();
       double dist;
-      Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
-      // Motion *nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist, false);
-      // Motion *nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, !try_connect);
+      Motion *nmotion;
+      if (nn_sort_by_time) {
+        nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, use_approx_dist && !try_connect);
+      } else {
+        nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist, use_approx_dist && !try_connect);
+      }
+
       if (std::isinf(dist)) {
         return TRAPPED;
       }
@@ -521,25 +510,27 @@ class CustomRRTConnect : public og::RRTConnect {
       if (!tGoal_)
           tGoal_.reset(new CustomNearestNeighborsSqrtApprox<Motion*>());
       */
-      if (!tStart_)
-          tStart_.reset(new NearestNeighborsSqrtApproxReturnDistance<Motion*>());
-      if (!tGoal_)
-          tGoal_.reset(new NearestNeighborsSqrtApproxReturnDistance<Motion*>());
-      /*
-      if (!tStart_)
-          tStart_.reset(new NearestNeighborsSortByTime<Motion*>(true));
-      if (!tGoal_)
-          tGoal_.reset(new NearestNeighborsSortByTime<Motion*>(false));
-      */
+      if (nn_sort_by_time) {
+        if (!tStart_)
+            tStart_.reset(new NearestNeighborsSortByTime<Motion*>(true));
+        if (!tGoal_)
+            tGoal_.reset(new NearestNeighborsSortByTime<Motion*>(false));
+      } else {
+        if (!tStart_)
+            tStart_.reset(new NearestNeighborsSqrtApproxReturnDistance<Motion*>());
+        if (!tGoal_)
+            tGoal_.reset(new NearestNeighborsSqrtApproxReturnDistance<Motion*>());
+      }
       tStart_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
       tGoal_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(b, a); });
 
-      /*
-      std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tStart_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(a, b); });
-      std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tGoal_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(b, a); });
-      */
-      std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tStart_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(a, b); });
-      std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tGoal_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(b, a); });
+      if (nn_sort_by_time) {
+        std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tStart_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(a, b); });
+        std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tGoal_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(b, a); });
+      } else {
+        std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tStart_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(a, b); });
+        std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tGoal_)->setApproxDistanceFunction([this](const Motion *a, const Motion *b) { return approx_distanceFunction(b, a); });
+      }
     }
 
   protected:
@@ -563,4 +554,7 @@ class CustomRRTConnect : public og::RRTConnect {
      double grow_time;
      double motion_check_time;
      double nn_time;
+
+     bool nn_sort_by_time;
+     bool use_approx_dist;
 };
