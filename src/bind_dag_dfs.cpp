@@ -10,6 +10,7 @@ PYBIND11_MAKE_OPAQUE(std::vector<py::array_t<long>>)
 
 PYBIND11_MODULE(dag_dfs, m) {
   m.def("dag_dfs", &dag_dfs);
+  m.def("dag_dfs_unordered_set", &dag_dfs_unordered_set);
   py::bind_vector<std::vector<py::array_t<long>>>(m, "VectorOfLongArrays");
 
   py::class_<LifelongDAGDFSPlanner>(m, "LifelongDAGDFSPlanner")
