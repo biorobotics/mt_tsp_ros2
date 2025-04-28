@@ -223,10 +223,10 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
 struct DFSNodeUnorderedSet { 
   DFSNodeUnorderedSet(std::shared_ptr<DFSNodeUnorderedSet> parent, 
                       int final_pt_idx,
-                      int final_target_idx,
-                      int num_targets = 0) : parent(parent), 
-                                             final_pt_idx(final_pt_idx) {
+                      int final_target_idx) : parent(parent), 
+                                              final_pt_idx(final_pt_idx) {
     if (parent != nullptr) {
+      visited_targets = parent->visited_targets;
       visited_targets.insert(final_target_idx);
     }
     std::vector<int> sorted_visited_targets(visited_targets.begin(), visited_targets.end());
