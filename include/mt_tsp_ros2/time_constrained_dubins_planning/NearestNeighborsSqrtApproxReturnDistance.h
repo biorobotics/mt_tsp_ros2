@@ -48,7 +48,13 @@ public:
        dmin = 0.0;
        for (std::size_t i = 0; i < sz; ++i)
        {
-           double distance = ompl::NearestNeighbors<_T>::distFun_(data_[i], data);
+           double distance;
+           if (use_approx_dist) {
+             distance = approx_distFun_(ompl::NearestNeighborsLinear<_T>::data_[i], data);
+           } else {
+             distance = ompl::NearestNeighbors<_T>::distFun_(data_[i], data);
+           }
+
            if (pos == sz || dmin > distance)
            {
                pos = i;
