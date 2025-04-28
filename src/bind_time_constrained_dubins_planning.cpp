@@ -12,7 +12,7 @@ PYBIND11_MAKE_OPAQUE(std::vector<RowMatrixXd>)
 PYBIND11_MODULE(time_constrained_dubins_planning, m) {
   py::class_<TimeConstrainedDubinsPlanner>(m, "TimeConstrainedDubinsPlanner")
     .def(py::init<double, double, RowMatrixXbRef_const, Vector2dRef_const, Vector2dRef_const>())
-    .def(py::init<double, double, RowMatrixXbRef_const, RowMatrixXdRef_const, Vector2dRef_const, Vector2dRef_const>())
+    .def(py::init<double, double, RowMatrixXbRef_const, RowMatrixXdRef_const, Vector2dRef_const, Vector2dRef_const, bool>())
     .def("plan", &TimeConstrainedDubinsPlanner::plan)
     .def("is_state_valid", &TimeConstrainedDubinsPlanner::is_state_valid)
     .def("sample_random_state", &TimeConstrainedDubinsPlanner::sample_random_state)
@@ -38,7 +38,7 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
   py::bind_vector<std::vector<RowMatrixXd>>(m, "VectorOfMatrices");
 
   py::class_<TimeConstrainedDubinsPlannerForwardProp>(m, "TimeConstrainedDubinsPlannerForwardProp")
-    .def(py::init<double, double, RowMatrixXbRef_const, RowMatrixXdRef_const, Vector2dRef_const, Vector2dRef_const>())
+    .def(py::init<double, double, RowMatrixXbRef_const, RowMatrixXdRef_const, Vector2dRef_const, Vector2dRef_const, bool>())
     .def("plan", &TimeConstrainedDubinsPlannerForwardProp::plan)
     .def("get_path_elongation_time", &TimeConstrainedDubinsPlannerForwardProp::get_path_elongation_time)
     .def("get_path_elongation_check_time", &TimeConstrainedDubinsPlannerForwardProp::get_path_elongation_check_time)

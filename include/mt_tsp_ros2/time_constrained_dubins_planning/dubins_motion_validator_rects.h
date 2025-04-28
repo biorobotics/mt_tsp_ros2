@@ -258,7 +258,7 @@ bool arc_intersects_rect(double xai, double yai, double thetaai, double turn_dir
 
 class DubinsMotionValidatorRects : public DubinsMotionValidator {
   public:
-    explicit DubinsMotionValidatorRects(const ob::SpaceInformationPtr si, double vmax, double rho, RowMatrixXdRef_const &rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub, const Ref<const VectorXd> &start, const Ref<const VectorXd> &goal) : DubinsMotionValidator(si, vmax, rho), rects(rects), map_lb(map_lb), map_ub(map_ub), start(start), goal(goal) {
+    explicit DubinsMotionValidatorRects(const ob::SpaceInformationPtr si, double vmax, double rho, RowMatrixXdRef_const &rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub, const Ref<const VectorXd> &start, const Ref<const VectorXd> &goal, bool monte_carlo_prop) : DubinsMotionValidator(si, vmax, rho), rects(rects), map_lb(map_lb), map_ub(map_ub), start(start), goal(goal), monte_carlo_prop(monte_carlo_prop) {
       for (int row = 0; row < rects.rows(); ++row) {
         Point point1(rects(row, 0), rects(row, 1)); // xlow, ylow
         Point point2(rects(row, 0), rects(row, 3)); // xlow, yhigh
@@ -442,7 +442,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       auto timer_stop = std::chrono::high_resolution_clock::now();
       auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
 
-      bool compute_elongated_path = false; // t2 - t1 <= maxDuration;
+      bool compute_elongated_path = !monte_carlo_prop; // false; // t2 - t1 <= maxDuration;
       RowMatrixXd turns(1, 2);
       if (compute_elongated_path) {
         timer_start = std::chrono::high_resolution_clock::now();
@@ -684,7 +684,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
 
       RowMatrixXd turns(1, 2);
-      bool compute_elongated_path = false; // t2 - t1 <= maxDuration;
+      bool compute_elongated_path = !monte_carlo_prop; // false; // t2 - t1 <= maxDuration;
       if (compute_elongated_path) {
         timer_start = std::chrono::high_resolution_clock::now();
         turns = elongated_dubins_path(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho, false);
@@ -1194,12 +1194,17 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
       collision_check_time += ((double)nanos)/1e9;
     }
 
+    void set_monte_carlo_prop(bool monte_carlo_prop) {
+      this->monte_carlo_prop = monte_carlo_prop;
+    }
+
   protected:
     RowMatrixXd rects;
     Vector2d map_lb;
     Vector2d map_ub;
     VectorXd start;
     VectorXd goal;
+    bool monte_carlo_prop;
 
     // Need segments to persist in memory while the tree is in use
     std::list<Segment> segments;

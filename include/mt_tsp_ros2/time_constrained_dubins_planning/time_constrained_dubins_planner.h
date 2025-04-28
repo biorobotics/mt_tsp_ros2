@@ -55,7 +55,7 @@ class TimeConstrainedDubinsPlanner {
     }
 
     // My occupancy grid to rectangle code is in python, otherwise I wouldn't have a separate constructor here
-    TimeConstrainedDubinsPlanner(double vmax, double rho, RowMatrixXbRef_const occupancy, RowMatrixXdRef_const rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub) : vmax(vmax), rho(rho), rects(rects), do_rects(true), map_lb(map_lb), map_ub(map_ub) {
+    TimeConstrainedDubinsPlanner(double vmax, double rho, RowMatrixXbRef_const occupancy, RowMatrixXdRef_const rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub, bool monte_carlo_prop) : vmax(vmax), rho(rho), rects(rects), do_rects(true), map_lb(map_lb), map_ub(map_ub) {
       std::shared_ptr<ob::SE2StateSpace> cspace = std::make_shared<ob::SE2StateSpace>();
       ob::RealVectorBounds bounds(2);
       bounds.setLow(0, map_lb(0));
@@ -67,7 +67,7 @@ class TimeConstrainedDubinsPlanner {
 
       si = std::make_shared<ob::SpaceInformation>(space);
 
-      motion_validator = std::make_shared<DubinsMotionValidatorRects>(si, vmax, rho, rects, map_lb, map_ub, VectorXd::Zero(4), VectorXd::Zero(4));
+      motion_validator = std::make_shared<DubinsMotionValidatorRects>(si, vmax, rho, rects, map_lb, map_ub, VectorXd::Zero(4), VectorXd::Zero(4), monte_carlo_prop);
       si->setMotionValidator(motion_validator);
 
       ss = std::make_shared<og::SimpleSetup>(si);
