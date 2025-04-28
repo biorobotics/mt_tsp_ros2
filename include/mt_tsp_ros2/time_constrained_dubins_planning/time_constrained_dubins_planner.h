@@ -80,6 +80,14 @@ class TimeConstrainedDubinsPlanner {
       collision_check_time = 0.;
     }
 
+    int get_num_discarded_samples() {
+      return motion_validator->get_num_discarded_samples();
+    }
+
+    int get_num_samples() {
+      return std::static_pointer_cast<CustomRRTConnect>(planner)->get_num_samples();
+    }
+
     RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter, std::vector<RowMatrixXd> &turns_chain) {
       // I'm avoiding reconstructing the motion validator for now so we don't have to reconstruct the AABB tree
       /*
@@ -91,6 +99,7 @@ class TimeConstrainedDubinsPlanner {
 
       space->reset_timing_info();
       motion_validator->reset_timing_info();
+      motion_validator->reset_num_discarded_samples();
 
       ompl::msg::setLogLevel(ompl::msg::LogLevel::LOG_NONE);
       planner = std::make_shared<CustomRRTConnect>(si, nn_sort_by_time, use_approx_dist);

@@ -78,6 +78,7 @@ class CustomRRTConnect : public og::RRTConnect {
       bool solved = false;
 
       sampling_time = 0.;
+      num_samples = 0;
       add_to_tree_time = 0.;
       motion_check_time = 0.;
       nn_time = 0.;
@@ -114,6 +115,7 @@ class CustomRRTConnect : public og::RRTConnect {
           auto timer_stop = std::chrono::high_resolution_clock::now();
           auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
           sampling_time += ((double)nanos)/1e9;
+          ++num_samples;
 
           GrowState gs = growTree(tree, tgi, rmotion);
 
@@ -289,6 +291,10 @@ class CustomRRTConnect : public og::RRTConnect {
 
     double get_sampling_time() {
       return sampling_time;
+    }
+
+    int get_num_samples() {
+      return num_samples;
     }
 
     double get_nearest_neighbor_time() {
@@ -565,6 +571,7 @@ class CustomRRTConnect : public og::RRTConnect {
      };
 
      double sampling_time;
+     int num_samples;
      double add_to_tree_time;
      double grow_time;
      double motion_check_time;

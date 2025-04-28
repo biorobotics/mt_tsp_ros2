@@ -454,6 +454,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
           reach = false;
           validMotion = false;
           // std::cout << "failed on initial forward elongation check" << std::endl;
+          ++num_discarded_samples;
           return turns;
         }
       } else {
@@ -695,6 +696,7 @@ class DubinsMotionValidatorRects : public DubinsMotionValidator {
           reach = false;
           validMotion = false;
           // std::cout << "failed on initial backward elongation check" << std::endl;
+          ++num_discarded_samples;
           return turns;
         }
       } else {

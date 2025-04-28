@@ -11,6 +11,8 @@ class DubinsMotionValidator : public ob::MotionValidator {
     explicit DubinsMotionValidator(const ob::SpaceInformationPtr si, double vmax, double rho) : ob::MotionValidator(si), vmax(vmax), rho(rho) {
       path_elongation_time = 0.;
       collision_check_time = 0.;
+
+      num_discarded_samples = 0;
     }
 
     virtual RowMatrixXd checkMotionForward(const ob::State *s1, const ob::State *s2, double maxDuration, ob::State *stopState, bool &reach, bool &validMotion, int num_checks = 1000) const {
@@ -36,6 +38,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
         stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(theta1);
         stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = t1;
         validMotion = false;
+        ++num_discarded_samples;
         return turns;
       }
 
@@ -192,6 +195,7 @@ class DubinsMotionValidator : public ob::MotionValidator {
         stopState->as<ob::CompoundState>()->as<ob::SE2StateSpace::StateType>(0)->setYaw(theta2);
         stopState->as<ob::CompoundState>()->as<ob::TimeStateSpace::StateType>(1)->position = t2;
         validMotion = false;
+        ++num_discarded_samples;
         return turns;
       }
 
@@ -452,9 +456,18 @@ class DubinsMotionValidator : public ob::MotionValidator {
       return vmax;
     }
 
+    int get_num_discarded_samples() {
+      return num_discarded_samples;
+    }
+
+    void reset_num_discarded_samples() {
+      num_discarded_samples = 0;
+    }
+
   protected:
     double vmax;
     double rho;
     mutable double path_elongation_time;
     mutable double collision_check_time;
+    mutable int num_discarded_samples;
 };

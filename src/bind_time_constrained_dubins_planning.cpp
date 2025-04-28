@@ -25,6 +25,8 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
     .def("get_sampling_time", &TimeConstrainedDubinsPlanner::get_sampling_time)
     .def("get_add_to_tree_time", &TimeConstrainedDubinsPlanner::get_add_to_tree_time)
     .def("get_num_tree_nodes", &TimeConstrainedDubinsPlanner::get_num_tree_nodes)
+    .def("get_num_discarded_samples", &TimeConstrainedDubinsPlanner::get_num_discarded_samples)
+    .def("get_num_samples", &TimeConstrainedDubinsPlanner::get_num_samples)
     ;
 
   py::class_<NoTimeDubinsPlanner>(m, "NoTimeDubinsPlanner")
