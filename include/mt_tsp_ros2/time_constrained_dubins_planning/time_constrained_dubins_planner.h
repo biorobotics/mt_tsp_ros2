@@ -144,6 +144,10 @@ class TimeConstrainedDubinsPlanner {
       }
     }
 
+    double get_num_tree_nodes() const {
+      return std::static_pointer_cast<CustomRRTConnect>(planner)->get_num_tree_nodes();
+    }
+
     double get_nearest_neighbor_time() const {
       return nearest_neighbor_time;
     }

@@ -295,6 +295,10 @@ class CustomRRTConnect : public og::RRTConnect {
       return nn_time;
     }
 
+    int get_num_tree_nodes() {
+      return tStart_->size() + tGoal_->size();
+    }
+
     double get_add_to_tree_time() {
       return add_to_tree_time;
     }
