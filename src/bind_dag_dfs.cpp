@@ -18,4 +18,10 @@ PYBIND11_MODULE(dag_dfs, m) {
     .def("plan", &LifelongDAGDFSPlanner::plan)
     .def("get_before_time", &LifelongDAGDFSPlanner::get_before_time)
     ;
+
+  py::class_<LifelongDAGDFSPlannerUnorderedSet>(m, "LifelongDAGDFSPlannerUnorderedSet")
+    .def(py::init<RowMatrixXdRef_const, VectorXlRef_const, const std::vector<py::array_t<long>> &, bool, bool, RowMatrixXdRef_const>())
+    .def("plan", &LifelongDAGDFSPlannerUnorderedSet::plan)
+    .def("get_before_time", &LifelongDAGDFSPlannerUnorderedSet::get_before_time)
+    ;
 }
