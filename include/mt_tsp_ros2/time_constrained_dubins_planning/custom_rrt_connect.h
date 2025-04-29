@@ -324,9 +324,11 @@ class CustomRRTConnect : public og::RRTConnect {
       double dist;
       Motion *nmotion;
       if (nn_sort_by_time) {
-        nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, use_approx_dist && !try_connect);
+        // nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, use_approx_dist && !try_connect);
+        nmotion = std::static_pointer_cast<NearestNeighborsSortByTime<Motion*>>(tree)->nearest_and_distance(rmotion, dist, use_approx_dist);
       } else {
-        nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist, use_approx_dist && !try_connect);
+        // nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist, use_approx_dist && !try_connect);
+        nmotion = std::static_pointer_cast<NearestNeighborsSqrtApproxReturnDistance<Motion*>>(tree)->nearest_and_distance(rmotion, dist, use_approx_dist);
       }
 
       if (std::isinf(dist)) {
