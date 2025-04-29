@@ -117,7 +117,13 @@ class TimeConstrainedDubinsPlanner {
       ss->setStartAndGoalStates(start_state, goal_state);
 
       // std::cout << "Solve" << std::endl;
-      ob::PlannerStatus status = ss->solve(ob::plannerOrTerminationCondition(ob::timedPlannerTerminationCondition(time_limit), ob::IterationTerminationCondition(max_iter)));
+      ob::PlannerStatus status;
+      // Just use a time limit
+      if (max_iter == -1) {
+         status = ss->solve(ob::timedPlannerTerminationCondition(time_limit));
+      } else {
+         status = ss->solve(ob::plannerOrTerminationCondition(ob::timedPlannerTerminationCondition(time_limit), ob::IterationTerminationCondition(max_iter)));
+      }
       // std::cout << "Solved" << std::endl;
 
       nearest_neighbor_time = std::static_pointer_cast<CustomRRTConnect>(planner)->get_nearest_neighbor_time();

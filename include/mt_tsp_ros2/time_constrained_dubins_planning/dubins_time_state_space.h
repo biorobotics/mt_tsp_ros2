@@ -84,8 +84,11 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       auto timer_start = std::chrono::high_resolution_clock::now();
       double delta_x = x2 - x1;
       double delta_y = y2 - y1;
+      /*
       double delta_theta = angdiff(theta1, theta2);
       double travel_time_lb = std::max(sqrt(delta_x*delta_x + delta_y*delta_y)/vmax, std::abs(delta_theta)/wmax);
+      */
+      double travel_time_lb = sqrt(delta_x*delta_x + delta_y*delta_y)/vmax;
       double delta_t = t2 - t1;
       if (delta_t < travel_time_lb || !check_elongation_possible(x1, y1, theta1, x2, y2, theta2, vmax*(t2 - t1), rho)) {
         auto timer_stop = std::chrono::high_resolution_clock::now();
@@ -114,8 +117,11 @@ class DubinsTimeStateSpace : public ob::CompoundStateSpace {
       auto timer_start = std::chrono::high_resolution_clock::now();
       double delta_x = x2 - x1;
       double delta_y = y2 - y1;
+      /*
       double delta_theta = angdiff(theta1, theta2);
       double travel_time_lb = std::max(sqrt(delta_x*delta_x + delta_y*delta_y)/vmax, std::abs(delta_theta)/wmax);
+      */
+      double travel_time_lb = sqrt(delta_x*delta_x + delta_y*delta_y)/vmax;
       double delta_t = t2 - t1;
       if (delta_t < travel_time_lb) {
         return std::numeric_limits<double>::infinity();
