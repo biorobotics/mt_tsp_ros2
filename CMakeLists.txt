@@ -230,6 +230,15 @@ install(TARGETS dag_dfs
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
+pybind11_add_module(memetic_dubins_ce_mt_tsp
+  src/bind_memetic_dubins_ce_mt_tsp.cpp
+)
+target_include_directories(memetic_dubins_ce_mt_tsp PRIVATE)
+target_link_libraries(memetic_dubins_ce_mt_tsp PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS memetic_dubins_ce_mt_tsp
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
