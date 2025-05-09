@@ -255,6 +255,9 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
             double t = 0;
             double next_t = 0;
             for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+              double delta_t = population[chromosome_idx](seq_idx, 2);
+              prev_t = t;
+              t += delta_t;
               if (seq_idx == gene_idx) {
                 if (seq_idx == 0) {
                   prev_pos = p0;
@@ -266,7 +269,7 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
                   prev_pos = prev_pos + prev_rel_pos;
                 }
 
-                int target_idx = population[chromosome_idx](seq_idx, 0);
+                target_idx = population[chromosome_idx](seq_idx, 0);
                 int theta = population[chromosome_idx](seq_idx, 1);
                 Vector2d rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
                 q_trj_per_target[target_idx].attr("__call__")(t, std::ref(pos));
@@ -276,6 +279,8 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
                 if (seq_idx != num_targets - 1) {
                   int next_target_idx = population[chromosome_idx](seq_idx + 1, 0);
                   int next_theta = population[chromosome_idx](seq_idx + 1, 1);
+                  int next_delta_t = population[chromosome_idx](seq_idx + 1, 2);
+                  next_t = t + next_delta_t;
                   Vector2d next_rel_pos = target_radii[next_target_idx]*Vector2d(cos(next_theta), sin(next_theta));
                   q_trj_per_target[next_target_idx].attr("__call__")(next_t, std::ref(next_pos));
                   next_pos = next_pos + next_rel_pos;
@@ -283,16 +288,21 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
                 }
                 break;
               }
-              double delta_t = population[chromosome_idx](seq_idx, 2);
-              prev_t = t;
-              t += delta_t;
             }
 
             // Do sampling-based local search
             int num_samples = 10;
             for (int sample_idx = 0; sample_idx < num_samples; ++sample_idx) {
               double new_theta = local_search_sampling_theta_distribution(rng);
-              double new_t = tw_per_target(target_idx, 0) + local_search_sampling_t_distribution(rng)*(tw_per_target(target_idx, 1) - tw_per_target(target_idx, 0));
+              double raw_t_sample = local_search_sampling_t_distribution(rng);
+              double t_min = std::max(tw_per_target(target_idx, 0), prev_t);
+              double t_max;
+              if (gene_idx == num_targets - 1) {
+                t_max = tw_per_target(target_idx, 1);
+              } else {
+                t_max = std::min(tw_per_target(target_idx, 1), next_t);
+              }
+              double new_t = t_min + raw_t_sample*(t_max - t_min);
 
               Vector2d new_rel_pos = target_radii[target_idx]*Vector2d(cos(new_theta), sin(new_theta));
               Vector2d new_pos;
@@ -311,9 +321,10 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
                 new_cost += dist2;
               }
               if (new_cost < cur_cost) {
-                cur_cost = new_cost;
+                population_costs[chromosome_idx] += new_cost - cur_cost;
                 population[chromosome_idx](gene_idx, 1) = new_theta;
                 population[chromosome_idx](gene_idx, 2) = new_t - prev_t;
+                cur_cost = new_cost;
               }
             }
           }
