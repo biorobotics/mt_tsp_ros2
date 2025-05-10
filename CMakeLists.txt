@@ -239,6 +239,14 @@ install(TARGETS memetic_dubins_ce_mt_tsp
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(cpp_spline
+  src/bind_cpp_spline.cpp
+)
+target_include_directories(cpp_spline PRIVATE)
+install(TARGETS cpp_spline
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -2,12 +2,11 @@
 #include <chrono>
 #include <omp.h>
 #include <Eigen/Dense>
-#include <pybind11/pybind11.h>
 #include <random>
 #include <set>
+#include "mt_tsp_ros2/cpp_spline.h"
 
 using namespace Eigen;
-namespace py = pybind11;
 
 typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
@@ -30,7 +29,7 @@ std::vector<size_t> sort_indexes(const std::vector<T> &v) {
   return idx;
 }
 
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<py::object> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, bool dubins) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, bool dubins) {
   int num_targets = tw_per_target.rows();
 
   bool repair_failed = false;
@@ -63,8 +62,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
       // Check if interception is feasible
       next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
-      q_trj_per_target[target_idx].attr("__call__")(next_t, std::ref(next_pos));
-      next_pos = next_pos + next_rel_pos;
+      next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
       double dist = (next_pos - pos).norm();
       if (dist <= vmax*delta_t) {
         // Travel is feasible, no need to repair
@@ -75,8 +73,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       }
 
       // Check if travel is feasible to next_rel_pos at end of time window
-      q_trj_per_target[target_idx].attr("__call__")(tw_per_target(target_idx, 1), std::ref(next_pos));
-      next_pos = next_pos + next_rel_pos;
+      next_pos = q_trj_per_target[target_idx](tw_per_target(target_idx, 1)) + next_rel_pos;
       dist = (next_pos - pos).norm();
       if (dist > vmax*delta_t) {
         // Travel is infeasible even to end of time window
@@ -92,8 +89,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       for (int bisection_iter = 0; bisection_iter < num_bisection_iter; ++bisection_iter) {
         double t_mid = 0.5*(t_low + t_high);
         delta_t = t_mid - t;
-        q_trj_per_target[target_idx].attr("__call__")(t_mid, std::ref(next_pos));
-        next_pos = next_pos + next_rel_pos;
+        next_pos = q_trj_per_target[target_idx](t_mid) + next_rel_pos;
         dist = (next_pos - pos).norm();
         if (dist > vmax*delta_t) {
           // Travel is infeasible
@@ -133,16 +129,24 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<py::object> &q_trj_per_target, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, int pop_size, double rho, double vmax, const Ref<const Vector2d> &p0, double theta0) {
+double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, int pop_size, double rho, double vmax, const Ref<const Vector2d> &p0, double theta0, int num_openmp_threads) {
   auto timer_start = std::chrono::high_resolution_clock::now();
+
+  omp_set_num_threads(num_openmp_threads);
+
+  // I'm doing this because I'm worried about the GIL
+  std::vector<CppSpline> q_trj_per_target;
+  for (auto q_trj : q_trj_per_target_python) {
+    q_trj_per_target.push_back(CppSpline(q_trj));
+  }
 
   bool dubins = rho != 0;
 
   int num_targets = q_trj_per_target.size();
 
-  std::vector<MatrixXd> population(pop_size);
-  std::vector<double> population_costs(pop_size);
-  Map<VectorXd>(population_costs.data(), pop_size) = initial_costs;
+  std::vector<MatrixXd> population1(pop_size);
+  std::vector<double> population_costs1(pop_size);
+  Map<VectorXd>(population_costs1.data(), pop_size) = initial_costs;
 
   std::mt19937 rng;
   std::uniform_int_distribution<int> parent_distribution(0, pop_size - 1);
@@ -172,10 +176,20 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
 
   // Initialize population
   for (int i = 0; i < pop_size; ++i) {
-    population[i] = initial_population.block(num_targets*i, 0, num_targets, gene_size);
+    population1[i] = initial_population.block(num_targets*i, 0, num_targets, gene_size);
   }
 
+  std::vector<MatrixXd> population2 = population1;
+  std::vector<double> population_costs2 = population_costs1;
+
   int gen_idx = 0;
+
+  std::vector<MatrixXd> *population = &population1;
+  std::vector<double> *population_costs = &population_costs1;
+
+  std::vector<MatrixXd> *updated_population = &population1;
+  std::vector<double> *updated_population_costs = &population_costs1;
+
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
     auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
@@ -183,6 +197,21 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
       break;
     }
 
+    if (gen_idx%2) {
+      population = &population2;
+      population_costs = &population_costs2;
+
+      updated_population = &population1;
+      updated_population_costs = &population_costs1;
+    } else {
+      population = &population1;
+      population_costs = &population_costs1;
+
+      updated_population = &population2;
+      updated_population_costs = &population_costs2;
+    }
+
+    #pragma omp parallel for
     for (int chromosome_idx = 0; chromosome_idx < pop_size; ++chromosome_idx) {
       int parent1_idx = chromosome_idx;
       int parent2_idx = parent_distribution(rng);
@@ -192,28 +221,28 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
       int parent1_counter = 0;
       int parent2_counter = 0;
 
-      // check_chromosome_feasible(population[chromosome_idx], tw_per_target);
+      // check_chromosome_feasible((*population)[chromosome_idx], tw_per_target);
 
       for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
         if (crossover_distribution(rng) == 0) {
-          while (inserted_targets((int)(population[parent1_idx](parent1_counter, 0)))) {
+          while (inserted_targets((int)((*population)[parent1_idx](parent1_counter, 0)))) {
             ++parent1_counter;
           }
           if (parent1_counter >= num_targets) {
             throw std::runtime_error("parent 1 out of bounds");
           }
-          int target_idx = population[parent1_idx](parent1_counter, 0);
-          Xnew.row(seq_idx) = population[parent1_idx].row(parent1_counter);
+          int target_idx = (*population)[parent1_idx](parent1_counter, 0);
+          Xnew.row(seq_idx) = (*population)[parent1_idx].row(parent1_counter);
           inserted_targets(target_idx) = true;
         } else {
-          while (inserted_targets((int)(population[parent2_idx](parent2_counter, 0)))) {
+          while (inserted_targets((int)((*population)[parent2_idx](parent2_counter, 0)))) {
             ++parent2_counter;
           }
           if (parent2_counter >= num_targets) {
             throw std::runtime_error("parent 2 out of bounds");
           }
-          int target_idx = population[parent2_idx](parent2_counter, 0);
-          Xnew.row(seq_idx) = population[parent2_idx].row(parent2_counter);
+          int target_idx = (*population)[parent2_idx](parent2_counter, 0);
+          Xnew.row(seq_idx) = (*population)[parent2_idx].row(parent2_counter);
           inserted_targets(target_idx) = true;
         }
       }
@@ -249,10 +278,10 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
         continue;
       }
 
-      if (cost < population_costs[chromosome_idx]) {
-        population[chromosome_idx] = Xnew;
-        population_costs[chromosome_idx] = cost;
-        // check_chromosome_feasible(population[chromosome_idx], tw_per_target);
+      if (cost < (*population_costs)[chromosome_idx]) {
+        (*updated_population)[chromosome_idx] = Xnew;
+        (*updated_population_costs)[chromosome_idx] = cost;
+        // check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target);
       }
 
       // TODO: transformation to reduce cost (only for Dubins)
@@ -260,13 +289,13 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
 
     /*
     for (int chromosome_idx = 0; chromosome_idx < pop_size; ++chromosome_idx) {
-      check_chromosome_feasible(population[chromosome_idx], tw_per_target);
+      check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target);
     }
     */
 
     ++gen_idx;
     if (gen_idx%Tlp == 0) {
-      std::vector<size_t> sort_idx = sort_indexes(population_costs);
+      std::vector<size_t> sort_idx = sort_indexes(*updated_population_costs);
       for (int j = 0; j < gen_idx/Tlp; ++j) {
         // Get individual from top 50% and run local search
         int chromosome_idx = sort_idx[local_search_elite_distribution(rng)];
@@ -285,16 +314,19 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
             double delta_t;
             double prev_t = 0.;
             for (int seq_idx = 0; seq_idx <= gene_idx; ++seq_idx) {
-              target_idx = population[chromosome_idx](seq_idx, 0);
-              theta = population[chromosome_idx](seq_idx, 1);
-              delta_t = population[chromosome_idx](seq_idx, 2);
+              target_idx = (*updated_population)[chromosome_idx](seq_idx, 0);
+              theta = (*updated_population)[chromosome_idx](seq_idx, 1);
+              delta_t = (*updated_population)[chromosome_idx](seq_idx, 2);
               prev_t = t;
               t += delta_t;
             }
-            // check_chromosome_feasible(population[chromosome_idx], tw_per_target);
+            // check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target);
 
             // Do sampling-based local search
             const int num_samples = 20; // From paper
+            std::vector<MatrixXd> local_modifications(num_samples);
+            std::vector<double> local_modification_costs(num_samples);
+            #pragma omp parallel for
             for (int sample_idx = 0; sample_idx < num_samples; ++sample_idx) {
               double new_theta = local_search_sampling_theta_distribution(rng);
               double raw_t_sample = local_search_sampling_t_distribution(rng);
@@ -302,31 +334,35 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
               double new_delta_t = new_t - prev_t;
 
               double new_cost;
-              MatrixXd new_chromosome = population[chromosome_idx];
-              new_chromosome(gene_idx, 1) = new_theta;
-              new_chromosome(gene_idx, 2) = new_delta_t;
+              local_modifications[sample_idx] = (*updated_population)[chromosome_idx];
+              local_modifications[sample_idx](gene_idx, 1) = new_theta;
+              local_modifications[sample_idx](gene_idx, 2) = new_delta_t;
 
-              bool repair_failed = repair_chromosome(new_chromosome, tw_per_target, target_radii, q_trj_per_target, p0, vmax, new_cost, dubins);
+              bool repair_failed = repair_chromosome(local_modifications[sample_idx], tw_per_target, target_radii, q_trj_per_target, p0, vmax, new_cost, dubins);
 
-              if (!(repair_failed || new_cost >= population_costs[chromosome_idx])) {
-                population[chromosome_idx] = new_chromosome;
-                population_costs[chromosome_idx] = new_cost;
-                theta = new_theta;
-                delta_t = new_delta_t;
-                t = new_t;
-
-                // check_chromosome_feasible(population[chromosome_idx], tw_per_target);
+              if (!(repair_failed || new_cost >= (*updated_population_costs)[chromosome_idx])) {
+                local_modification_costs[sample_idx] = new_cost;
+                // check_chromosome_feasible(local_modifications[sample_idx], tw_per_target);
+              } else {
+                local_modification_costs[sample_idx] = std::numeric_limits<double>::infinity();
               }
             } // Sampling-based local search iterations
+
+            auto it = std::min_element(local_modification_costs.begin(), local_modification_costs.end());
+            int min_idx = it - local_modification_costs.begin();
+            if (local_modification_costs[min_idx] < (*updated_population_costs)[chromosome_idx]) {
+              (*updated_population)[chromosome_idx] = local_modifications[min_idx];
+              (*updated_population_costs)[chromosome_idx] = local_modification_costs[min_idx];
+            }
           } // Not Dubins
         } // Sampling-based local search instead of gradient
       } // Pick a chromosome for local search
     } // Check if local search condition has been met
   } // Overall loop
 
-  auto it = std::min_element(population_costs.begin(), population_costs.end());
-  int min_idx = it - population_costs.begin();
-  const Ref<const MatrixXd> &Xbest = population[min_idx];
+  auto it = std::min_element((*updated_population_costs).begin(), (*updated_population_costs).end());
+  int min_idx = it - (*updated_population_costs).begin();
+  const Ref<const MatrixXd> &Xbest = (*updated_population)[min_idx];
 
   int dim_q = dubins ? 3 : 2;
   if (dubins) {
@@ -340,8 +376,7 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
       double delta_t = Xbest(seq_idx, 2);
       t += delta_t;
       selected_pts_per_target(target_idx, 0) = t;
-      q_trj_per_target[target_idx].attr("__call__")(t, std::ref(pos));
-      pos = pos + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+      pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
       selected_pts_per_target(target_idx, 1) = pos(0);
       selected_pts_per_target(target_idx, 2) = pos(1);
 
@@ -351,5 +386,5 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
     }
   }
 
-  return population_costs[min_idx];
+  return (*updated_population_costs)[min_idx];
 }
