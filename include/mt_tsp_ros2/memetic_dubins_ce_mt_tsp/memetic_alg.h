@@ -119,7 +119,6 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
 void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target) {
   int num_targets = tw_per_target.rows();
-  std::cout << num_targets << std::endl;
   double t = 0.;
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
     int target_idx = chromosome(seq_idx, 0);
@@ -159,6 +158,7 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
   std::uniform_real_distribution<double> mutation_operator3_delta_t_distribution(0, 1);
 
   std::uniform_int_distribution<int> local_search_elite_distribution(0, pop_size/2);
+  std::uniform_int_distribution<int> local_search_gene_idx_distribution(0, num_targets - 1);
   std::uniform_int_distribution<int> local_search_grad_vs_sampling_distribution(0, 1);
 
   std::uniform_real_distribution<double> local_search_sampling_theta_distribution(0, 2*M_PI);
@@ -270,7 +270,7 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
       for (int j = 0; j < gen_idx/Tlp; ++j) {
         // Get individual from top 50% and run local search
         int chromosome_idx = sort_idx[local_search_elite_distribution(rng)];
-        int gene_idx = local_search_elite_distribution(rng);
+        int gene_idx = local_search_gene_idx_distribution(rng);
         // if (local_search_grad_vs_sampling_distribution(rng) == 0) {
         if (false) {
           // TODO: implement gradient-based local search
@@ -305,6 +305,7 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
               MatrixXd new_chromosome = population[chromosome_idx];
               new_chromosome(gene_idx, 1) = new_theta;
               new_chromosome(gene_idx, 2) = new_delta_t;
+
               bool repair_failed = repair_chromosome(new_chromosome, tw_per_target, target_radii, q_trj_per_target, p0, vmax, new_cost, dubins);
 
               if (!(repair_failed || new_cost >= population_costs[chromosome_idx])) {
