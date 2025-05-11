@@ -130,6 +130,9 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
 RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, int pop_size, double rho, double vmax, const Ref<const Vector2d> &p0, double theta0, int num_openmp_threads) {
+  std::vector<std::pair<double, double>> cost_vs_time;
+  cost_vs_time.push_back(std::pair<double, double>(0., initial_costs.minCoeff()));
+
   auto timer_start = std::chrono::high_resolution_clock::now();
 
   double min_cost_record_time = 0.;
@@ -198,8 +201,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   std::vector<MatrixXd> *updated_population = &population1;
   std::vector<double> *updated_population_costs = &population_costs1;
-
-  std::vector<std::pair<double, double>> cost_vs_time;
 
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
@@ -286,6 +287,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       double cost = 0.;
       bool repair_failed = repair_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost, dubins);
       if (repair_failed) {
+        (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
+        (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
         continue;
       }
 
@@ -303,7 +306,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target);
     }
     */
-
+    
     ++gen_idx;
     if (gen_idx%Tlp == 0) {
       std::vector<size_t> sort_idx = sort_indexes(*updated_population_costs);
@@ -370,15 +373,18 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       } // Pick a chromosome for local search
     } // Check if local search condition has been met
 
-    auto timer_start1 = std::chrono::high_resolution_clock::now();
-    auto it = std::min_element((*updated_population_costs).begin(), (*updated_population_costs).end());
-    auto timer_stop1 = std::chrono::high_resolution_clock::now();
-    auto nanos1 = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop1 - timer_start1).count();
-    min_cost_record_time += ((double)nanos1)/1e9;
+    auto timer_start2 = std::chrono::high_resolution_clock::now();
+    auto it2 = std::min_element((*updated_population_costs).begin(), (*updated_population_costs).end());
+    auto timer_stop2 = std::chrono::high_resolution_clock::now();
+    auto nanos2 = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop2 - timer_start2).count();
+    min_cost_record_time += ((double)nanos2)/1e9;
 
     timer_stop = std::chrono::high_resolution_clock::now();
     nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
-    cost_vs_time.push_back(std::pair<double, double>(((double)nanos)/1e9, *it));
+    if (cost_vs_time.size() && *it2 > cost_vs_time.back().second) {
+      throw std::runtime_error("Cost increased after memetic alg iteration");
+    }
+    cost_vs_time.push_back(std::pair<double, double>(((double)nanos)/1e9, *it2));
   } // Overall loop
 
   auto it = std::min_element((*updated_population_costs).begin(), (*updated_population_costs).end());
