@@ -129,8 +129,10 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, int pop_size, double rho, double vmax, const Ref<const Vector2d> &p0, double theta0, int num_openmp_threads) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, int pop_size, double rho, double vmax, const Ref<const Vector2d> &p0, double theta0, int num_openmp_threads) {
   auto timer_start = std::chrono::high_resolution_clock::now();
+
+  double min_cost_record_time = 0.;
 
   omp_set_num_threads(num_openmp_threads);
 
@@ -196,6 +198,8 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
 
   std::vector<MatrixXd> *updated_population = &population1;
   std::vector<double> *updated_population_costs = &population_costs1;
+
+  std::vector<std::pair<double, double>> cost_vs_time;
 
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
@@ -365,6 +369,16 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
         } // Sampling-based local search instead of gradient
       } // Pick a chromosome for local search
     } // Check if local search condition has been met
+
+    auto timer_start1 = std::chrono::high_resolution_clock::now();
+    auto it = std::min_element((*updated_population_costs).begin(), (*updated_population_costs).end());
+    auto timer_stop1 = std::chrono::high_resolution_clock::now();
+    auto nanos1 = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop1 - timer_start1).count();
+    min_cost_record_time += ((double)nanos1)/1e9;
+
+    timer_stop = std::chrono::high_resolution_clock::now();
+    nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+    cost_vs_time.push_back(std::pair<double, double>(((double)nanos)/1e9, *it));
   } // Overall loop
 
   auto it = std::min_element((*updated_population_costs).begin(), (*updated_population_costs).end());
@@ -393,5 +407,12 @@ double memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const Row
     }
   }
 
-  return (*updated_population_costs)[min_idx];
+  RowMatrixXd cost_vs_time_mat(cost_vs_time.size(), 2);
+  for (int i = 0; i < cost_vs_time.size(); ++i) {
+    cost_vs_time_mat(i, 0) = cost_vs_time[i].first;
+    cost_vs_time_mat(i, 1) = cost_vs_time[i].second;
+  }
+
+  std::cout << "Spent " << min_cost_record_time << " s tracking what the min cost was after each iteration (just making sure this is not too large)" << std::endl;
+  return cost_vs_time_mat;
 }
