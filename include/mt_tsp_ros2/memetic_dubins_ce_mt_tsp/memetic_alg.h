@@ -151,7 +151,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   bool dubins = rho != 0;
 
-  int num_targets = q_trj_per_target.size();
+  int num_targets = tw_per_target.rows();
 
   std::vector<MatrixXd> population1(pop_size);
   std::vector<double> population_costs1(pop_size);
