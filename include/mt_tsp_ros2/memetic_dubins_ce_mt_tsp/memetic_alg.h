@@ -289,17 +289,14 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       // Repair to restore feasibility
       double cost = 0.;
       bool repair_failed = repair_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost, dubins);
-      if (repair_failed) {
+      if (repair_failed || cost >= (*population_costs)[chromosome_idx]) {
         (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
         continue;
       }
 
-      if (cost < (*population_costs)[chromosome_idx]) {
-        (*updated_population)[chromosome_idx] = Xnew;
-        (*updated_population_costs)[chromosome_idx] = cost;
-        // check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target);
-      }
+      (*updated_population)[chromosome_idx] = Xnew;
+      (*updated_population_costs)[chromosome_idx] = cost;
 
       // TODO: transformation to reduce cost (only for Dubins)
     }
