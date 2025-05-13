@@ -202,8 +202,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   std::vector<MatrixXd> *population = &population1;
   std::vector<double> *population_costs = &population_costs1;
 
-  std::vector<MatrixXd> *updated_population = &population1;
-  std::vector<double> *updated_population_costs = &population_costs1;
+  std::vector<MatrixXd> *updated_population = &population2;
+  std::vector<double> *updated_population_costs = &population_costs2;
 
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
@@ -212,19 +212,15 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       break;
     }
 
-    if (gen_idx%2) {
-      population = &population2;
-      population_costs = &population_costs2;
+    // Swap pointers
+    std::vector<MatrixXd> *population_tmp = updated_population;
+    std::vector<double> *population_costs_tmp = updated_population_costs;
 
-      updated_population = &population1;
-      updated_population_costs = &population_costs1;
-    } else {
-      population = &population1;
-      population_costs = &population_costs1;
+    updated_population = population;
+    updated_population_costs = population_costs;
 
-      updated_population = &population2;
-      updated_population_costs = &population_costs2;
-    }
+    population = population_tmp;
+    population_costs = population_costs_tmp;
 
     #pragma omp parallel for
     for (int chromosome_idx = 0; chromosome_idx < pop_size; ++chromosome_idx) {
@@ -309,10 +305,24 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
     
     ++gen_idx;
     if (gen_idx%Tlp == 0) {
+      // Swap pointers
+      std::vector<MatrixXd> *population_tmp = updated_population;
+      std::vector<double> *population_costs_tmp = updated_population_costs;
+
+      updated_population = population;
+      updated_population_costs = population_costs;
+
+      population = population_tmp;
+      population_costs = population_costs_tmp;
+
       std::vector<size_t> sort_idx = sort_indexes(*updated_population_costs);
-      for (int j = 0; j < gen_idx/Tlp; ++j) {
+      sort_idx.resize(pop_size/2);
+      std::shuffle(sort_idx.begin(), sort_idx.end(), rngs_per_thread[0]);
+      int num_loop = std::min(gen_idx/Tlp, pop_size/2);
+      #pragma omp parallel for
+      for (int j = 0; j < num_loop; ++j) {
         // Get individual from top 50% and run local search
-        int chromosome_idx = sort_idx[local_search_elite_distribution(rngs_per_thread[omp_get_thread_num()])];
+        int chromosome_idx = sort_idx[j];
         int gene_idx = local_search_gene_idx_distribution(rngs_per_thread[omp_get_thread_num()]);
         double theta = (*updated_population)[chromosome_idx](gene_idx, 1);
         if (local_search_grad_vs_sampling_distribution(rngs_per_thread[omp_get_thread_num()]) == 0) {
@@ -385,7 +395,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
             std::vector<double> local_modification_costs(num_samples);
             #pragma omp parallel for
             for (int sample_idx = 0; sample_idx < num_samples; ++sample_idx) {
-              // double new_theta = local_search_sampling_theta_distribution(rngs_per_thread[omp_get_thread_num()]);
+              // double new_theta = local_search_sampling_theta_distribution(rngs_per_thread[omp_get_thread_num()]); // Note: if uncommenting this, don't use nested omp
               double new_theta = (2*M_PI*sample_idx)/num_samples;
 
               double new_cost;
