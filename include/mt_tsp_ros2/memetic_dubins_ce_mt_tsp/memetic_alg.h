@@ -5,6 +5,7 @@
 #include <random>
 #include <set>
 #include "mt_tsp_ros2/cpp_spline.h"
+#include <iomanip>
 
 using namespace Eigen;
 
@@ -110,6 +111,9 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       pos = next_pos;
     }
   }
+  if (repair_failed) {
+    cost = std::numeric_limits<double>::infinity();
+  }
   return repair_failed;
 }
 
@@ -178,7 +182,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   std::uniform_int_distribution<int> local_search_grad_vs_sampling_distribution(0, 1);
 
   std::uniform_real_distribution<double> local_search_sampling_theta_distribution(0, 2*M_PI);
-  std::uniform_real_distribution<double> local_search_sampling_t_distribution(0, 1);
 
   int Tlp = 2; // From paper
 
@@ -314,10 +317,53 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         // Get individual from top 50% and run local search
         int chromosome_idx = sort_idx[local_search_elite_distribution(rngs_per_thread[omp_get_thread_num()])];
         int gene_idx = local_search_gene_idx_distribution(rngs_per_thread[omp_get_thread_num()]);
-        // if (local_search_grad_vs_sampling_distribution(rngs_per_thread[omp_get_thread_num()]) == 0) {
-        if (false) {
-          // TODO: implement gradient-based local search
-          // Do gradient-based local search
+        double theta = (*updated_population)[chromosome_idx](gene_idx, 1);
+        if (local_search_grad_vs_sampling_distribution(rngs_per_thread[omp_get_thread_num()]) == 0) {
+          // Gradient-based local search
+          bool improvement = true;
+          while (improvement) {
+            int max_backtrack_fd = 3;
+            double delta_theta = 0.01; // To compute approximate gradient
+            double new_cost = std::numeric_limits<double>::infinity();
+            for (int backtrack_iter = 0; backtrack_iter < max_backtrack_fd; ++backtrack_iter) {
+              double new_theta = theta + delta_theta;
+
+              MatrixXd local_modification = (*updated_population)[chromosome_idx];
+              local_modification(gene_idx, 1) = new_theta;
+
+              bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, new_cost, dubins);
+              if (!repair_failed) {
+                break;
+              }
+              delta_theta *= 0.1;
+            }
+            if (std::isinf(new_cost)) {
+              break;
+            }
+            double gradient = (new_cost - (*updated_population_costs)[chromosome_idx])/delta_theta;
+
+            int max_backtrack_gd = 3;
+            double gd_step_size = 0.01;
+            for (int backtrack_iter = 0; backtrack_iter < max_backtrack_gd; ++backtrack_iter) {
+              double new_theta = theta - gd_step_size*gradient;
+
+              MatrixXd local_modification = (*updated_population)[chromosome_idx];
+              local_modification(gene_idx, 1) = new_theta;
+
+              bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, new_cost, dubins);
+              if (!repair_failed) {
+                if (new_cost < (*updated_population_costs)[chromosome_idx]) {
+                  (*updated_population)[chromosome_idx] = local_modification;
+                  (*updated_population_costs)[chromosome_idx] = new_cost;
+                }
+
+                break;
+              }
+              gd_step_size *= 0.1;
+            }
+
+            improvement = new_cost < (*updated_population_costs)[chromosome_idx] - 1e-4;
+          }
         } else {
           if (dubins) {
             throw std::runtime_error("Did not implement Dubins yet");
@@ -342,15 +388,12 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
             std::vector<double> local_modification_costs(num_samples);
             #pragma omp parallel for
             for (int sample_idx = 0; sample_idx < num_samples; ++sample_idx) {
-              double new_theta = local_search_sampling_theta_distribution(rngs_per_thread[omp_get_thread_num()]);
-              double raw_t_sample = local_search_sampling_t_distribution(rngs_per_thread[omp_get_thread_num()]);
-              double new_t = tw_per_target(target_idx, 0) + raw_t_sample*(tw_per_target(target_idx, 1) - tw_per_target(target_idx, 0));
-              double new_delta_t = new_t - prev_t;
+              // double new_theta = local_search_sampling_theta_distribution(rngs_per_thread[omp_get_thread_num()]);
+              double new_theta = (2*M_PI*sample_idx)/num_samples;
 
               double new_cost;
               local_modifications[sample_idx] = (*updated_population)[chromosome_idx];
               local_modifications[sample_idx](gene_idx, 1) = new_theta;
-              local_modifications[sample_idx](gene_idx, 2) = new_delta_t;
 
               bool repair_failed = repair_chromosome(local_modifications[sample_idx], tw_per_target, target_radii, q_trj_per_target, p0, vmax, new_cost, dubins);
 
