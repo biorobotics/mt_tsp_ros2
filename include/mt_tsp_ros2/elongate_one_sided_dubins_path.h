@@ -57,7 +57,7 @@ RowMatrixXd turns_for_CS_path(double x_0, double y_0, double theta_0, double x_f
   Vector2d rel_p_0 = p_0 - center;
   double rel_p_0_angle = atan2(rel_p_0(1), rel_p_0(0));
 
-  double diff = angdiff(total_angle, rel_p_0_angle);
+  double diff = angdiff(rel_p_0_angle, total_angle);
   if (diff < 0 && left_turn) {
     diff = diff + 2*M_PI;
   } else if (diff > 0 && !left_turn) {
@@ -150,6 +150,7 @@ RowMatrixXd turns_for_one_sided_dubins_path(double x_0, double y_0, double theta
     turns(0, 1) = -rho*diff1;
     turns(1, 0) = 1;
     turns(1, 1) = rho*diff2;
+    return turns;
   } else if (normR < rho) {
     // LR case
     double alpha = acos((normL*normL + 3*rho*rho)/(4*rho*normL));
@@ -206,8 +207,12 @@ RowMatrixXd turns_for_one_sided_dubins_path(double x_0, double y_0, double theta
     turns(0, 0) = 1;
     turns(0, 1) = rho*diff1;
     turns(1, 0) = -1;
-    turns(1, 1) = -rho*diff2;
-    
+    turns(1, 1) = -rho*diff2;    
+    return turns;
+  } else if (perp_0.dot(P - p_0) >= 0) {
+    turns = turns_for_CS_path(x_0, y_0, theta_0, x_f, y_f, rho, true);
+  } else {
+    turns = turns_for_CS_path(x_0, y_0, theta_0, x_f, y_f, rho, false);
   }
 
   return turns;
@@ -304,21 +309,22 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
 
   if (!(P_rel(1) > 0 && (P - center_L).norm() < 3*rho && (P - center_R).norm() < 3*rho)) {
     if (left_turn && (shortest_turns(0, 0) != 1 || shortest_turns(1, 0) != 0)) {
-      throw std::runtime_error("Did not get expected path type for D_I left");
+      throw std::runtime_error("Did not get expected path type for D_II left");
     }
 
     if (!left_turn && (shortest_turns(0, 0) != -1 || shortest_turns(1, 0) != 0)) {
-      throw std::runtime_error("Did not get expected path type for D_I right");
+      throw std::runtime_error("Did not get expected path type for D_II right");
     }
 
     // Compute pose after turning opposite direction from first segment for angle pi
+    double opposite_turn_dir = left_turn ? -1. : 1;
     double theta_after_opposite_turn = left_turn ? theta_0 - M_PI : theta_0 + M_PI;
-    Vector2d pos_after_opposite_turn = p_0 + rho*Vector2d(-s_0 + sin(theta_after_opposite_turn),
-                                                          c_0 - cos(theta_after_opposite_turn));
-    RowMatrixXd turns = turns_for_CS_path(pos_after_opposite_turn(0),
-                                          pos_after_opposite_turn(1),
-                                          theta_after_opposite_turn, x_f, y_f, rho, left_turn);
-    double d_I = M_PI*rho + turns.col(1).sum();
+    Vector2d pos_after_opposite_turn = p_0 + rho*opposite_turn_dir*Vector2d(-s_0 + sin(theta_after_opposite_turn),
+                                                                            c_0 - cos(theta_after_opposite_turn));
+    RowMatrixXd remaining_turns = turns_for_CS_path(pos_after_opposite_turn(0),
+                                                    pos_after_opposite_turn(1),
+                                                    theta_after_opposite_turn, x_f, y_f, rho, left_turn);
+    double d_I = M_PI*rho + remaining_turns.col(1).sum();
     if (s <= d_I) {
       // Elongate by performing bisection on the opposite turn angle
       double theta_opposite_min = 0;
@@ -328,14 +334,19 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
         double theta_opposite_mid = 0.5*(theta_opposite_min + theta_opposite_max);
 
         double theta_after_opposite_turn = left_turn ? theta_0 - theta_opposite_mid : theta_0 + theta_opposite_mid;
-        Vector2d pos_after_opposite_turn = p_0 + rho*Vector2d(-s_0 + sin(theta_after_opposite_turn),
-                                                              c_0 - cos(theta_after_opposite_turn));
+        Vector2d pos_after_opposite_turn = p_0 + rho*opposite_turn_dir*Vector2d(-s_0 + sin(theta_after_opposite_turn),
+                                                                                c_0 - cos(theta_after_opposite_turn));
 
-        RowMatrixXd turns = turns_for_CS_path(pos_after_opposite_turn(0),
-                                              pos_after_opposite_turn(1),
-                                              theta_after_opposite_turn, x_f, y_f, rho, left_turn);
-        double dist = M_PI*rho + turns.col(1).sum();
+        RowMatrixXd remaining_turns = turns_for_CS_path(pos_after_opposite_turn(0),
+                                                        pos_after_opposite_turn(1),
+                                                        theta_after_opposite_turn, x_f, y_f, rho, left_turn);
+        double dist = theta_opposite_mid*rho + remaining_turns.col(1).sum();
         if (std::abs(dist - s) < tol) {
+          std::cout << pos_after_opposite_turn << std::endl;
+          RowMatrixXd turns(3, 2);
+          turns(0, 0) = left_turn ? -1 : 1; // If left turn, opposite turn is right turn, and vice versa
+          turns(0, 1) = rho*theta_opposite_mid;
+          turns.bottomRows<2>() = remaining_turns.bottomRows<2>();
           return turns;
         }
         if (dist > s) {
@@ -349,10 +360,10 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
       double rho_min = rho;
       double rho_max = rho*2;
       while (true) {
-        RowMatrixXd turns = turns_for_CS_path(pos_after_opposite_turn(0),
-                                              pos_after_opposite_turn(1),
-                                              theta_after_opposite_turn, x_f, y_f, rho_max, left_turn);
-        if (M_PI*rho + turns.col(1).sum() > s) {
+        RowMatrixXd remaining_turns = turns_for_CS_path(pos_after_opposite_turn(0),
+                                                        pos_after_opposite_turn(1),
+                                                        theta_after_opposite_turn, x_f, y_f, rho_max, left_turn);
+        if (M_PI*rho + remaining_turns.col(1).sum() > s) {
           break;
         }
         rho_max *= 2;
@@ -360,13 +371,18 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
 
       while (true) {
         double rho_mid = 0.5*(rho_min + rho_max);
-        RowMatrixXd turns = turns_for_CS_path(pos_after_opposite_turn(0),
-                                              pos_after_opposite_turn(1),
-                                              theta_after_opposite_turn, x_f, y_f, rho_mid, left_turn);
-        double dist = M_PI*rho + turns.col(1).sum();
+        RowMatrixXd remaining_turns = turns_for_CS_path(pos_after_opposite_turn(0),
+                                                        pos_after_opposite_turn(1),
+                                                        theta_after_opposite_turn, x_f, y_f, rho_mid, left_turn);
+        double dist = M_PI*rho + remaining_turns.col(1).sum();
         if (std::abs(dist - s) < tol) {
+          RowMatrixXd turns(3, 2);
+          turns(0, 0) = left_turn ? -1 : 1; // If left turn, opposite turn is right turn, and vice versa
+          turns(0, 1) = rho*M_PI;
+          turns.bottomRows<2>() = remaining_turns.bottomRows<2>();
+
           // If the turn is not at the min turning radius, indicate in left column
-          for (int i = 0; i < turns.cols(); ++i) {
+          for (int i = 1; i < turns.cols(); ++i) {
             if (turns(i, 0) != 0) {
               turns(i, 0) *= rho_mid;
             }
