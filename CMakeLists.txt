@@ -247,6 +247,13 @@ install(TARGETS cpp_spline
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(one_sided_dubins_elongation
+  src/bind_one_sided_dubins_elongation.cpp
+)
+install(TARGETS one_sided_dubins_elongation
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -1,0 +1,530 @@
+#pragma once
+#include <Eigen/Dense>
+#include <cmath>
+#include <iostream>
+#include <stdexcept>
+#include "mt_tsp_ros2/time_constrained_dubins_planning/angle_mod.h"
+
+using namespace Eigen;
+typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
+
+const double tol = 1e-4;
+
+RowMatrixXd turns_for_CS_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double rho, bool left_turn) {
+  double c_0 = cos(theta_0);
+  double s_0 = sin(theta_0);
+
+  Vector2d p_0(x_0, y_0);
+  Vector2d dir_0(c_0, s_0);
+  Vector2d perp_0(-s_0, c_0);
+  Vector2d center;
+  if (left_turn) {
+    center = p_0 + rho*perp_0;
+  } else {
+    center = p_0 - rho*perp_0;
+  }
+  Vector2d P(x_f, y_f); 
+
+  double dist_from_center = (P - center).norm();
+  if (dist_from_center < rho) {
+    return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
+  }
+
+  double dist_from_tangent_point = sqrt(dist_from_center*dist_from_center - rho*rho);
+
+  double intersect_point_angle = acos(rho/dist_from_center);
+  double Pangle = atan2(P(1) - center(1), P(0) - center(0));
+
+  // There could be two tangent points. Here's the first candidate
+  double total_angle = Pangle - intersect_point_angle;
+  Vector2d center_to_tangent_point(rho*cos(total_angle), rho*sin(total_angle));
+  Vector2d tangent_point = center + center_to_tangent_point;
+  Vector2d tangent_point_to_P = P - tangent_point;
+  Vector2d dir_at_tangent_point;
+  if (left_turn) {
+    dir_at_tangent_point(0) = -center_to_tangent_point(1);
+    dir_at_tangent_point(1) = center_to_tangent_point(0);
+  } else {
+    dir_at_tangent_point(0) = center_to_tangent_point(1);
+    dir_at_tangent_point(1) = -center_to_tangent_point(0);
+  }
+
+  if (tangent_point_to_P.dot(dir_at_tangent_point) < 0) {
+    // Need to use the other candidate
+    total_angle = Pangle + intersect_point_angle;
+  }
+
+  Vector2d rel_p_0 = p_0 - center;
+  double rel_p_0_angle = atan2(rel_p_0(1), rel_p_0(0));
+
+  double diff = angdiff(total_angle, rel_p_0_angle);
+  if (diff < 0 && left_turn) {
+    diff = diff + 2*M_PI;
+  } else if (diff > 0 && !left_turn) {
+    diff = diff - 2*M_PI;
+  }
+
+  if (!left_turn) {
+    diff = -diff;
+  }
+
+  double C_dist = diff*rho;
+  RowMatrixXd turns(2, 2);
+  turns(0, 0) = left_turn ? 1 : -1;
+  turns(0, 1) = C_dist;
+  turns(1, 0) = 0;
+  turns(1, 1) = dist_from_tangent_point;
+  return turns;
+}
+
+RowMatrixXd turns_for_one_sided_dubins_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double rho) {
+  RowMatrixXd turns(2, 2);
+
+  double c_0 = cos(theta_0);
+  double s_0 = sin(theta_0);
+
+  Vector2d p_0(x_0, y_0);
+  Vector2d dir_0(c_0, s_0);
+  Vector2d perp_0(-s_0, c_0);
+  Vector2d center_L = p_0 + rho*perp_0;
+  Vector2d center_R = p_0 - rho*perp_0;
+  Vector2d P(x_f, y_f);
+
+  double normL = (P - center_L).norm();
+  double normR = (P - center_R).norm();
+
+  if (normL < rho) {
+    // RL case
+    double alpha = acos((normR*normR + 3*rho*rho)/(4*rho*normR));
+
+    Vector2d P_wrt_center_R = P - center_R;
+
+    double beta = atan2(P_wrt_center_R(1), P_wrt_center_R(0));
+
+    double gamma = alpha + beta;
+
+    // Intersection between first R and second L turning circles
+    Vector2d intersect_point_wrt_center_R(rho*cos(gamma), rho*sin(gamma));
+    Vector2d center_L2 = center_R + 2*intersect_point_wrt_center_R;
+    Vector2d intersect_point_wrt_center_L2 = -intersect_point_wrt_center_R;
+    Vector2d P_wrt_center_L2 = P - center_L2;
+    double angleP = atan2(P_wrt_center_L2(1), P_wrt_center_L2(0));
+    double angle_intersect_point = atan2(intersect_point_wrt_center_L2(1), intersect_point_wrt_center_L2(0));
+    // Since atan2 returns values in [-pi, pi], diff2 is in range [-2pi, 2pi]
+    double diff2 = angleP - angle_intersect_point;
+    if (diff2 < 0) { 
+      diff2 += 2*M_PI; // Since we are turning left
+    }
+    if (diff2 < M_PI) {
+      gamma = -alpha + beta;
+
+      // Intersection between first R and second L turning circles
+      intersect_point_wrt_center_R = Vector2d(rho*cos(gamma), rho*sin(gamma));
+      center_L2 = center_R + 2*intersect_point_wrt_center_R;
+      intersect_point_wrt_center_L2 = -intersect_point_wrt_center_R;
+      P_wrt_center_L2 = P - center_L2;
+      angleP = atan2(P_wrt_center_L2(1), P_wrt_center_L2(0));
+      angle_intersect_point = atan2(intersect_point_wrt_center_L2(1), intersect_point_wrt_center_L2(0));
+      // Since atan2 returns values in [-pi, pi], diff2 is in range [-2pi, 2pi]
+      diff2 = angleP - angle_intersect_point;
+
+      if (diff2 < 0) {
+        diff2 += 2*M_PI; // Since we are turning left
+      }
+
+      if (diff2 < M_PI) {
+        throw std::runtime_error("Error in computing RL path");
+      }
+    }
+
+    angle_intersect_point = atan2(intersect_point_wrt_center_R(1), intersect_point_wrt_center_R(0));
+    double angle_p0 = atan2(perp_0(1), perp_0(0));
+
+    // Since atan2 returns values in [-pi, pi], diff1 is in range [-2pi, 2pi]
+    double diff1 = angle_intersect_point - angle_p0;
+    if (diff1 > 0) {
+      diff1 -= 2*M_PI; // Since we are turning right
+    }
+
+    turns(0, 0) = -1;
+    turns(0, 1) = -rho*diff1;
+    turns(1, 0) = 1;
+    turns(1, 1) = rho*diff2;
+  } else if (normR < rho) {
+    // LR case
+    double alpha = acos((normL*normL + 3*rho*rho)/(4*rho*normL));
+
+    Vector2d P_wrt_center_L = P - center_L;
+
+    double beta = atan2(P_wrt_center_L(1), P_wrt_center_L(0));
+
+    double gamma = alpha + beta;
+
+    // Intersection between first L and second R turning circles
+    Vector2d intersect_point_wrt_center_L(rho*cos(gamma), rho*sin(gamma));
+    Vector2d center_R2 = center_L + 2*intersect_point_wrt_center_L;
+    Vector2d intersect_point_wrt_center_R2 = -intersect_point_wrt_center_L;
+    Vector2d P_wrt_center_R2 = P - center_R2;
+    double angleP = atan2(P_wrt_center_R2(1), P_wrt_center_R2(0));
+    double angle_intersect_point = atan2(intersect_point_wrt_center_R2(1), intersect_point_wrt_center_R2(0));
+    // Since atan2 returns values in [-pi, pi], diff2 is in range [-2pi, 2pi]
+    double diff2 = angleP - angle_intersect_point;
+    if (diff2 > 0) { 
+      diff2 -= 2*M_PI; // Since we are turning right
+    }
+    if (diff2 > -M_PI) {
+      gamma = -alpha + beta;
+
+      // Intersection between first R and second L turning circles
+      intersect_point_wrt_center_L = Vector2d(rho*cos(gamma), rho*sin(gamma));
+      center_R2 = center_L + 2*intersect_point_wrt_center_L;
+      intersect_point_wrt_center_R2 = -intersect_point_wrt_center_L;
+      P_wrt_center_R2 = P - center_R2;
+      angleP = atan2(P_wrt_center_R2(1), P_wrt_center_R2(0));
+      angle_intersect_point = atan2(intersect_point_wrt_center_R2(1), intersect_point_wrt_center_R2(0));
+      // Since atan2 returns values in [-pi, pi], diff2 is in range [-2pi, 2pi]
+      diff2 = angleP - angle_intersect_point;
+
+      if (diff2 > 0) {
+        diff2 -= 2*M_PI; // Since we are turning right
+      }
+
+      if (diff2 > -M_PI) {
+        throw std::runtime_error("Error in computing LR path");
+      }
+    }
+
+    angle_intersect_point = atan2(intersect_point_wrt_center_L(1), intersect_point_wrt_center_L(0));
+    double angle_p0 = atan2(-perp_0(1), -perp_0(0));
+
+    // Since atan2 returns values in [-pi, pi], diff1 is in range [-2pi, 2pi]
+    double diff1 = angle_intersect_point - angle_p0;
+    if (diff1 < 0) {
+      diff1 += 2*M_PI; // Since we are turning left
+    }
+
+    turns(0, 0) = 1;
+    turns(0, 1) = rho*diff1;
+    turns(1, 0) = -1;
+    turns(1, 1) = -rho*diff2;
+    
+  }
+
+  return turns;
+}
+
+RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta_0, double x_f, double y_f, double s, double rho) {
+  RowMatrixXd shortest_turns = turns_for_one_sided_dubins_path(x_0, y_0, theta_0, x_f, y_f, rho);
+  double length = shortest_turns.col(1).sum();
+
+  if (std::abs(length - s) < tol) {
+    return shortest_turns;
+  }
+
+  if (length > s) {
+    return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
+  }
+
+  // Check if endpoint is in D_I (interior of union of left and right turning circles). If so, we can elongate to arbitrary length
+  double c_0 = cos(theta_0);
+  double s_0 = sin(theta_0);
+
+  Vector2d p_0(x_0, y_0);
+  Vector2d dir_0(c_0, s_0);
+  Vector2d perp_0(-s_0, c_0);
+  Vector2d center_L = p_0 + rho*perp_0;
+  Vector2d P(x_f, y_f);
+
+  // Left case
+  if ((P - center_L).norm() < rho) {
+    // Apply parallel tangents
+    RowMatrixXd turns(5, 2);
+    if (shortest_turns(0, 0) != -1 || shortest_turns(1, 0) != 1) {
+      throw std::runtime_error("Did not get expected path type for D_I left");
+    }
+    turns(0, 0) = -1; // Turn right
+    turns(0, 1) = shortest_turns(0, 1);
+
+    double extra_length = s - shortest_turns.col(1).sum();
+
+    turns(1, 0) = 0; // Straight
+    turns(1, 1) = extra_length/2;
+
+    turns(2, 0) = 1; // Turn left
+    turns(2, 1) = M_PI*rho;
+
+    turns(3, 0) = 0; // Straight
+    turns(3, 1) = turns(1, 1);
+
+    turns(4, 0) = 1; // Turn left
+    turns(4, 1) = shortest_turns(1, 1) - turns(2, 1);
+    return turns;
+  }
+
+  Vector2d center_R = p_0 - rho*perp_0;
+
+  // Right case
+  if ((P - center_R).norm() < rho) {
+    // Apply parallel tangents
+    RowMatrixXd turns(5, 2);
+    if (shortest_turns(0, 0) != 1 || shortest_turns(1, 0) != -1) {
+      throw std::runtime_error("Did not get expected path type for D_I right");
+    }
+    turns(0, 0) = 1; // Turn left
+    turns(0, 1) = shortest_turns(0, 1);
+
+    double extra_length = s - shortest_turns.col(1).sum();
+
+    turns(1, 0) = 0; // Straight
+    turns(1, 1) = extra_length/2;
+
+    turns(2, 0) = -1; // Turn right
+    turns(2, 1) = M_PI*rho;
+
+    turns(3, 0) = 0; // Straight
+    turns(3, 1) = turns(1, 1);
+
+    turns(4, 0) = -1; // Turn right
+    turns(4, 1) = shortest_turns(1, 1) - turns(2, 1);
+    return turns;
+  }
+
+  // Check if endpoint is in D_II = Omega - int(Omega_+ union Omega_L union Omega_R)
+  // We already know the endpoint isn't in the interior of Omega_L union Omega_R (D_I).
+  // int(Omega_+ union Omega_L union Omega_R contains points on the boundary of Omega_L union Omega_R, but these points
+  // are in the interior of Omega_+ so we don't need to check them separately from checking the interior of Omega_+
+  // Omega_+ = Omega_EL intersect Omega_ER intersect {y : y >= 0}
+  Matrix2d rmat_inv;
+  rmat_inv(0, 0) = c_0;
+  rmat_inv(1, 0) = -s_0;
+  rmat_inv(0, 1) = s_0;
+  rmat_inv(1, 1) = c_0;
+  Vector2d P_rel = rmat_inv*(P - p_0);
+  bool left_turn = P_rel(0) <= 0;
+
+  if (!(P_rel(1) > 0 && (P - center_L).norm() < 3*rho && (P - center_R).norm() < 3*rho)) {
+    if (left_turn && (shortest_turns(0, 0) != 1 || shortest_turns(1, 0) != 0)) {
+      throw std::runtime_error("Did not get expected path type for D_I left");
+    }
+
+    if (!left_turn && (shortest_turns(0, 0) != -1 || shortest_turns(1, 0) != 0)) {
+      throw std::runtime_error("Did not get expected path type for D_I right");
+    }
+
+    // Compute pose after turning opposite direction from first segment for angle pi
+    double theta_after_opposite_turn = left_turn ? theta_0 - M_PI : theta_0 + M_PI;
+    Vector2d pos_after_opposite_turn = p_0 + rho*Vector2d(-s_0 + sin(theta_after_opposite_turn),
+                                                          c_0 - cos(theta_after_opposite_turn));
+    RowMatrixXd turns = turns_for_CS_path(pos_after_opposite_turn(0),
+                                          pos_after_opposite_turn(1),
+                                          theta_after_opposite_turn, x_f, y_f, rho, left_turn);
+    double d_I = M_PI*rho + turns.col(1).sum();
+    if (s <= d_I) {
+      // Elongate by performing bisection on the opposite turn angle
+      double theta_opposite_min = 0;
+      double theta_opposite_max = M_PI;
+
+      while (true) {
+        double theta_opposite_mid = 0.5*(theta_opposite_min + theta_opposite_max);
+
+        double theta_after_opposite_turn = left_turn ? theta_0 - theta_opposite_mid : theta_0 + theta_opposite_mid;
+        Vector2d pos_after_opposite_turn = p_0 + rho*Vector2d(-s_0 + sin(theta_after_opposite_turn),
+                                                              c_0 - cos(theta_after_opposite_turn));
+
+        RowMatrixXd turns = turns_for_CS_path(pos_after_opposite_turn(0),
+                                              pos_after_opposite_turn(1),
+                                              theta_after_opposite_turn, x_f, y_f, rho, left_turn);
+        double dist = M_PI*rho + turns.col(1).sum();
+        if (std::abs(dist - s) < tol) {
+          return turns;
+        }
+        if (dist > s) {
+          theta_opposite_max = theta_opposite_mid;
+        } else {
+          theta_opposite_min = theta_opposite_mid;
+        }
+      }
+    } else {
+      // Elongate by performing bisection on the middle turn radius
+      double rho_min = rho;
+      double rho_max = rho*2;
+      while (true) {
+        RowMatrixXd turns = turns_for_CS_path(pos_after_opposite_turn(0),
+                                              pos_after_opposite_turn(1),
+                                              theta_after_opposite_turn, x_f, y_f, rho_max, left_turn);
+        if (M_PI*rho + turns.col(1).sum() > s) {
+          break;
+        }
+        rho_max *= 2;
+      }
+
+      while (true) {
+        double rho_mid = 0.5*(rho_min + rho_max);
+        RowMatrixXd turns = turns_for_CS_path(pos_after_opposite_turn(0),
+                                              pos_after_opposite_turn(1),
+                                              theta_after_opposite_turn, x_f, y_f, rho_mid, left_turn);
+        double dist = M_PI*rho + turns.col(1).sum();
+        if (std::abs(dist - s) < tol) {
+          // If the turn is not at the min turning radius, indicate in left column
+          for (int i = 0; i < turns.cols(); ++i) {
+            if (turns(i, 0) != 0) {
+              turns(i, 0) *= rho_mid;
+            }
+          }
+          return turns;
+        }
+        if (dist > s) {
+          rho_max = rho_mid;
+        } else {
+          rho_min = rho_mid;
+        }
+      }
+    }
+  }
+
+  // Now we're in D_III. Handle LS paths via mirroring
+  if (left_turn) {
+    Vector2d P_mirror_rel(-P_rel(0), P_rel(1));
+    P = rmat_inv.transpose()*P_mirror_rel + p_0;
+    x_f = P(0);
+    y_f = P(1);
+  }
+
+  double delta_x = x_f - x_0;
+  double delta_y = y_f - y_0;
+  double r_M = (delta_x*delta_x + delta_y*delta_y)/(2*std::abs(sin(theta_0)*delta_x - cos(theta_0)*delta_y));
+
+  // Find length of R^{rM} path
+  Vector2d center_R_rM = p_0 - r_M*perp_0;
+  Vector2d p_0_wrt_center = p_0 - center_R_rM;
+
+  double p_0_angle = atan2(p_0_wrt_center(1), p_0_wrt_center(0));
+
+  Vector2d P_wrt_center = P - center_R_rM;
+
+  double P_angle = atan2(P_wrt_center(1), P_wrt_center(0));
+
+  double diff = angdiff(P_angle, p_0_angle);
+  if (diff > 0) {
+    diff = diff - 2*M_PI;
+  }
+  diff = -diff;
+  double L_rM = diff*r_M;
+  if (s <= L_rM) {
+    // Elongate by performing bisection on the turn radius
+    double rho_min = rho;
+    double rho_max = r_M;
+    while (true) {
+      double rho_mid = 0.5*(rho_min + rho_max);
+      RowMatrixXd turns = turns_for_CS_path(x_0,
+                                            y_0,
+                                            theta_0, x_f, y_f, rho_mid, false);
+      double dist = M_PI*rho + turns.col(1).sum();
+      if (std::abs(dist - s) < tol) {
+        // If the turn is not at the min turning radius, indicate in left column
+        for (int i = 0; i < turns.cols(); ++i) {
+          if (turns(i, 0) != 0) {
+            turns(i, 0) *= rho_mid;
+          }
+        }
+        if (left_turn) {
+          turns(0, 0) = -turns(0, 0);
+        }
+        return turns;
+      }
+      if (dist > s) {
+        rho_max = rho_mid;
+      } else {
+        rho_min = rho_mid;
+      }
+    }
+  }
+
+  double xi = acos((P - center_L).dot(-perp_0));
+
+  // Ding 2019 paper defines rho as distance from turning circle center and P
+  double paper_rho = (P - center_R).norm();
+  double paper_rho2 = paper_rho*paper_rho;
+  double rho2 = rho*rho;
+
+  double acos1 = acos((paper_rho2 + 3*rho2)/(4*paper_rho*rho));
+  double acos2 = acos((5*paper_rho2 - rho2)/(4*rho2));
+
+  double length_lambda_minus = rho*(xi - acos1 + acos2);
+  double length_beta_minus = rho*(xi + acos1 + 2*M_PI - acos2);
+
+  if (length_lambda_minus < s && s < length_beta_minus) {
+    // Elongation impossible
+    return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
+  }
+
+  if (s <= length_lambda_minus) {
+    // Elongate by performing bisection on the turn radius
+    double rho_min = rho;
+    double rho_max = r_M;
+    while (true) {
+      double rho_mid = 0.5*(rho_min + rho_max);
+      RowMatrixXd turns = turns_for_CS_path(x_0,
+                                            y_0,
+                                            theta_0, x_f, y_f, rho_mid, false);
+      double dist = M_PI*rho + turns.col(1).sum();
+      if (std::abs(dist - s) < tol) {
+        // If the turn is not at the min turning radius, indicate in left column
+        for (int i = 0; i < turns.cols(); ++i) {
+          if (turns(i, 0) != 0) {
+            turns(i, 0) *= rho_mid;
+          }
+        }
+        if (left_turn) {
+          turns(0, 0) = -turns(0, 0);
+        }
+        return turns;
+      }
+      // This is reversed because decreasing rho increases path length
+      if (dist > s) {
+        rho_min = rho_mid;
+      } else {
+        rho_max = rho_mid;
+      }
+    }
+  }
+
+  // s >= length_beta_minus
+  // Elongate by performing bisection on the turn radius
+  double rho_min = rho;
+  double rho_max = rho*2;
+  while (true) {
+    RowMatrixXd turns = turns_for_CS_path(x_0,
+                                          y_0,
+                                          theta_0, x_f, y_f, rho_max, false);
+    if (M_PI*rho + turns.col(1).sum() > s) {
+      break;
+    }
+    rho_max *= 2;
+  }
+
+  while (true) {
+    double rho_mid = 0.5*(rho_min + rho_max);
+    RowMatrixXd turns = turns_for_CS_path(x_0,
+                                          y_0,
+                                          theta_0, x_f, y_f, rho_mid, false);
+    double dist = M_PI*rho + turns.col(1).sum();
+    if (std::abs(dist - s) < tol) {
+      // If the turn is not at the min turning radius, indicate in left column
+      for (int i = 0; i < turns.cols(); ++i) {
+        if (turns(i, 0) != 0) {
+          turns(i, 0) *= rho_mid;
+        }
+      }
+      if (left_turn) {
+        turns(0, 0) = -turns(0, 0);
+      }
+      return turns;
+    }
+    if (dist > s) {
+      rho_max = rho_mid;
+    } else {
+      rho_min = rho_mid;
+    }
+  }
+}
