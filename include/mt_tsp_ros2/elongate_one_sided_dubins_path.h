@@ -477,7 +477,9 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
 
   // Now we're in D_III. Handle LS paths via mirroring
   if (left_turn) {
-    throw std::runtime_error("not implemented");
+    P = P - 2*perp_0*perp_0.dot(P - p_0);
+    x_f = P(0);
+    y_f = P(1);
   }
 
   double delta_x = x_f - x_0;
