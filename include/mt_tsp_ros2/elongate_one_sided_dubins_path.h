@@ -78,7 +78,7 @@ RowMatrixXd turns_for_CS_path(double x_0, double y_0, double theta_0, double x_f
   return turns;
 }
 
-RowMatrixXd turns_for_RL_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double rho1, double rho2, bool known_shortest = false) {
+RowMatrixXd turns_for_LR_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double rho1, double rho2, double xi, bool gt_xi) {
   RowMatrixXd turns(2, 2);
 
   double c_0 = cos(theta_0);
@@ -87,78 +87,9 @@ RowMatrixXd turns_for_RL_path(double x_0, double y_0, double theta_0, double x_f
   Vector2d p_0(x_0, y_0);
   Vector2d dir_0(c_0, s_0);
   Vector2d perp_0(-s_0, c_0);
-  Vector2d center_R = p_0 - rho1*perp_0;
-  Vector2d P(x_f, y_f);
 
-  double normR = (P - center_R).norm();
+  double angle_p0 = atan2(-perp_0(1), -perp_0(0));
 
-  double sum_rho = rho1 + rho2;
-  double alpha = acos((normR*normR + sum_rho*sum_rho - rho2*rho2)/(2*normR*sum_rho));
-
-  Vector2d P_wrt_center_R = P - center_R;
-
-  double beta = atan2(P_wrt_center_R(1), P_wrt_center_R(0));
-
-  double gamma = alpha + beta;
-
-  // Intersection between first R and second L turning circles
-  Vector2d intersect_dir(cos(gamma), sin(gamma));
-  Vector2d center_L2 = center_R + sum_rho*intersect_dir;
-  Vector2d intersect_point_wrt_center_L2 = -rho2*intersect_dir;
-  Vector2d P_wrt_center_L2 = P - center_L2;
-  double angleP = atan2(P_wrt_center_L2(1), P_wrt_center_L2(0));
-  double angle_intersect_point = atan2(intersect_point_wrt_center_L2(1), intersect_point_wrt_center_L2(0));
-  // Since atan2 returns values in [-pi, pi], diff2 is in range [-2pi, 2pi]
-  double diff2 = angleP - angle_intersect_point;
-  if (diff2 < 0) { 
-    diff2 += 2*M_PI; // Since we are turning left
-  }
-  if (diff2 < M_PI) {
-    gamma = -alpha + beta;
-
-    // Intersection between first R and second L turning circles
-    intersect_dir(cos(gamma), sin(gamma));
-    center_L2 = center_R + sum_rho*intersect_dir;
-    intersect_point_wrt_center_L2 = -rho2*intersect_dir;
-    P_wrt_center_L2 = P - center_L2;
-    angleP = atan2(P_wrt_center_L2(1), P_wrt_center_L2(0));
-    angle_intersect_point = atan2(intersect_point_wrt_center_L2(1), intersect_point_wrt_center_L2(0));
-    // Since atan2 returns values in [-pi, pi], diff2 is in range [-2pi, 2pi]
-    diff2 = angleP - angle_intersect_point;
-    if (diff2 < 0) {
-      diff2 += 2*M_PI; // Since we are turning left
-    }
-
-    if (known_shortest && diff2 < M_PI) {
-      throw std::runtime_error("Error in computing RL path");
-    }
-  }
-
-  angle_intersect_point = atan2(intersect_dir(1), intersect_dir(0));
-  double angle_p0 = atan2(perp_0(1), perp_0(0));
-
-  // Since atan2 returns values in [-pi, pi], diff1 is in range [-2pi, 2pi]
-  double diff1 = angle_intersect_point - angle_p0;
-  if (diff1 > 0) {
-    diff1 -= 2*M_PI; // Since we are turning right
-  }
-
-  turns(0, 0) = -rho1;
-  turns(0, 1) = -rho1*diff1;
-  turns(1, 0) = rho2;
-  turns(1, 1) = rho2*diff2;
-  return turns;
-}
-
-RowMatrixXd turns_for_LR_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double rho1, double rho2, bool known_shortest = false) {
-  RowMatrixXd turns(2, 2);
-
-  double c_0 = cos(theta_0);
-  double s_0 = sin(theta_0);
-
-  Vector2d p_0(x_0, y_0);
-  Vector2d dir_0(c_0, s_0);
-  Vector2d perp_0(-s_0, c_0);
   Vector2d center_L = p_0 + rho1*perp_0;
   Vector2d P(x_f, y_f);
 
@@ -175,45 +106,43 @@ RowMatrixXd turns_for_LR_path(double x_0, double y_0, double theta_0, double x_f
 
   // Intersection between first L and second R turning circles
   Vector2d intersect_dir(cos(gamma), sin(gamma));
+
+  double angle_intersect_point_wrt_center_L = atan2(intersect_dir(1), intersect_dir(0));
+
+  // Since atan2 returns values in [-pi, pi], diff1 is in range [-2pi, 2pi]
+  double diff1 = angle_intersect_point_wrt_center_L - angle_p0;
+  if (diff1 < 0) {
+    diff1 += 2*M_PI; // Since we are turning left
+  }
+
+  if ((gt_xi && diff1 <= xi) || (!gt_xi && diff1 > xi)) {
+    gamma = -alpha + beta;
+
+    // Intersection between first R and second L turning circles
+    intersect_dir = Vector2d(cos(gamma), sin(gamma));
+
+    angle_intersect_point_wrt_center_L = atan2(intersect_dir(1), intersect_dir(0));
+
+    // Since atan2 returns values in [-pi, pi], diff1 is in range [-2pi, 2pi]
+    diff1 = angle_intersect_point_wrt_center_L - angle_p0;
+    if (diff1 < 0) {
+      diff1 += 2*M_PI; // Since we are turning left
+    }
+
+    if ((gt_xi && diff1 <= xi) || (!gt_xi && diff1 > xi)) {
+      throw std::runtime_error("LR path computation failed during elongation");
+    }
+  }
+
   Vector2d center_R2 = center_L + sum_rho*intersect_dir;
   Vector2d intersect_point_wrt_center_R2 = -rho2*intersect_dir;
   Vector2d P_wrt_center_R2 = P - center_R2;
   double angleP = atan2(P_wrt_center_R2(1), P_wrt_center_R2(0));
-  double angle_intersect_point = atan2(intersect_point_wrt_center_R2(1), intersect_point_wrt_center_R2(0));
+  double angle_intersect_point_wrt_center_R2 = atan2(intersect_point_wrt_center_R2(1), intersect_point_wrt_center_R2(0));
   // Since atan2 returns values in [-pi, pi], diff2 is in range [-2pi, 2pi]
-  double diff2 = angleP - angle_intersect_point;
+  double diff2 = angleP - angle_intersect_point_wrt_center_R2;
   if (diff2 > 0) { 
     diff2 -= 2*M_PI; // Since we are turning right
-  }
-  if (diff2 > -M_PI) {
-    gamma = -alpha + beta;
-
-    // Intersection between first R and second L turning circles
-    intersect_dir(cos(gamma), sin(gamma));
-    center_R2 = center_L + sum_rho*intersect_dir;
-    intersect_point_wrt_center_R2 = -rho2*intersect_dir;
-    P_wrt_center_R2 = P - center_R2;
-    angleP = atan2(P_wrt_center_R2(1), P_wrt_center_R2(0));
-    angle_intersect_point = atan2(intersect_point_wrt_center_R2(1), intersect_point_wrt_center_R2(0));
-    // Since atan2 returns values in [-pi, pi], diff2 is in range [-2pi, 2pi]
-    diff2 = angleP - angle_intersect_point;
-
-    if (diff2 > 0) {
-      diff2 -= 2*M_PI; // Since we are turning right
-    }
-
-    if (known_shortest && diff2 > -M_PI) {
-      throw std::runtime_error("Error in computing LR path");
-    }
-  }
-
-  angle_intersect_point = atan2(intersect_dir(1), intersect_dir(0));
-  double angle_p0 = atan2(-perp_0(1), -perp_0(0));
-
-  // Since atan2 returns values in [-pi, pi], diff1 is in range [-2pi, 2pi]
-  double diff1 = angle_intersect_point - angle_p0;
-  if (diff1 < 0) {
-    diff1 += 2*M_PI; // Since we are turning left
   }
 
   turns(0, 0) = rho1;
@@ -627,7 +556,7 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
       double rho_mid = 0.5*(rho_min + rho_max);
       RowMatrixXd turns = turns_for_LR_path(x_0,
                                             y_0,
-                                            theta_0, x_f, y_f, rho, rho_mid);
+                                            theta_0, x_f, y_f, rho, rho_mid, xi, false);
       double dist = turns.col(1).sum();
       if (std::abs(dist - s) < tol) {
         if (left_turn) {
@@ -653,7 +582,7 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
   for (int bisection_iter = 0; bisection_iter < max_bisection_iter; ++bisection_iter) {
     RowMatrixXd turns = turns_for_LR_path(x_0,
                                           y_0,
-                                          theta_0, x_f, y_f, rho, rho_max);
+                                          theta_0, x_f, y_f, rho, rho_max, xi, true);
     if (turns.col(1).sum() > s) {
       found_ub = true;
       break;
@@ -668,7 +597,7 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
     double rho_mid = 0.5*(rho_min + rho_max);
     RowMatrixXd turns = turns_for_LR_path(x_0,
                                           y_0,
-                                          theta_0, x_f, y_f, rho, rho_mid);
+                                          theta_0, x_f, y_f, rho, rho_mid, xi, true);
     double dist = turns.col(1).sum();
     if (std::abs(dist - s) < tol) {
       if (left_turn) {
