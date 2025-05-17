@@ -72,7 +72,7 @@ RowMatrixXd turns_for_CS_path(double x_0, double y_0, double theta_0, double x_f
 
   double C_dist = diff*rho;
   RowMatrixXd turns(2, 2);
-  turns(0, 0) = left_turn ? 1 : -1;
+  turns(0, 0) = left_turn ? rho : -rho;
   turns(0, 1) = C_dist;
   turns(1, 0) = 0;
   turns(1, 1) = dist_from_tangent_point;
@@ -222,9 +222,9 @@ RowMatrixXd turns_for_one_sided_dubins_path(double x_0, double y_0, double theta
       diff1 -= 2*M_PI; // Since we are turning right
     }
 
-    turns(0, 0) = -1;
+    turns(0, 0) = -rho;
     turns(0, 1) = -rho*diff1;
-    turns(1, 0) = 1;
+    turns(1, 0) = rho;
     turns(1, 1) = rho*diff2;
     return turns;
   } else if (normR < rho) {
@@ -280,9 +280,9 @@ RowMatrixXd turns_for_one_sided_dubins_path(double x_0, double y_0, double theta
       diff1 += 2*M_PI; // Since we are turning left
     }
 
-    turns(0, 0) = 1;
+    turns(0, 0) = rho;
     turns(0, 1) = rho*diff1;
-    turns(1, 0) = -1;
+    turns(1, 0) = -rho;
     turns(1, 1) = -rho*diff2;    
     return turns;
   } else if (perp_0.dot(P - p_0) >= 0) {
@@ -320,10 +320,10 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
   if ((P - center_L).norm() < rho) {
     // Apply parallel tangents
     RowMatrixXd turns(5, 2);
-    if (shortest_turns(0, 0) != -1 || shortest_turns(1, 0) != 1) {
+    if (shortest_turns(0, 0) != -rho || shortest_turns(1, 0) != rho) {
       throw std::runtime_error("Did not get expected path type for D_I left");
     }
-    turns(0, 0) = -1; // Turn right
+    turns(0, 0) = -rho; // Turn right
     turns(0, 1) = shortest_turns(0, 1);
 
     double extra_length = s - shortest_turns.col(1).sum();
@@ -331,13 +331,13 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
     turns(1, 0) = 0; // Straight
     turns(1, 1) = extra_length/2;
 
-    turns(2, 0) = 1; // Turn left
+    turns(2, 0) = rho; // Turn left
     turns(2, 1) = M_PI*rho;
 
     turns(3, 0) = 0; // Straight
     turns(3, 1) = turns(1, 1);
 
-    turns(4, 0) = 1; // Turn left
+    turns(4, 0) = rho; // Turn left
     turns(4, 1) = shortest_turns(1, 1) - turns(2, 1);
     return turns;
   }
@@ -348,10 +348,10 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
   if ((P - center_R).norm() < rho) {
     // Apply parallel tangents
     RowMatrixXd turns(5, 2);
-    if (shortest_turns(0, 0) != 1 || shortest_turns(1, 0) != -1) {
+    if (shortest_turns(0, 0) != rho || shortest_turns(1, 0) != -rho) {
       throw std::runtime_error("Did not get expected path type for D_I right");
     }
-    turns(0, 0) = 1; // Turn left
+    turns(0, 0) = rho; // Turn left
     turns(0, 1) = shortest_turns(0, 1);
 
     double extra_length = s - shortest_turns.col(1).sum();
@@ -359,13 +359,13 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
     turns(1, 0) = 0; // Straight
     turns(1, 1) = extra_length/2;
 
-    turns(2, 0) = -1; // Turn right
+    turns(2, 0) = -rho; // Turn right
     turns(2, 1) = M_PI*rho;
 
     turns(3, 0) = 0; // Straight
     turns(3, 1) = turns(1, 1);
 
-    turns(4, 0) = -1; // Turn right
+    turns(4, 0) = -rho; // Turn right
     turns(4, 1) = shortest_turns(1, 1) - turns(2, 1);
     return turns;
   }
@@ -379,11 +379,11 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
   bool left_turn = perp_0.dot(P_wrt_p0) >= 0;
 
   if (!(Vector2d(c_0, s_0).dot(P_wrt_p0) >= 0 && (P - center_L).norm() < 3*rho && (P - center_R).norm() < 3*rho)) {
-    if (left_turn && (shortest_turns(0, 0) != 1 || shortest_turns(1, 0) != 0)) {
+    if (left_turn && (shortest_turns(0, 0) != rho || shortest_turns(1, 0) != 0)) {
       throw std::runtime_error("Did not get expected path type for D_II left");
     }
 
-    if (!left_turn && (shortest_turns(0, 0) != -1 || shortest_turns(1, 0) != 0)) {
+    if (!left_turn && (shortest_turns(0, 0) != -rho || shortest_turns(1, 0) != 0)) {
       throw std::runtime_error("Did not get expected path type for D_II right");
     }
 
@@ -414,7 +414,7 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
         double dist = theta_opposite_mid*rho + remaining_turns.col(1).sum();
         if (std::abs(dist - s) < tol) {
           RowMatrixXd turns(3, 2);
-          turns(0, 0) = left_turn ? -1 : 1; // If left turn, opposite turn is right turn, and vice versa
+          turns(0, 0) = left_turn ? -rho : rho; // If left turn, opposite turn is right turn, and vice versa
           turns(0, 1) = rho*theta_opposite_mid;
           turns.bottomRows<2>() = remaining_turns.bottomRows<2>();
           return turns;
@@ -453,16 +453,9 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
         double dist = M_PI*rho + remaining_turns.col(1).sum();
         if (std::abs(dist - s) < tol) {
           RowMatrixXd turns(3, 2);
-          turns(0, 0) = left_turn ? -1 : 1; // If left turn, opposite turn is right turn, and vice versa
+          turns(0, 0) = left_turn ? -rho : rho; // If left turn, opposite turn is right turn, and vice versa
           turns(0, 1) = rho*M_PI;
           turns.bottomRows<2>() = remaining_turns.bottomRows<2>();
-
-          // If the turn is not at the min turning radius, indicate in left column
-          for (int i = 1; i < turns.cols(); ++i) {
-            if (turns(i, 0) != 0) {
-              turns(i, 0) *= rho_mid;
-            }
-          }
           return turns;
         }
         if (dist > s) {
@@ -514,8 +507,6 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
                                             theta_0, x_f, y_f, rho_mid, false);
       double dist = turns.col(1).sum();
       if (std::abs(dist - s) < tol) {
-        // If the turn is not at the min turning radius, indicate in left column
-        turns(0, 0) *= rho_mid;
         if (left_turn) {
           turns(0, 0) = -turns(0, 0);
         }

@@ -7,6 +7,7 @@ namespace py = pybind11;
 
 PYBIND11_MAKE_OPAQUE(std::vector<py::object>)
 PYBIND11_MAKE_OPAQUE(std::vector<CppSpline>)
+PYBIND11_MAKE_OPAQUE(std::vector<RowMatrixXd>)
 
 PYBIND11_MODULE(memetic_dubins_ce_mt_tsp, m) {
   m.def("memetic_alg", &memetic_alg);
@@ -18,4 +19,5 @@ PYBIND11_MODULE(memetic_dubins_ce_mt_tsp, m) {
 
   py::bind_vector<std::vector<py::object>>(m, "VectorOfPyObjects");
   py::bind_vector<std::vector<CppSpline>>(m, "VectorOfCppSplines");
+  py::bind_vector<std::vector<RowMatrixXd>>(m, "VectorOfMatrices");
 }

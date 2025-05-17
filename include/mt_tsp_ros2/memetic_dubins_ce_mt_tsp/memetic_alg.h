@@ -76,7 +76,11 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho);
         if (std::isfinite(turns(0, 0))) {
           newton_succeeded = true;
-          heading = heading + turns.col(1).sum();
+          for (int row = 0; row < turns.rows(); ++row) {
+            if (turns(row, 0) != 0) {
+              heading += turns(row, 1)/turns(row, 0);
+            }
+          }
           break;
         }
 
@@ -223,7 +227,7 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, int pop_size, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, int pop_size, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain) {
   std::vector<std::pair<double, double>> cost_vs_time;
   cost_vs_time.push_back(std::pair<double, double>(0., initial_costs.minCoeff()));
 
@@ -316,7 +320,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       updated_population_costs = &population_costs2;
     }
 
-    // #pragma omp parallel for
+    #pragma omp parallel for
     for (int chromosome_idx = 0; chromosome_idx < pop_size; ++chromosome_idx) {
       int parent1_idx = chromosome_idx;
       int parent2_idx = parent_distribution(rngs_per_thread[omp_get_thread_num()]);
@@ -529,7 +533,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   if (dubins) {
     double t = 0;
-    Vector2d pos;
+    Vector2d pos = p0;
     Vector2d next_pos;
     double heading = heading0;
     for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
@@ -546,7 +550,14 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       }
 
       pos = next_pos;
-      heading = heading + turns.col(1).sum();
+      for (int row = 0; row < turns.rows(); ++row) {
+        if (turns(row, 0) != 0) {
+          heading += turns(row, 1)/turns(row, 0);
+        }
+      }
+      heading = angle_mod(heading); // To avoid giant heading values that are confusing to look at
+
+      turns_chain.push_back(turns);
 
       selected_pts_per_target(target_idx, 1) = pos(0);
       selected_pts_per_target(target_idx, 2) = pos(1);
