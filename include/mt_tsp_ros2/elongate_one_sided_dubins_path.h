@@ -412,7 +412,6 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
                                                         theta_after_opposite_turn, x_f, y_f, rho, left_turn);
         double dist = theta_opposite_mid*rho + remaining_turns.col(1).sum();
         if (std::abs(dist - s) < tol) {
-          std::cout << pos_after_opposite_turn << std::endl;
           RowMatrixXd turns(3, 2);
           turns(0, 0) = left_turn ? -1 : 1; // If left turn, opposite turn is right turn, and vice versa
           turns(0, 1) = rho*theta_opposite_mid;
