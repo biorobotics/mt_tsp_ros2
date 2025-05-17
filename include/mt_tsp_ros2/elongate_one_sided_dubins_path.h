@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 #include "mt_tsp_ros2/time_constrained_dubins_planning/angle_mod.h"
+#include <iomanip>
 
 using namespace Eigen;
 typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
@@ -377,7 +378,7 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
   Vector2d P_wrt_p0 = P - p_0;
   bool left_turn = perp_0.dot(P_wrt_p0) >= 0;
 
-  if (!(Vector2d(c_0, s_0).dot(P_wrt_p0) && (P - center_L).norm() < 3*rho && (P - center_R).norm() < 3*rho)) {
+  if (!(Vector2d(c_0, s_0).dot(P_wrt_p0) >= 0 && (P - center_L).norm() < 3*rho && (P - center_R).norm() < 3*rho)) {
     if (left_turn && (shortest_turns(0, 0) != 1 || shortest_turns(1, 0) != 0)) {
       throw std::runtime_error("Did not get expected path type for D_II left");
     }
@@ -613,5 +614,7 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
     }
   }
   
+  // std::cout << std::fixed << std::setprecision(std::numeric_limits<double>::max_digits10) << x_0 << " " << y_0 << " " << theta_0 << " " << x_f << " " << y_f << " " << s << std::endl;
+
   throw std::runtime_error("Bisection s >= length_beta_minus failed");
 }
