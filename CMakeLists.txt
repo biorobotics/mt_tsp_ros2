@@ -254,6 +254,22 @@ install(TARGETS one_sided_dubins_elongation
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+add_executable(compare_to_gdip 
+  src/compare_to_gdip.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/angleinterval.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/arc.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/circle.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/dip.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/dubins.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/dubinsmaneuver.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/dubinspath.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/gdip.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/line.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/path.cpp
+  $ENV{HOME}/gdip/gdip/core/src/opendubins/state.cpp
+)
+target_include_directories(compare_to_gdip PRIVATE $ENV{HOME}/gdip/gdip/include)
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
