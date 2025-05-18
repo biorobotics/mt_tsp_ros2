@@ -68,13 +68,15 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     // Check if interception is feasible
     if (dubins) {
       // Run Newton to restore feasibility if needed
-      int max_newton_iter = 100;
+      int max_newton_iter = 10000; // Need the number to be this high to even repair the solutions in the initial population
       double delta_delta_t_finite_diff = 1e-4;
       double repair_tol = 1e-4;
       bool newton_succeeded = false;
+      // std::cout << "starting newton" << std::endl;
       for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
         next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
 
+        // std::cout << delta_t << " desired length " << vmax*delta_t << " shortest path length " << turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho).col(1).sum() << std::endl;
         RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho);
         if (std::isfinite(turns(0, 0))) {
           newton_succeeded = true;
@@ -114,12 +116,11 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
           if (delta_t < 0) {
             throw std::runtime_error("Projection of delta t failed in repair");
           }
-          X(seq_idx, 2) = delta_t;
         } else if (next_t < tw_per_target(target_idx, 0)) {
           next_t = tw_per_target(target_idx, 0);
           delta_t = next_t - t;
-          X(seq_idx, 2) = delta_t;
         }
+        X(seq_idx, 2) = delta_t;
       }
 
       if (!newton_succeeded) {
@@ -359,7 +360,6 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<CppSpl
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
 RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, int pop_size, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain) {
   std::vector<std::pair<double, double>> cost_vs_time;
-  cost_vs_time.push_back(std::pair<double, double>(0., initial_costs.minCoeff()));
 
   auto timer_start = std::chrono::high_resolution_clock::now();
 
@@ -420,9 +420,27 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   const double mutation_prob = 0.1; // From paper
 
   // Initialize population
+  #pragma omp parallel for
   for (int i = 0; i < pop_size; ++i) {
     population1[i] = initial_population.block(num_targets*i, 0, num_targets, gene_size);
+
+    if (dubins) {
+      double cost;
+      if (repair_chromosome(population1[i], tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, cost, dubins, rho)) {
+        population_costs1[i] = std::numeric_limits<double>::infinity();
+      } else {
+        population_costs1[i] = cost;
+      }
+    }
   }
+  cost_vs_time.push_back(std::pair<double, double>(0., Map<VectorXd>(population_costs1.data(), population_costs1.size()).minCoeff()));
+  int num_finite_cost = 0;
+  for (auto cost : population_costs1) {
+    if (std::isfinite(cost)){ 
+      ++num_finite_cost;
+    }
+  }
+  std::cout << "Initialized population of " << num_finite_cost << " finite-cost solutions" << std::endl;
 
   std::vector<MatrixXd> population2 = population1;
   std::vector<double> population_costs2 = population_costs1;
@@ -695,7 +713,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
           heading += turns(row, 1)/turns(row, 0);
         }
       }
-      heading = angle_mod(heading); // To avoid giant heading values that are confusing to look at
 
       turns_chain.push_back(turns);
 
@@ -703,7 +720,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       selected_pts_per_target(target_idx, 2) = pos(1);
       selected_pts_per_target(target_idx, 3) = heading;
 
-      if (t < tw_per_target(target_idx, 0) || t > tw_per_target(target_idx, 1)) {
+      if (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4) {
         throw std::runtime_error("t out of window");
       }
     }
