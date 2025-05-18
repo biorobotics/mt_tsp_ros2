@@ -13,70 +13,107 @@ const double tol = 1e-4;
 const int max_bisection_iter = 100;
 
 RowMatrixXd turns_for_CS_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double rho, bool left_turn) {
-  double c_0 = cos(theta_0);
-  double s_0 = sin(theta_0);
+  if (true) {
+    double c_0 = cos(theta_0);
+    double s_0 = sin(theta_0);
 
-  Vector2d p_0(x_0, y_0);
-  Vector2d dir_0(c_0, s_0);
-  Vector2d perp_0(-s_0, c_0);
-  Vector2d center;
-  if (left_turn) {
-    center = p_0 + rho*perp_0;
+    Vector2d p_0(x_0, y_0);
+    Vector2d dir_0(c_0, s_0);
+    Vector2d perp_0(-s_0, c_0);
+    Vector2d center;
+    if (left_turn) {
+      center = p_0 + rho*perp_0;
+    } else {
+      center = p_0 - rho*perp_0;
+    }
+    Vector2d P(x_f, y_f); 
+
+    double dist_from_center = (P - center).norm();
+    if (dist_from_center < rho) {
+      return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
+    }
+
+    double dist_from_tangent_point = sqrt(dist_from_center*dist_from_center - rho*rho);
+
+    double intersect_point_angle = acos(rho/dist_from_center);
+    double Pangle = atan2(P(1) - center(1), P(0) - center(0));
+
+    // There could be two tangent points. Here's the first candidate
+    double total_angle = Pangle - intersect_point_angle;
+    Vector2d center_to_tangent_point(rho*cos(total_angle), rho*sin(total_angle));
+    Vector2d tangent_point = center + center_to_tangent_point;
+    Vector2d tangent_point_to_P = P - tangent_point;
+    Vector2d dir_at_tangent_point;
+    if (left_turn) {
+      dir_at_tangent_point(0) = -center_to_tangent_point(1);
+      dir_at_tangent_point(1) = center_to_tangent_point(0);
+    } else {
+      dir_at_tangent_point(0) = center_to_tangent_point(1);
+      dir_at_tangent_point(1) = -center_to_tangent_point(0);
+    }
+
+    if (tangent_point_to_P.dot(dir_at_tangent_point) < 0) {
+      // Need to use the other candidate
+      total_angle = Pangle + intersect_point_angle;
+    }
+
+    Vector2d rel_p_0 = p_0 - center;
+    double rel_p_0_angle = atan2(rel_p_0(1), rel_p_0(0));
+
+    double diff = angdiff(rel_p_0_angle, total_angle);
+    if (diff < 0 && left_turn) {
+      diff = diff + 2*M_PI;
+    } else if (diff > 0 && !left_turn) {
+      diff = diff - 2*M_PI;
+    }
+
+    if (!left_turn) {
+      diff = -diff;
+    }
+
+    double C_dist = diff*rho;
+    RowMatrixXd turns(2, 2);
+    turns(0, 0) = left_turn ? rho : -rho;
+    turns(0, 1) = C_dist;
+    turns(1, 0) = 0;
+    turns(1, 1) = dist_from_tangent_point;
+    return turns;
   } else {
-    center = p_0 - rho*perp_0;
+    // From the GDIP code
+    double c_0 = cos(theta_0);
+    double s_0 = sin(theta_0);
+
+    Vector2d p_0(x_0, y_0);
+    Vector2d dir_0(c_0, s_0);
+    Vector2d perp_0(-s_0, c_0);
+
+    Vector2d center;
+    if (left_turn) {
+      center = p_0 + rho*perp_0;
+    } else {
+      center = p_0 - rho*perp_0;
+    }
+    Vector2d P(x_f, y_f); 
+
+    Vector2d center_to_P = P - center;
+    double l = center_to_P.norm();
+    double alpha = asin(rho/l);
+    double center_to_P_angle = atan2(center_to_P(1), center_to_P(0));
+    double tangent_direction = left_turn ? center_to_P_angle + alpha : center_to_P_angle - alpha;
+    double diff = atan2(sin(tangent_direction), cos(tangent_direction)) - atan2(s_0, c_0);
+    if (diff < 0 && left_turn) {
+      diff += 2*M_PI;
+    } else if (diff > 0 && !left_turn) {
+      diff -= 2*M_PI;
+    }
+
+    RowMatrixXd turns(2, 2);
+    turns(0, 0) = left_turn ? rho : -rho;
+    turns(0, 1) = std::abs(diff)*rho;
+    turns(1, 0) = 0;
+    turns(1, 1) = l*cos(alpha);
+    return turns;
   }
-  Vector2d P(x_f, y_f); 
-
-  double dist_from_center = (P - center).norm();
-  if (dist_from_center < rho) {
-    return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
-  }
-
-  double dist_from_tangent_point = sqrt(dist_from_center*dist_from_center - rho*rho);
-
-  double intersect_point_angle = acos(rho/dist_from_center);
-  double Pangle = atan2(P(1) - center(1), P(0) - center(0));
-
-  // There could be two tangent points. Here's the first candidate
-  double total_angle = Pangle - intersect_point_angle;
-  Vector2d center_to_tangent_point(rho*cos(total_angle), rho*sin(total_angle));
-  Vector2d tangent_point = center + center_to_tangent_point;
-  Vector2d tangent_point_to_P = P - tangent_point;
-  Vector2d dir_at_tangent_point;
-  if (left_turn) {
-    dir_at_tangent_point(0) = -center_to_tangent_point(1);
-    dir_at_tangent_point(1) = center_to_tangent_point(0);
-  } else {
-    dir_at_tangent_point(0) = center_to_tangent_point(1);
-    dir_at_tangent_point(1) = -center_to_tangent_point(0);
-  }
-
-  if (tangent_point_to_P.dot(dir_at_tangent_point) < 0) {
-    // Need to use the other candidate
-    total_angle = Pangle + intersect_point_angle;
-  }
-
-  Vector2d rel_p_0 = p_0 - center;
-  double rel_p_0_angle = atan2(rel_p_0(1), rel_p_0(0));
-
-  double diff = angdiff(rel_p_0_angle, total_angle);
-  if (diff < 0 && left_turn) {
-    diff = diff + 2*M_PI;
-  } else if (diff > 0 && !left_turn) {
-    diff = diff - 2*M_PI;
-  }
-
-  if (!left_turn) {
-    diff = -diff;
-  }
-
-  double C_dist = diff*rho;
-  RowMatrixXd turns(2, 2);
-  turns(0, 0) = left_turn ? rho : -rho;
-  turns(0, 1) = C_dist;
-  turns(1, 0) = 0;
-  turns(1, 1) = dist_from_tangent_point;
-  return turns;
 }
 
 RowMatrixXd turns_for_LR_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double rho1, double rho2, double xi, bool gt_xi) {
