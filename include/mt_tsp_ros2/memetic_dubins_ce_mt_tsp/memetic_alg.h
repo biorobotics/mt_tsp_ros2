@@ -14,6 +14,8 @@ typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
 typedef Matrix<bool, Dynamic, 1> VectorXb;
 
+typedef Matrix<double, 1, 1> Vector1d;
+
 template <typename T>
 std::vector<size_t> sort_indexes(const std::vector<T> &v) {
 
@@ -183,8 +185,67 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   return repair_failed;
 }
 
-// TODO: finish implementing? I don't think the transformation method applies in the presence of time windows
-void transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost) {
+// next_heading is Ref<Vector1d> rather than double& so I can test in python
+double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const CppSpline &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double radius, double theta, double t, double vmax_agent, double rho, double vmax_target) {
+  Vector2d next_rel_pos = radius*Vector2d(cos(theta), sin(theta));
+
+  Vector2d pos_start = q_trj(tw_start) + next_rel_pos;
+
+  RowMatrixXd turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_start(0), pos_start(1), rho);
+  double length = turns.col(1).sum();
+
+  double length_min = length;
+
+  double t_min = tw_start + length/(vmax_agent + vmax_target);
+  double t_max = tw_start + length/(vmax_agent - vmax_target);
+  // double t_min = tw_start;
+  // double t_max = tw_end;
+
+  Vector2d pos_min = q_trj(t_min) + next_rel_pos;
+  turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_min(0), pos_min(1), rho);
+  length = turns.col(1).sum();
+  double delta_min = length - vmax_agent*(t_min - t);
+
+  Vector2d pos_max = q_trj(t_max) + next_rel_pos;
+  turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_max(0), pos_max(1), rho);
+  length = turns.col(1).sum();
+  double delta_max = length - vmax_agent*(t_max - t);
+  if (delta_min*delta_max > 0) {
+    // No bracket
+    // std::cout << "no bracket" << std::endl;
+    // std::cout << t_min << " " << t_max << " " << tw_start << " " << tw_end << " " << delta_min << " " << delta_max << std::endl;
+    // throw std::runtime_error("No bracket"); 
+    return std::numeric_limits<double>::infinity();
+  }
+  // std::cout << "bracket" << std::endl;
+
+  int max_bisection_iter = 100;
+  double bisection_tol = 1e-4;
+  for (int bisection_iter = 0; bisection_iter < max_bisection_iter; ++bisection_iter) {
+    if (t_min > tw_end) {
+      std::cout << "Transformation method required putting the arrival time outside the time window" << std::endl;
+      return std::numeric_limits<double>::infinity();
+    }
+    double t_mid = 0.5*(t_min + t_max);
+    next_pos = q_trj(t_mid) + next_rel_pos;
+    turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho);
+    double length = turns.col(1).sum();
+    double delta = length - vmax_agent*(t_mid - t);
+    if (std::abs(delta) < bisection_tol) {
+      next_heading(0) = heading + turns.col(1).sum()/rho; // I know the first column is all -rho, 0, or rho because we weren't doing any elongation
+      return t_mid;
+    }
+    if (delta*delta_min > 0) {
+      t_min = t_mid;
+    } else {
+      t_max = t_mid;
+    }
+  }
+  throw std::runtime_error("Transformation method bisection ran out of iterations"); 
+  return std::numeric_limits<double>::infinity();
+}
+
+bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, double &cost, const Ref<const VectorXd> &speed_upper_bounds) {
   int num_targets = tw_per_target.rows();
 
   double t = 0;
@@ -192,23 +253,30 @@ void transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
   double heading = heading0;
   Vector2d next_rel_pos;
   Vector2d next_pos;
+  Vector1d next_heading;
   cost = 0;
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
     int target_idx = X(seq_idx, 0);
     double theta = X(seq_idx, 1);
     double delta_t = X(seq_idx, 2);
-    double next_t = t + delta_t;
 
-    next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
-
-    next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+    double next_t = find_earliest_arrival_time_dubins(next_pos, next_heading, q_trj_per_target[target_idx], pos, heading, tw_per_target(target_idx, 0), tw_per_target(target_idx, 1), target_radii(target_idx), theta, t, vmax, rho, speed_upper_bounds(target_idx));
+    if (std::isinf(next_t)) {
+      // std::cout << "Transformation failed on seq_idx " << seq_idx << std::endl;
+      return false;
+    }
+    delta_t = next_t - t;
+    X(seq_idx, 2) = delta_t;
 
     // Update cost, time, and position
     // Assume dubins
     cost += next_t - tw_per_target(target_idx, 0);
     t = next_t;
     pos = next_pos;
+    heading = next_heading(0);
   }
+  std::cout << "Transformation succeeded" << std::endl;
+  return true;
 }
 
 void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target) {
@@ -226,6 +294,68 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
   }
 }
 
+void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<CppSpline> &q_trj_per_target, const Ref<const RowMatrixXd> &tw_per_target) {
+  #pragma omp parallel for
+  for (int target_idx = 0; target_idx < tw_per_target.rows(); ++target_idx) {
+    // Need to evaluate at three points to fit a quadratic
+    double t1 = tw_per_target(target_idx, 0);
+    double t2 = tw_per_target(target_idx, 1);
+    double t3 = 0.5*t1 + 0.5*t2;
+
+    Matrix3d lhs;
+    lhs(0, 0) = t1*t1;
+    lhs(0, 1) = t1;
+    lhs(0, 2) = 1;
+
+    lhs(1, 0) = t2*t2;
+    lhs(1, 1) = t2;
+    lhs(1, 2) = 1;
+
+    lhs(2, 0) = t2*t2;
+    lhs(2, 1) = t2;
+    lhs(2, 2) = 1;
+
+    Matrix<double, 3, 2> rhs;
+    rhs.row(0) = q_trj_per_target[target_idx].derivatives(t1).transpose();
+    rhs.row(1) = q_trj_per_target[target_idx].derivatives(t2).transpose();
+    rhs.row(2) = q_trj_per_target[target_idx].derivatives(t3).transpose();
+
+    Matrix<double, 3, 2> coeffs = lhs.colPivHouseholderQr().solve(rhs);
+
+    // x dimension
+    double a = coeffs(0);
+    double b = coeffs(1);
+    double c = coeffs(2);
+    double t_crit = -b/(2*a);
+
+    double max_speed_x = std::max(std::abs(rhs(0, 0)), std::abs(rhs(1, 0)));
+    max_speed_x = std::max(max_speed_x, std::abs(q_trj_per_target[target_idx].derivatives(t_crit)(0))); // Unnecessary computation of derivative in all dimensions here, fix if this overall procedure is slow
+
+    // y dimension
+    a = coeffs(0);
+    b = coeffs(1);
+    c = coeffs(2);
+    t_crit = -b/(2*a);
+
+    double max_speed_y = std::max(std::abs(rhs(0, 1)), std::abs(rhs(1, 1)));
+    max_speed_y = std::max(max_speed_y, std::abs(q_trj_per_target[target_idx].derivatives(t_crit)(1))); // Unnecessary computation of derivative in all dimensions here, fix if this overall procedure is slow
+
+    upper_bounds(target_idx) = sqrt(max_speed_x*max_speed_x + max_speed_y*max_speed_y);
+
+    /*
+    int num_sample = 100;
+    for (int sample_idx = 0; sample_idx < num_sample; ++sample_idx) {
+      double alpha = sample_idx/(double)num_sample;
+      double t = alpha*t2 + (1 - alpha)*t1;
+      Vector2d deriv = q_trj_per_target[target_idx].derivatives(t);
+      if (deriv.norm() > upper_bounds(target_idx)) {
+        std::cout << "Upper bound incorrect" << std::endl;
+      }
+    }
+    */
+  }
+}
+
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
 RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, int pop_size, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain) {
   std::vector<std::pair<double, double>> cost_vs_time;
@@ -237,15 +367,21 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   omp_set_num_threads(num_openmp_threads);
 
+  int num_targets = tw_per_target.rows();
+
   // I'm doing this because I'm worried about the GIL
   std::vector<CppSpline> q_trj_per_target;
-  for (auto q_trj : q_trj_per_target_python) {
-    q_trj_per_target.push_back(CppSpline(q_trj));
+  for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
+    q_trj_per_target.push_back(CppSpline(q_trj_per_target_python[target_idx]));
   }
 
   bool dubins = rho != 0;
 
-  int num_targets = tw_per_target.rows();
+  VectorXd speed_upper_bounds(1);
+  if (dubins) {
+    speed_upper_bounds = VectorXd(num_targets);
+    get_speed_upper_bounds(speed_upper_bounds, q_trj_per_target, tw_per_target);
+  }
 
   std::vector<MatrixXd> population1(pop_size);
   std::vector<double> population_costs1(pop_size);
@@ -320,7 +456,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       updated_population_costs = &population_costs2;
     }
 
-    #pragma omp parallel for
+    // #pragma omp parallel for
     for (int chromosome_idx = 0; chromosome_idx < pop_size; ++chromosome_idx) {
       int parent1_idx = chromosome_idx;
       int parent2_idx = parent_distribution(rngs_per_thread[omp_get_thread_num()]);
@@ -389,15 +525,19 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         continue;
       }
 
+      (*updated_population)[chromosome_idx] = Xnew;
+      (*updated_population_costs)[chromosome_idx] = cost;
+
       // Transformation to reduce cost (only for Dubins)
       /*
       if (dubins) {
-        transform_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost);
+        bool success = transform_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds);
+        if (success && cost < (*updated_population_costs)[chromosome_idx]) {
+          (*updated_population)[chromosome_idx] = Xnew;
+          (*updated_population_costs)[chromosome_idx] = cost;
+        }
       }
       */
-
-      (*updated_population)[chromosome_idx] = Xnew;
-      (*updated_population_costs)[chromosome_idx] = cost;
     }
 
     /*
