@@ -209,11 +209,13 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
 
   Vector2d pos_min = q_trj(t_min) + next_rel_pos;
   turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_min(0), pos_min(1), rho);
+  bool CC_detected = turns(1, 0) != 0;
   length = turns.col(1).sum();
   double delta_min = length - vmax_agent*(t_min - t);
 
   Vector2d pos_max = q_trj(t_max) + next_rel_pos;
   turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_max(0), pos_max(1), rho);
+  CC_detected |= turns(1, 0) != 0;
   length = turns.col(1).sum();
   double delta_max = length - vmax_agent*(t_max - t);
   if (delta_min*delta_max > 0) {
@@ -227,6 +229,7 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
     double t_mid = 0.5*(t_min + t_max);
     next_pos = q_trj(t_mid) + next_rel_pos;
     turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho);
+    CC_detected |= turns(1, 0) != 0;
     double length = turns.col(1).sum();
     double delta = length - vmax_agent*(t_mid - t);
     if (std::abs(delta) < bisection_tol) {
@@ -240,6 +243,9 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
     }
   }
   // throw std::runtime_error("Transformation method bisection ran out of iterations"); 
+  if (!CC_detected) {
+    throw std::runtime_error("Transformation bisection failed and no CC path detected");
+  }
   return std::numeric_limits<double>::infinity();
 }
 
