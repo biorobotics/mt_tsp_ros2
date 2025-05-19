@@ -327,7 +327,6 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
     pos = next_pos;
     heading = next_heading(0);
   }
-  std::cout << "Transformation succeeded" << std::endl;
   return true;
 }
 
@@ -606,7 +605,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         if (success && cost < (*updated_population_costs)[chromosome_idx]) {
           (*updated_population)[chromosome_idx] = Xnew;
           (*updated_population_costs)[chromosome_idx] = cost;
-          // std::cout << "transformation reduced cost" << std::endl;
+          std::cout << "transformation reduced cost" << std::endl;
         }
       }
     }
