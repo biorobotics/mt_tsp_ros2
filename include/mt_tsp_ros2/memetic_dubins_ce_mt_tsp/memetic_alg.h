@@ -689,7 +689,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   int min_idx = it - (*updated_population_costs).begin();
   const Ref<const MatrixXd> &Xbest = (*updated_population)[min_idx];
 
-  if (dubins) {
+  if (std::isinf(*it)) {
+  } else if (dubins) {
     double t = 0;
     Vector2d pos = p0;
     Vector2d next_pos;
