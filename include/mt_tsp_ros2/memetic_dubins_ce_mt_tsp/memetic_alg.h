@@ -190,17 +190,20 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const CppSpline &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double radius, double theta, double t, double vmax_agent, double rho, double vmax_target) {
   Vector2d next_rel_pos = radius*Vector2d(cos(theta), sin(theta));
 
-  Vector2d pos_start = q_trj(tw_start) + next_rel_pos;
+  Vector2d pos_t = q_trj(t) + next_rel_pos;
 
-  RowMatrixXd turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_start(0), pos_start(1), rho);
+  RowMatrixXd turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_t(0), pos_t(1), rho);
   double length = turns.col(1).sum();
 
   double length_min = length;
 
-  double t_min = tw_start + length/(vmax_agent + vmax_target);
-  double t_max = tw_start + length/(vmax_agent - vmax_target);
+  double t_min = t + length/(vmax_agent + vmax_target);
+  double t_max = t + length/(vmax_agent - vmax_target);
   // double t_min = tw_start;
   // double t_max = tw_end;
+
+  t_min = std::max(t_min, tw_start);
+  t_max = std::min(t_max, tw_end);
 
   Vector2d pos_min = q_trj(t_min) + next_rel_pos;
   turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_min(0), pos_min(1), rho);
@@ -212,21 +215,13 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
   length = turns.col(1).sum();
   double delta_max = length - vmax_agent*(t_max - t);
   if (delta_min*delta_max > 0) {
-    // No bracket
-    // std::cout << "no bracket" << std::endl;
-    // std::cout << t_min << " " << t_max << " " << tw_start << " " << tw_end << " " << delta_min << " " << delta_max << std::endl;
     // throw std::runtime_error("No bracket"); 
     return std::numeric_limits<double>::infinity();
   }
-  // std::cout << "bracket" << std::endl;
 
   int max_bisection_iter = 100;
   double bisection_tol = 1e-4;
   for (int bisection_iter = 0; bisection_iter < max_bisection_iter; ++bisection_iter) {
-    if (t_min > tw_end) {
-      std::cout << "Transformation method required putting the arrival time outside the time window" << std::endl;
-      return std::numeric_limits<double>::infinity();
-    }
     double t_mid = 0.5*(t_min + t_max);
     next_pos = q_trj(t_mid) + next_rel_pos;
     turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho);
@@ -547,7 +542,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       (*updated_population_costs)[chromosome_idx] = cost;
 
       // Transformation to reduce cost (only for Dubins)
-      /*
       if (dubins) {
         bool success = transform_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds);
         if (success && cost < (*updated_population_costs)[chromosome_idx]) {
@@ -555,7 +549,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
           (*updated_population_costs)[chromosome_idx] = cost;
         }
       }
-      */
     }
 
     /*
