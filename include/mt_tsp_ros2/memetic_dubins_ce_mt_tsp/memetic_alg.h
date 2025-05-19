@@ -16,6 +16,8 @@ typedef Matrix<bool, Dynamic, 1> VectorXb;
 
 typedef Matrix<double, 1, 1> Vector1d;
 
+const int gene_size = 3; // target index, theta, and delta t
+
 template <typename T>
 std::vector<size_t> sort_indexes(const std::vector<T> &v) {
 
@@ -237,7 +239,7 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
       t_max = t_mid;
     }
   }
-  throw std::runtime_error("Transformation method bisection ran out of iterations"); 
+  // throw std::runtime_error("Transformation method bisection ran out of iterations"); 
   return std::numeric_limits<double>::infinity();
 }
 
@@ -251,16 +253,70 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
   Vector2d next_pos;
   Vector1d next_heading;
   cost = 0;
+  bool made_change = false;
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
     int target_idx = X(seq_idx, 0);
+
+    if (made_change) {
+      // Changing previous delta_t values may make next interception infeasible. If so, repair
+      double tmp_cost;
+      std::vector<CppSpline> tmp_q_trj;
+      tmp_q_trj.push_back(q_trj_per_target[target_idx]);
+      MatrixXd tmp_chromosome = X.block(seq_idx, 0, 1, gene_size);
+      tmp_chromosome(0, 0) = 0;
+      bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), target_radii.segment(target_idx, 1), tmp_q_trj, pos, heading, vmax, tmp_cost, false, rho);
+      if (repair_failed) {
+        cost = std::numeric_limits<double>::infinity();
+        return false;
+      }
+      X.block(seq_idx, 0, 1, gene_size) = tmp_chromosome;
+      X(seq_idx, 0) = target_idx;
+    }
+
     double theta = X(seq_idx, 1);
     double delta_t = X(seq_idx, 2);
+
+    if (seq_idx != num_targets - 1) {
+      double next_t = t + delta_t;
+      // Check the encounter pattern to the target at seq_idx + 1. If catchup, then optimize the arrival time to target at seq_idx.
+      // If meeting, don't optimize the arrival time. The following method of determining the encounter pattern was obtained
+      // from correspondence with the authors
+      int following_target_idx = X(seq_idx + 1, 0);
+      double following_theta = X(seq_idx + 1, 1);
+      double following_delta_t = X(seq_idx + 1, 2);
+      Vector2d following_rel_pos = target_radii[following_target_idx]*Vector2d(cos(following_theta), sin(following_theta));
+      Vector2d following_pos = q_trj_per_target[following_target_idx](next_t + following_delta_t);
+
+      RowMatrixXd turns = turns_for_one_sided_dubins_path(p0(0), p0(1), heading0, following_pos(0), following_pos(1), rho);
+
+      double length = turns.col(1).sum();
+
+      Vector2d following_pos_plus = q_trj_per_target[following_target_idx](next_t + following_delta_t + 0.1);
+      turns = turns_for_one_sided_dubins_path(p0(0), p0(1), heading0, following_pos_plus(0), following_pos_plus(1), rho);
+
+      double length_plus = turns.col(1).sum();
+
+      if (length_plus < length) {
+        next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+        next_pos = q_trj_per_target[target_idx](next_t);
+
+        // Meeting pattern
+        cost += next_t - tw_per_target(target_idx, 0);
+        t = next_t;
+        pos = next_pos;
+        heading = next_heading(0);
+
+        continue;
+      }
+      // Catch-up pattern
+    }
 
     double next_t = find_earliest_arrival_time_dubins(next_pos, next_heading, q_trj_per_target[target_idx], pos, heading, tw_per_target(target_idx, 0), tw_per_target(target_idx, 1), target_radii(target_idx), theta, t, vmax, rho, speed_upper_bounds(target_idx));
     if (std::isinf(next_t)) {
       // std::cout << "Transformation failed on seq_idx " << seq_idx << std::endl;
       return false;
     }
+    made_change = true;
     delta_t = next_t - t;
     X(seq_idx, 2) = delta_t;
 
@@ -307,8 +363,8 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<CppSpl
     lhs(1, 1) = t2;
     lhs(1, 2) = 1;
 
-    lhs(2, 0) = t2*t2;
-    lhs(2, 1) = t2;
+    lhs(2, 0) = t3*t3;
+    lhs(2, 1) = t3;
     lhs(2, 2) = 1;
 
     Matrix<double, 3, 2> rhs;
@@ -353,9 +409,9 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<CppSpl
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, int pop_size, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain) {
   std::vector<std::pair<double, double>> cost_vs_time;
-
+  
   auto timer_start = std::chrono::high_resolution_clock::now();
 
   double min_cost_record_time = 0.;
@@ -376,6 +432,11 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   if (dubins) {
     speed_upper_bounds = VectorXd(num_targets);
     get_speed_upper_bounds(speed_upper_bounds, q_trj_per_target, tw_per_target);
+  }
+
+  int pop_size = initial_costs.size();
+  if (pop_size != initial_population.rows()/num_targets) {
+    throw std::runtime_error("Population size does not match the number of provided cost values");
   }
 
   std::vector<MatrixXd> population1(pop_size);
@@ -409,8 +470,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   std::uniform_real_distribution<double> local_search_sampling_theta_distribution(0, 2*M_PI);
 
   int Tlp = 2; // From paper
-
-  const int gene_size = 3; // target index, theta, and delta t
 
   const double mutation_prob = 0.1; // From paper
 
@@ -547,6 +606,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         if (success && cost < (*updated_population_costs)[chromosome_idx]) {
           (*updated_population)[chromosome_idx] = Xnew;
           (*updated_population_costs)[chromosome_idx] = cost;
+          // std::cout << "transformation reduced cost" << std::endl;
         }
       }
     }
@@ -677,6 +737,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
     }
     cost_vs_time.push_back(std::pair<double, double>(((double)nanos)/1e9, *it2));
   } // Overall loop
+
 
   auto it = std::min_element((*updated_population_costs).begin(), (*updated_population_costs).end());
   int min_idx = it - (*updated_population_costs).begin();
