@@ -22,7 +22,7 @@ class CppSpline {
     }
 
     Vector2d derivatives(double t) const {
-      return mySpline->derivatives((t - min_knot)/knot_range, 1)/knot_range;
+      return mySpline->derivatives((t - min_knot)/knot_range, 1).col(1)/knot_range;
     }
 
   private:
