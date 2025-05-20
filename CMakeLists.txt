@@ -18,7 +18,7 @@ find_package(pluginlib REQUIRED)
 find_package(rviz_common REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(OpenMP REQUIRED)
-find_package(ompl REQUIRED)
+# find_package(ompl REQUIRED)
 find_package(CGAL REQUIRED)
 
 # The following is for TFTrajectoryDisplay
@@ -140,6 +140,7 @@ install(TARGETS implicit_grid_astar
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+#[[
 pybind11_add_module(time_constrained_dubins_planning
   src/bind_time_constrained_dubins_planning.cpp
   src/dubins.cpp
@@ -149,6 +150,7 @@ target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES}
 install(TARGETS time_constrained_dubins_planning
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
+]]
 
 pybind11_add_module(box_qp
   src/bind_box_qp.cpp
@@ -212,6 +214,7 @@ install(TARGETS mt_cbss
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
+#[[
 pybind11_add_module(nearest_neighbor_edge_posterior
   src/bind_nearest_neighbor_edge_posterior.cpp
 )
@@ -221,6 +224,7 @@ install(TARGETS nearest_neighbor_edge_posterior
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+#]]
 
 pybind11_add_module(dag_dfs
   src/bind_dag_dfs.cpp
@@ -236,6 +240,15 @@ pybind11_add_module(memetic_dubins_ce_mt_tsp
 target_include_directories(memetic_dubins_ce_mt_tsp PRIVATE)
 target_link_libraries(memetic_dubins_ce_mt_tsp PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS memetic_dubins_ce_mt_tsp
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
+pybind11_add_module(memetic_dubins_mt_tsp
+  src/bind_memetic_dubins_mt_tsp.cpp
+)
+target_include_directories(memetic_dubins_mt_tsp PRIVATE)
+target_link_libraries(memetic_dubins_mt_tsp PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS memetic_dubins_mt_tsp
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
