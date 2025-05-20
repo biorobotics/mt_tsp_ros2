@@ -11,6 +11,7 @@ PYBIND11_MAKE_OPAQUE(std::vector<RowMatrixXd>)
 
 PYBIND11_MODULE(memetic_dubins_ce_mt_tsp, m) {
   m.def("memetic_alg", &memetic_alg);
+  m.def("repair_chromosome", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const Ref<const VectorXd>&, const std::vector<CppSpline>&, const Ref<const Vector2d>&, double, double, Ref<Vector1d>, bool, double, int&>(&repair_chromosome));
 
   py::class_<CppSpline>(m, "CppSpline")
     .def(py::init<const Ref<const VectorXd>&, const Ref<const RowMatrixXd>&>())

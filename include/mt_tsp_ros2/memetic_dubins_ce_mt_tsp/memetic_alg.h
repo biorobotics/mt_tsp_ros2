@@ -189,6 +189,13 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   return repair_failed;
 }
 
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, Ref<Vector1d> cost, bool dubins, double rho, int &max_newton_iter_for_success_repair) {
+  double tmp_cost = 0.;
+  bool repair_failed = repair_chromosome(X, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, tmp_cost, dubins, rho, max_newton_iter_for_success_repair);
+  cost(0) = tmp_cost;
+  return repair_failed;
+}
+
 // next_heading is Ref<Vector1d> rather than double& so I can test in python
 double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const CppSpline &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double radius, double theta, double t, double vmax_agent, double rho, double vmax_target, int &max_bisection_iter_for_success_transformation) {
   Vector2d next_rel_pos = radius*Vector2d(cos(theta), sin(theta));
@@ -488,6 +495,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   for (int i = 0; i < pop_size; ++i) {
     population1[i] = initial_population.block(num_targets*i, 0, num_targets, gene_size);
 
+    // Don't need to run the repairs now because we assume those have been run in python
+    /*
     if (dubins) {
       double cost;
       if (repair_chromosome(population1[i], tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()])) {
@@ -496,6 +505,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         population_costs1[i] = cost;
       }
     }
+    */
   }
   cost_vs_time.push_back(std::pair<double, double>(0., Map<VectorXd>(population_costs1.data(), population_costs1.size()).minCoeff()));
   int num_finite_cost = 0;
