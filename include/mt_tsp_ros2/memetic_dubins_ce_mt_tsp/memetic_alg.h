@@ -345,9 +345,10 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
   return true;
 }
 
-void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target) {
+void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double vmax, const std::vector<CppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii) {
   int num_targets = tw_per_target.rows();
   double t = 0.;
+  Vector2d pos = p0;
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
     int target_idx = chromosome(seq_idx, 0);
     double theta = chromosome(seq_idx, 1);
@@ -357,6 +358,14 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
     if (t < tw_per_target(target_idx, 0) || t > tw_per_target(target_idx, 1)) {
       throw std::runtime_error("chromosome infeasible");
     }
+
+    Vector2d next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+    Vector2d next_pos = q_trj_per_target[target_idx](t) + next_rel_pos;
+    double dist = (next_pos - pos).norm();
+    if (dist > vmax*delta_t + 1e-4) {
+      throw std::runtime_error("chromosome infeasible");
+    }
+    pos = next_pos;
   }
 }
 
@@ -494,6 +503,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   #pragma omp parallel for
   for (int i = 0; i < pop_size; ++i) {
     population1[i] = initial_population.block(num_targets*i, 0, num_targets, gene_size);
+    // check_chromosome_feasible(population1[i], tw_per_target, p0, vmax, q_trj_per_target, target_radii);
 
     // Don't need to run the repairs now because we assume those have been run in python
     /*
@@ -560,8 +570,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       int parent1_counter = 0;
       int parent2_counter = 0;
 
-      // check_chromosome_feasible((*population)[chromosome_idx], tw_per_target);
-
       for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
         if (crossover_distribution(rngs_per_thread[omp_get_thread_num()]) == 0) {
           while (inserted_targets((int)((*population)[parent1_idx](parent1_counter, 0)))) {
@@ -618,6 +626,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
         continue;
       }
+
+      // check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target, p0, vmax, q_trj_per_target, target_radii);
 
       (*updated_population)[chromosome_idx] = Xnew;
       (*updated_population_costs)[chromosome_idx] = cost;
@@ -703,13 +713,12 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
                 } else {
                   (*updated_population)[chromosome_idx] = local_modification;
                   (*updated_population_costs)[chromosome_idx] = new_cost;
+                  // check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target, p0, vmax, q_trj_per_target, target_radii);
                 }
                 break;
               }
               gd_step_size *= 0.1;
             }
-
-            improvement = new_cost < (*updated_population_costs)[chromosome_idx] - 1e-4;
           }
         } else {
           double theta = (*updated_population)[chromosome_idx](gene_idx, 1);
@@ -754,6 +763,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
           if (local_modification_costs[min_idx] < (*updated_population_costs)[chromosome_idx]) {
             (*updated_population)[chromosome_idx] = local_modifications[min_idx];
             (*updated_population_costs)[chromosome_idx] = local_modification_costs[min_idx];
+            // check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target, p0, vmax, q_trj_per_target, target_radii);
           }
         } // Sampling-based local search instead of gradient
       } // Pick a chromosome for local search
