@@ -657,7 +657,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         int chromosome_idx = sort_idx[local_search_elite_distribution(rngs_per_thread[omp_get_thread_num()])];
         int gene_idx = local_search_gene_idx_distribution(rngs_per_thread[omp_get_thread_num()]);
         double theta = (*updated_population)[chromosome_idx](gene_idx, 1);
-        if (local_search_grad_vs_sampling_distribution(rngs_per_thread[omp_get_thread_num()]) == 0) {
+        // Only run gradient-based local search on feasible solutions (only relevant if I do Dubins close-enough)
+        if (std::isfinite((*updated_population_costs)[chromosome_idx]) && local_search_grad_vs_sampling_distribution(rngs_per_thread[omp_get_thread_num()]) == 0) {
           // Gradient-based local search
           bool improvement = true;
           while (improvement) {
@@ -691,6 +692,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
             int max_backtrack_gd = 3;
             double gd_step_size = 0.01;
+            improvement = false;
             for (int backtrack_iter = 0; backtrack_iter < max_backtrack_gd; ++backtrack_iter) {
               double new_theta = theta - gd_step_size*gradient;
 
@@ -699,6 +701,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
               bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()]);
               if (!repair_failed && new_cost < (*updated_population_costs)[chromosome_idx]) {
+                improvement = true;
                 if (dubins) {
                   double tmp_cost;
                   MatrixXd tmp_local_modification = local_modification;
