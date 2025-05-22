@@ -692,7 +692,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
             int max_backtrack_gd = 3;
             double gd_step_size = 0.01;
-            improvement = false;
             for (int backtrack_iter = 0; backtrack_iter < max_backtrack_gd; ++backtrack_iter) {
               double new_theta = theta - gd_step_size*gradient;
 
@@ -701,7 +700,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
               bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()]);
               if (!repair_failed && new_cost < (*updated_population_costs)[chromosome_idx]) {
-                improvement = true;
                 if (dubins) {
                   double tmp_cost;
                   MatrixXd tmp_local_modification = local_modification;
@@ -722,6 +720,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
               }
               gd_step_size *= 0.1;
             }
+
+            improvement = new_cost < (*updated_population_costs)[chromosome_idx] - 1e-4;
           }
         } else {
           double theta = (*updated_population)[chromosome_idx](gene_idx, 1);
