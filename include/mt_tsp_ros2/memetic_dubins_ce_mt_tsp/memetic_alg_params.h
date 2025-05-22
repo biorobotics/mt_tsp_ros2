@@ -6,7 +6,7 @@ class MemeticAlgParams {
                          local_search_gd_step_size(0.01),
                          local_search_num_samples(20), // From paper
                          Tlp(2), // From paper
-                         repair_step_size(repair_step_size) {
+                         repair_step_size(0.01) {
     }
 
     // Use custom values
@@ -20,6 +20,27 @@ class MemeticAlgParams {
                                                                                                                                      Tlp(Tlp),
                                                                                                                                      repair_step_size(repair_step_size) {
     }
+
+    double get_mutation_prob() const {
+      return mutation_prob;
+    }
+
+    double get_local_search_gd_step_size() const {
+      return local_search_gd_step_size;
+    }
+
+    int get_local_search_num_samples() const {
+      return local_search_num_samples;
+    }
+
+    int get_Tlp() const {
+      return Tlp;
+    }
+
+    double get_repair_step_size() const {
+      return repair_step_size;
+    }
+
     const double mutation_prob;
     const double local_search_gd_step_size;
     const int local_search_num_samples;

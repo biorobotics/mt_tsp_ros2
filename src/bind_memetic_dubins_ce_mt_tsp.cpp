@@ -16,6 +16,11 @@ PYBIND11_MODULE(memetic_dubins_ce_mt_tsp, m) {
   py::class_<MemeticAlgParams>(m, "MemeticAlgParams")
     .def(py::init<>())
     .def(py::init<double, double, int, int, double>())
+    .def("get_mutation_prob", &MemeticAlgParams::get_mutation_prob)
+    .def("get_local_search_gd_step_size", &MemeticAlgParams::get_local_search_gd_step_size)
+    .def("get_local_search_num_samples", &MemeticAlgParams::get_local_search_num_samples)
+    .def("get_Tlp", &MemeticAlgParams::get_Tlp)
+    .def("get_repair_step_size", &MemeticAlgParams::get_repair_step_size)
     ;
 
   py::class_<CppSpline>(m, "CppSpline")
