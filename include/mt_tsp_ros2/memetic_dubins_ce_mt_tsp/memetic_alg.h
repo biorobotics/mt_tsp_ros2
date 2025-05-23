@@ -708,20 +708,16 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       (*updated_population_costs)[chromosome_idx] = cost;
 
       // Transformation to reduce cost
+      bool success;
       if (dubins) {
-        bool success = transform_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
-        if (success && cost < (*updated_population_costs)[chromosome_idx]) {
-          (*updated_population)[chromosome_idx] = Xnew;
-          (*updated_population_costs)[chromosome_idx] = cost;
-          std::cout << "transformation reduced cost" << std::endl;
-        }
+        success = transform_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
       } else {
-        bool success = transform_chromosome_no_dubins(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
-        if (success && cost < (*updated_population_costs)[chromosome_idx]) {
-          (*updated_population)[chromosome_idx] = Xnew;
-          (*updated_population_costs)[chromosome_idx] = cost;
-          std::cout << "transformation reduced cost" << std::endl;
-        }
+        success = false; // transform_chromosome_no_dubins(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+      }
+      if (success && cost < (*updated_population_costs)[chromosome_idx]) {
+        (*updated_population)[chromosome_idx] = Xnew;
+        (*updated_population_costs)[chromosome_idx] = cost;
+        std::cout << "transformation reduced cost" << std::endl;
       }
     }
 
@@ -732,7 +728,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
     */
     
     ++gen_idx;
-    if (gen_idx%params.Tlp == 0) {
+    // -1 means don't run local search
+    if (params.Tlp != -1 && gen_idx%params.Tlp == 0) {
       std::vector<size_t> sort_idx = sort_indexes(*updated_population_costs);
       for (int j = 0; j < gen_idx/params.Tlp; ++j) {
         // Get individual from top 50% and run local search
@@ -755,12 +752,15 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
               bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params);
               if (!repair_failed) {
+                double tmp_cost;
+                bool transformation_succeeded;
                 if (dubins) {
-                  double tmp_cost;
-                  bool transformation_succeeded = transform_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
-                  if (transformation_succeeded && tmp_cost < new_cost) {
-                    new_cost = tmp_cost;
-                  }
+                  transformation_succeeded = transform_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+                } else {
+                  transformation_succeeded = false; // transform_chromosome_no_dubins(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+                }
+                if (transformation_succeeded && tmp_cost < new_cost) {
+                  new_cost = tmp_cost;
                 }
 
                 break;
@@ -782,21 +782,20 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
               bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params);
               if (!repair_failed && new_cost < (*updated_population_costs)[chromosome_idx]) {
+                double tmp_cost;
+                bool transformation_succeeded;
+                MatrixXd tmp_local_modification = local_modification;
                 if (dubins) {
-                  double tmp_cost;
-                  MatrixXd tmp_local_modification = local_modification;
-                  bool transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
-                  if (transformation_succeeded && tmp_cost < new_cost) {
-                    (*updated_population)[chromosome_idx] = tmp_local_modification;
-                    (*updated_population_costs)[chromosome_idx] = tmp_cost;
-                  } else {
-                    (*updated_population)[chromosome_idx] = local_modification;
-                    (*updated_population_costs)[chromosome_idx] = new_cost;
-                  }
+                  transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+                } else {
+                  transformation_succeeded = false; // transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+                }
+                if (transformation_succeeded && tmp_cost < new_cost) {
+                  (*updated_population)[chromosome_idx] = tmp_local_modification;
+                  (*updated_population_costs)[chromosome_idx] = tmp_cost;
                 } else {
                   (*updated_population)[chromosome_idx] = local_modification;
                   (*updated_population_costs)[chromosome_idx] = new_cost;
-                  // check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target, p0, vmax, q_trj_per_target, target_radii);
                 }
                 break;
               }
