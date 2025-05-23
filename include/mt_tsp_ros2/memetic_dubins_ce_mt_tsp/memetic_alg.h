@@ -345,6 +345,85 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
   return true;
 }
 
+bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params) {
+  int num_targets = tw_per_target.rows();
+
+  double t = 0;
+  Vector2d pos = p0;
+  Vector2d next_rel_pos;
+  Vector2d next_pos;
+  cost = 0;
+  bool made_change = false;
+  for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+    int target_idx = X(seq_idx, 0);
+
+    if (seq_idx != 0) {
+      // Changing previous delta_t values may make next interception infeasible. If so, repair
+      double tmp_cost;
+      std::vector<CppSpline> tmp_q_trj;
+      tmp_q_trj.push_back(q_trj_per_target[target_idx]);
+      MatrixXd tmp_chromosome = X.block(seq_idx, 0, 1, gene_size);
+      tmp_chromosome(0, 0) = 0;
+      bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), target_radii.segment(target_idx, 1), tmp_q_trj, pos, 0., vmax, tmp_cost, false, 0., max_newton_iter_for_success_repair, params);
+      if (repair_failed) {
+        cost = std::numeric_limits<double>::infinity();
+        return false;
+      }
+      X.block(seq_idx, 0, 1, gene_size) = tmp_chromosome;
+      X(seq_idx, 0) = target_idx;
+    }
+
+    double theta = X(seq_idx, 1);
+    double delta_t = X(seq_idx, 2);
+
+    Vector2d next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+
+    int max_gd_iter = 10;
+    int max_backtrack_iter = 3;
+    double next_t = t + delta_t;
+    for (int gd_iter = 0; gd_iter < max_gd_iter; ++gd_iter) {
+      next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+      double dist = (next_pos - pos).norm();
+      double deriv = (next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t));
+      // Limit step size to avoid going outside time window
+      double step = std::min(std::max(-deriv, tw_per_target(target_idx, 0) - next_t), tw_per_target(target_idx, 1) - next_t);
+      double step_size = step/(-deriv);
+
+      double b = 0.01; // From Zac's class (he mentioned to set b between 1e-4 and 0.1)
+      double c = 0.5; // From Zac's class
+      bool reduction = false;
+      for (int backtrack_iter = 0; backtrack_iter < max_backtrack_iter; ++backtrack_iter) {
+        double next_t_cand = next_t - step_size*deriv;
+        Vector2d next_pos_cand = q_trj_per_target[target_idx](next_t_cand) + next_rel_pos;
+        double dist_cand = (next_pos_cand - pos).norm();
+        // Armijo rule.
+        // Mutliply change in next_t by derivative to get expected change in cost.
+        // We're checking if the actual cost reduction is at least b times the expected
+        if (dist_cand - dist <= b*deriv*step) {
+          next_t = next_t_cand;
+          next_pos = next_pos_cand;
+          reduction = true;
+          break;
+        }
+        step_size *= c;
+      }
+      if (!reduction) {
+        break;
+      }
+    }
+
+    delta_t = next_t - t;
+    X(seq_idx, 2) = delta_t;
+
+    // Update cost, time, and position
+    // Assume dubins
+    cost += (next_pos - pos).norm();
+    t = next_t;
+    pos = next_pos;
+  }
+  return true;
+}
+
 void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double vmax, const std::vector<CppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii) {
   int num_targets = tw_per_target.rows();
   double t = 0.;
@@ -628,9 +707,16 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       (*updated_population)[chromosome_idx] = Xnew;
       (*updated_population_costs)[chromosome_idx] = cost;
 
-      // Transformation to reduce cost (only for Dubins)
+      // Transformation to reduce cost
       if (dubins) {
         bool success = transform_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+        if (success && cost < (*updated_population_costs)[chromosome_idx]) {
+          (*updated_population)[chromosome_idx] = Xnew;
+          (*updated_population_costs)[chromosome_idx] = cost;
+          std::cout << "transformation reduced cost" << std::endl;
+        }
+      } else {
+        bool success = transform_chromosome_no_dubins(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
         if (success && cost < (*updated_population_costs)[chromosome_idx]) {
           (*updated_population)[chromosome_idx] = Xnew;
           (*updated_population_costs)[chromosome_idx] = cost;
