@@ -511,7 +511,7 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<CppSpl
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final) {
   std::vector<std::pair<double, double>> cost_vs_time;
   
   auto timer_start = std::chrono::high_resolution_clock::now();
@@ -866,6 +866,13 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
     cost_vs_time.push_back(std::pair<double, double>(((double)nanos)/1e9, *it2));
   } // Overall loop
 
+  num_feas_final(0) = 0;
+  for (auto cost : (*updated_population_costs)) {
+    if (std::isfinite(cost)){ 
+      ++num_feas_final(0);
+    }
+  }
+  std::cout << "Final population contains " << num_feas_final(0) << " feas solns" << std::endl;
 
   auto it = std::min_element((*updated_population_costs).begin(), (*updated_population_costs).end());
   int min_idx = it - (*updated_population_costs).begin();
