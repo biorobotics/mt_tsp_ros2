@@ -9,7 +9,6 @@
 using namespace Eigen;
 typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
-const double tol = 1e-4;
 const int max_bisection_iter = 100;
 
 RowMatrixXd turns_for_CS_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double rho, bool left_turn) {
@@ -331,7 +330,7 @@ RowMatrixXd turns_for_one_sided_dubins_path(double x_0, double y_0, double theta
   return turns;
 }
 
-RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta_0, double x_f, double y_f, double s, double rho) {
+RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta_0, double x_f, double y_f, double s, double rho, double tol) {
   RowMatrixXd shortest_turns = turns_for_one_sided_dubins_path(x_0, y_0, theta_0, x_f, y_f, rho);
   double length = shortest_turns.col(1).sum();
 
@@ -645,4 +644,8 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
   // std::cout << std::fixed << std::setprecision(std::numeric_limits<double>::max_digits10) << x_0 << " " << y_0 << " " << theta_0 << " " << x_f << " " << y_f << " " << s << std::endl;
 
   throw std::runtime_error("Bisection s >= length_beta_minus failed");
+}
+
+RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta_0, double x_f, double y_f, double s, double rho) {
+  return elongated_dubins_path_one_sided(x_0, y_0, theta_0, x_f, y_f, s, rho, 1e-4);
 }

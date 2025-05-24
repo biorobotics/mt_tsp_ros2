@@ -76,7 +76,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         next_pos = q_trj_per_target[target_idx](next_t);
 
         // std::cout << delta_t << " desired length " << vmax*delta_t << " shortest path length " << turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho).col(1).sum() << std::endl;
-        RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho);
+        RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-2);
         if (std::isfinite(turns(0, 0))) {
           max_newton_iter_for_success_repair = std::max(newton_iter, max_newton_iter_for_success_repair);
           newton_succeeded = true;
@@ -659,7 +659,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       selected_pts_per_target(target_idx, 0) = t;
       next_pos = q_trj_per_target[target_idx](t);
 
-      RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho);
+      RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-2);
       if (std::isinf(turns(0, 0))) {
         throw std::runtime_error("elongated path generation failed");
       }
