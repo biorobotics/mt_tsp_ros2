@@ -466,12 +466,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   std::uniform_int_distribution<int> mutation_operator3_seq_idx_distribution(0, num_targets - 1);
   std::uniform_real_distribution<double> mutation_operator3_delta_t_distribution(0, 1);
 
-  std::uniform_int_distribution<int> local_search_elite_distribution(0, pop_size/2);
-  std::uniform_int_distribution<int> local_search_gene_idx_distribution(0, num_targets - 1);
-  std::uniform_int_distribution<int> local_search_grad_vs_sampling_distribution(0, 1);
-
-  int Tlp = 2; // From paper
-
   std::vector<int> max_newton_iter_for_success_repair_per_thread(num_openmp_threads, 0);
   std::vector<int> max_bisection_iter_for_success_transformation_per_thread(num_openmp_threads, 0);
 
