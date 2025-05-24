@@ -699,7 +699,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       selected_pts_per_target(target_idx, 1) = pos(0);
       selected_pts_per_target(target_idx, 2) = pos(1);
 
-      if (t < tw_per_target(target_idx, 0) || t > tw_per_target(target_idx, 1)) {
+      if (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4) {
         throw std::runtime_error("t out of window");
       }
     }
