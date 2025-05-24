@@ -863,7 +863,9 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
     if (cost_vs_time.size() && *it2 > cost_vs_time.back().second) {
       throw std::runtime_error("Cost increased after memetic alg iteration");
     }
-    cost_vs_time.push_back(std::pair<double, double>(((double)nanos)/1e9, *it2));
+    if (cost_vs_time.size() == 0 || *it2 < cost_vs_time.back().second) {
+      cost_vs_time.push_back(std::pair<double, double>(((double)nanos)/1e9, *it2));
+    }
   } // Overall loop
 
   num_feas_final(0) = 0;
