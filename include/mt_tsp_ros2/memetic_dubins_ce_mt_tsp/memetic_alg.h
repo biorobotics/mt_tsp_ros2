@@ -1008,3 +1008,59 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   std::cout << "Spent " << min_cost_record_time << " s tracking what the min cost was after each iteration (just making sure this is not too large)" << std::endl;
   return cost_vs_time_mat;
 }
+
+void get_selected_pts(Ref<RowMatrixXd> selected_pts_per_target, const std::vector<ExtendedCppSpline> q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const Ref<const MatrixXd> &X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, bool no_tw) {
+  bool dubins = rho != 0.;
+  int num_targets = tw_per_target.rows();
+  if (dubins) {
+    double t = 0;
+    Vector2d pos = p0;
+    Vector2d next_pos;
+    double heading = heading0;
+    for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+      int target_idx = X(seq_idx, 0);
+      double theta = X(seq_idx, 1);
+      double delta_t = X(seq_idx, 2);
+      t += delta_t;
+      selected_pts_per_target(target_idx, 0) = t;
+      next_pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+
+      RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-2);
+      if (std::isinf(turns(0, 0))) {
+        throw std::runtime_error("elongated path generation failed");
+      }
+
+      pos = next_pos;
+      for (int row = 0; row < turns.rows(); ++row) {
+        if (turns(row, 0) != 0) {
+          heading += turns(row, 1)/turns(row, 0);
+        }
+      }
+
+      selected_pts_per_target(target_idx, 1) = pos(0);
+      selected_pts_per_target(target_idx, 2) = pos(1);
+      selected_pts_per_target(target_idx, 3) = heading;
+
+      if (!no_tw && (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4)) {
+        throw std::runtime_error("t out of window");
+      }
+    }
+  } else {
+    double t = 0;
+    Vector2d pos;
+    for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+      int target_idx = X(seq_idx, 0);
+      double theta = X(seq_idx, 1);
+      double delta_t = X(seq_idx, 2);
+      t += delta_t;
+      selected_pts_per_target(target_idx, 0) = t;
+      pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+      selected_pts_per_target(target_idx, 1) = pos(0);
+      selected_pts_per_target(target_idx, 2) = pos(1);
+
+      if (!no_tw && (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4)) {
+        throw std::runtime_error("t out of window");
+      }
+    }
+  }
+}
