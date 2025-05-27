@@ -774,7 +774,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       if (success && cost < (*updated_population_costs)[chromosome_idx]) {
         (*updated_population)[chromosome_idx] = Xnew;
         (*updated_population_costs)[chromosome_idx] = cost;
-        std::cout << "transformation reduced cost" << std::endl;
+        // std::cout << "transformation reduced cost" << std::endl;
       }
     }
 
