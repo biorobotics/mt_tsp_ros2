@@ -5,6 +5,7 @@
 #include <random>
 #include <set>
 #include "mt_tsp_ros2/cpp_spline.h"
+#include "mt_tsp_ros2/extended_cpp_spline.h"
 #include "mt_tsp_ros2/elongate_one_sided_dubins_path.h"
 #include "mt_tsp_ros2/memetic_dubins_ce_mt_tsp/memetic_alg_params.h"
 #include <iomanip>
@@ -36,7 +37,7 @@ std::vector<size_t> sort_indexes(const std::vector<T> &v) {
   return idx;
 }
 
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw) {
   int num_targets = tw_per_target.rows();
 
   bool repair_failed = false;
@@ -52,18 +53,20 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     double delta_t = X(seq_idx, 2);
     double next_t = t + delta_t;
 
-    if (next_t > tw_per_target(target_idx, 1)) {
-      next_t = tw_per_target(target_idx, 1);
-      delta_t = next_t - t;
-      if (delta_t < 0) {
-        repair_failed = true;
-        break;
+    if (!no_tw) {
+      if (next_t > tw_per_target(target_idx, 1)) {
+        next_t = tw_per_target(target_idx, 1);
+        delta_t = next_t - t;
+        if (delta_t < 0) {
+          repair_failed = true;
+          break;
+        }
+        X(seq_idx, 2) = delta_t;
+      } else if (next_t < tw_per_target(target_idx, 0)) {
+        next_t = tw_per_target(target_idx, 0);
+        delta_t = next_t - t;
+        X(seq_idx, 2) = delta_t;
       }
-      X(seq_idx, 2) = delta_t;
-    } else if (next_t < tw_per_target(target_idx, 0)) {
-      next_t = tw_per_target(target_idx, 0);
-      delta_t = next_t - t;
-      X(seq_idx, 2) = delta_t;
     }
 
     next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
@@ -113,15 +116,22 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
         next_t = t + delta_t;
 
-        if (next_t > tw_per_target(target_idx, 1)) {
-          next_t = tw_per_target(target_idx, 1);
-          delta_t = next_t - t;
-          if (delta_t < 0) {
-            throw std::runtime_error("Projection of delta t failed in repair");
+        if (no_tw) {
+          if (next_t < t) {
+            next_t = t;
+            delta_t = 0.;
           }
-        } else if (next_t < tw_per_target(target_idx, 0)) {
-          next_t = tw_per_target(target_idx, 0);
-          delta_t = next_t - t;
+        } else {
+          if (next_t > tw_per_target(target_idx, 1)) {
+            next_t = tw_per_target(target_idx, 1);
+            delta_t = next_t - t;
+            if (delta_t < 0) {
+              throw std::runtime_error("Projection of delta t failed in repair");
+            }
+          } else if (next_t < tw_per_target(target_idx, 0)) {
+            next_t = tw_per_target(target_idx, 0);
+            delta_t = next_t - t;
+          }
         }
         X(seq_idx, 2) = delta_t;
       }
@@ -131,7 +141,11 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         break;
       }
 
-      cost += next_t - tw_per_target(target_idx, 0);
+      if (no_tw && seq_idx == num_targets - 1) {
+        cost = next_t;
+      } else {
+        cost += next_t - tw_per_target(target_idx, 0);
+      }
     } else {
       next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
       double dist = (next_pos - pos).norm();
@@ -143,20 +157,42 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         continue;
       }
 
-      // Check if travel is feasible to next_rel_pos at end of time window
-      next_pos = q_trj_per_target[target_idx](tw_per_target(target_idx, 1)) + next_rel_pos;
-      dist = (next_pos - pos).norm();
-      if (dist > vmax*delta_t) {
-        // Travel is infeasible even to end of time window
-        repair_failed = true;
-        break;
+      double t_high;
+      double t_high_dist;
+
+      if (no_tw) {
+        bool found_ub = false;
+        t_high = 2*t;
+        for (int i = 0; i < 100; ++i) {
+          // Check if travel is feasible to next_pos
+          next_pos = q_trj_per_target[target_idx](t_high);
+          dist = (next_pos - pos).norm();
+          if (dist <= vmax*delta_t) {
+            found_ub = true;
+            t_high_dist = dist;
+            break;
+          }
+          t_high *= 2;
+        }
+        if (!found_ub) {
+          throw std::runtime_error("Did not find upper bound for bisection");
+        }
+      } else {
+        // Check if travel is feasible to next_rel_pos at end of time window
+        next_pos = q_trj_per_target[target_idx](tw_per_target(target_idx, 1)) + next_rel_pos;
+        dist = (next_pos - pos).norm();
+        if (dist > vmax*delta_t) {
+          // Travel is infeasible even to end of time window
+          repair_failed = true;
+          break;
+        }
+        t_high = tw_per_target(target_idx, 1);
+        t_high_dist = dist;
       }
 
       // Run bisection to find earliest time such that interception is feasible
       double t_low = next_t;
-      double t_high = tw_per_target(target_idx, 1);
       int num_bisection_iter = 10;
-      double t_high_dist = dist;
       for (int bisection_iter = 0; bisection_iter < num_bisection_iter; ++bisection_iter) {
         double t_mid = 0.5*(t_low + t_high);
         delta_t = t_mid - t;
@@ -184,20 +220,23 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     pos = next_pos;
   }
   if (repair_failed) {
+    if (no_tw) {
+      throw std::runtime_error("Repair failed and no time windows");
+    }
     cost = std::numeric_limits<double>::infinity();
   }
   return repair_failed;
 }
 
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, Ref<Vector1d> cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, Ref<Vector1d> cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw) {
   double tmp_cost = 0.;
-  bool repair_failed = repair_chromosome(X, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, tmp_cost, dubins, rho, max_newton_iter_for_success_repair, params);
+  bool repair_failed = repair_chromosome(X, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, tmp_cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw);
   cost(0) = tmp_cost;
   return repair_failed;
 }
 
 // next_heading is Ref<Vector1d> rather than double& so I can test in python
-double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const CppSpline &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double radius, double theta, double t, double vmax_agent, double rho, double vmax_target, int &max_bisection_iter_for_success_transformation) {
+double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const ExtendedCppSpline &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double radius, double theta, double t, double vmax_agent, double rho, double vmax_target, int &max_bisection_iter_for_success_transformation, bool no_tw) {
   Vector2d next_rel_pos = radius*Vector2d(cos(theta), sin(theta));
 
   Vector2d pos_t = q_trj(t) + next_rel_pos;
@@ -212,8 +251,10 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
   // double t_min = tw_start;
   // double t_max = tw_end;
 
-  t_min = std::max(t_min, tw_start);
-  t_max = std::min(t_max, tw_end);
+  if (!no_tw) {
+    t_min = std::max(t_min, tw_start);
+    t_max = std::min(t_max, tw_end);
+  }
 
   Vector2d pos_min = q_trj(t_min) + next_rel_pos;
   turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_min(0), pos_min(1), rho);
@@ -258,7 +299,7 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
   return std::numeric_limits<double>::infinity();
 }
 
-bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, double &cost, const Ref<const VectorXd> &speed_upper_bounds, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params) {
+bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, double &cost, const Ref<const VectorXd> &speed_upper_bounds, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw) {
   int num_targets = tw_per_target.rows();
 
   double t = 0;
@@ -275,11 +316,11 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
     if (made_change) {
       // Changing previous delta_t values may make next interception infeasible. If so, repair
       double tmp_cost;
-      std::vector<CppSpline> tmp_q_trj;
+      std::vector<ExtendedCppSpline> tmp_q_trj;
       tmp_q_trj.push_back(q_trj_per_target[target_idx]);
       MatrixXd tmp_chromosome = X.block(seq_idx, 0, 1, gene_size);
       tmp_chromosome(0, 0) = 0;
-      bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), target_radii.segment(target_idx, 1), tmp_q_trj, pos, heading, vmax, tmp_cost, true, rho, max_newton_iter_for_success_repair, params);
+      bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), target_radii.segment(target_idx, 1), tmp_q_trj, pos, heading, vmax, tmp_cost, true, rho, max_newton_iter_for_success_repair, params, no_tw);
       if (repair_failed) {
         cost = std::numeric_limits<double>::infinity();
         return false;
@@ -316,7 +357,9 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
         next_pos = q_trj_per_target[target_idx](next_t);
 
         // Meeting pattern
-        cost += next_t - tw_per_target(target_idx, 0);
+        if (!no_tw) {
+          cost += next_t - tw_per_target(target_idx, 0);
+        }
         t = next_t;
         pos = next_pos;
         heading = next_heading(0);
@@ -326,7 +369,7 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
       // Catch-up pattern
     }
 
-    double next_t = find_earliest_arrival_time_dubins(next_pos, next_heading, q_trj_per_target[target_idx], pos, heading, tw_per_target(target_idx, 0), tw_per_target(target_idx, 1), target_radii(target_idx), theta, t, vmax, rho, speed_upper_bounds(target_idx), max_bisection_iter_for_success_transformation);
+    double next_t = find_earliest_arrival_time_dubins(next_pos, next_heading, q_trj_per_target[target_idx], pos, heading, tw_per_target(target_idx, 0), tw_per_target(target_idx, 1), target_radii(target_idx), theta, t, vmax, rho, speed_upper_bounds(target_idx), max_bisection_iter_for_success_transformation, no_tw);
     if (std::isinf(next_t)) {
       // std::cout << "Transformation failed on seq_idx " << seq_idx << std::endl;
       return false;
@@ -337,7 +380,11 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
 
     // Update cost, time, and position
     // Assume dubins
-    cost += next_t - tw_per_target(target_idx, 0);
+    if (no_tw && seq_idx == num_targets - 1) {
+      cost = next_t;
+    } else {
+      cost += next_t - tw_per_target(target_idx, 0);
+    }
     t = next_t;
     pos = next_pos;
     heading = next_heading(0);
@@ -345,7 +392,7 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
   return true;
 }
 
-bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params) {
+bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw) {
   int num_targets = tw_per_target.rows();
 
   double t = 0;
@@ -360,11 +407,11 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     if (seq_idx != 0) {
       // Changing previous delta_t values may make next interception infeasible. If so, repair
       double tmp_cost;
-      std::vector<CppSpline> tmp_q_trj;
+      std::vector<ExtendedCppSpline> tmp_q_trj;
       tmp_q_trj.push_back(q_trj_per_target[target_idx]);
       MatrixXd tmp_chromosome = X.block(seq_idx, 0, 1, gene_size);
       tmp_chromosome(0, 0) = 0;
-      bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), target_radii.segment(target_idx, 1), tmp_q_trj, pos, 0., vmax, tmp_cost, false, 0., max_newton_iter_for_success_repair, params);
+      bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), target_radii.segment(target_idx, 1), tmp_q_trj, pos, 0., vmax, tmp_cost, false, 0., max_newton_iter_for_success_repair, params, no_tw);
       if (repair_failed) {
         cost = std::numeric_limits<double>::infinity();
         return false;
@@ -386,7 +433,12 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
       double dist = (next_pos - pos).norm();
       double deriv = (next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t));
       // Limit step size to avoid going outside time window
-      double step = std::min(std::max(-deriv, tw_per_target(target_idx, 0) - next_t), tw_per_target(target_idx, 1) - next_t);
+      double step;
+      if (no_tw) {
+        step = std::min(std::max(-deriv, tw_per_target(target_idx, 0) - next_t), tw_per_target(target_idx, 1) - next_t);
+      } else {
+        step = -deriv;
+      }
       double step_size = step/(-deriv);
 
       double b = 0.01; // From Zac's class (he mentioned to set b between 1e-4 and 0.1)
@@ -424,7 +476,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
   return true;
 }
 
-void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double vmax, const std::vector<CppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii) {
+void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double vmax, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii) {
   int num_targets = tw_per_target.rows();
   double t = 0.;
   Vector2d pos = p0;
@@ -448,7 +500,7 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
   }
 }
 
-void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<CppSpline> &q_trj_per_target, const Ref<const RowMatrixXd> &tw_per_target) {
+void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const RowMatrixXd> &tw_per_target) {
   #pragma omp parallel for
   for (int target_idx = 0; target_idx < tw_per_target.rows(); ++target_idx) {
     // Need to evaluate at three points to fit a quadratic
@@ -511,7 +563,7 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<CppSpl
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, bool no_tw) {
   std::vector<std::pair<double, double>> cost_vs_time;
   
   auto timer_start = std::chrono::high_resolution_clock::now();
@@ -522,10 +574,10 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   int num_targets = tw_per_target.rows();
 
-  // I'm doing this because I'm worried about the GIL
-  std::vector<CppSpline> q_trj_per_target;
+  // I'm doing this regardless of whether there are time windows because I'm worried about the GIL
+  std::vector<ExtendedCppSpline> q_trj_per_target;
   for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
-    q_trj_per_target.push_back(CppSpline(q_trj_per_target_python[target_idx]));
+    q_trj_per_target.push_back(ExtendedCppSpline(q_trj_per_target_python[target_idx].get_knots(), q_trj_per_target_python[target_idx].get_coeffs(), tw_per_target(target_idx, 0), tw_per_target(target_idx, 1)));
   }
 
   bool dubins = rho != 0;
@@ -533,7 +585,14 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   VectorXd speed_upper_bounds(1);
   if (dubins) {
     speed_upper_bounds = VectorXd(num_targets);
+    // Whether or not time windows are a constraint in the problem, the way the instances are generated,
+    // we have targets that move along a straight line, and then a cubic B-spline, then a straight line,
+    // and the time windows denote where they have each motion pattern
     get_speed_upper_bounds(speed_upper_bounds, q_trj_per_target, tw_per_target);
+
+    if (speed_upper_bounds.maxCoeff() > vmax) {
+      throw std::runtime_error("Max speed of some target is larger than agent speed");
+    }
   }
 
   int pop_size = initial_costs.size();
@@ -579,18 +638,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   for (int i = 0; i < pop_size; ++i) {
     population1[i] = initial_population.block(num_targets*i, 0, num_targets, gene_size);
     // check_chromosome_feasible(population1[i], tw_per_target, p0, vmax, q_trj_per_target, target_radii);
-
-    // Don't need to run the repairs now because we assume those have been run in python
-    /*
-    if (dubins) {
-      double cost;
-      if (repair_chromosome(population1[i], tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params)) {
-        population_costs1[i] = std::numeric_limits<double>::infinity();
-      } else {
-        population_costs1[i] = cost;
-      }
-    }
-    */
   }
   cost_vs_time.push_back(std::pair<double, double>(0., Map<VectorXd>(population_costs1.data(), population_costs1.size()).minCoeff()));
   int num_finite_cost = 0;
@@ -686,16 +733,22 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
           int seq_idx = mutation_operator3_seq_idx_distribution(rngs_per_thread[omp_get_thread_num()]);
           double raw_sample = mutation_operator3_delta_t_distribution(rngs_per_thread[omp_get_thread_num()]);
           int target_idx = Xnew(seq_idx, 0);
-          double min_t = tw_per_target(target_idx, 0);
-          double max_t = tw_per_target(target_idx, 1);
-          double delta_t = (max_t - min_t)*raw_sample;
+          double delta_t;
+          if (no_tw) {
+            double max_delta_t = 108; // TODO: if Yulong answers my question, replace this
+            delta_t = max_delta_t*raw_sample;
+          } else {
+            double min_t = tw_per_target(target_idx, 0);
+            double max_t = tw_per_target(target_idx, 1);
+            delta_t = (max_t - min_t)*raw_sample;
+          }
           Xnew(seq_idx, 2) = delta_t;
         }
       }
 
       // Repair to restore feasibility
       double cost = 0.;
-      bool repair_failed = repair_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params);
+      bool repair_failed = repair_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw);
       if (repair_failed || cost >= (*population_costs)[chromosome_idx]) {
         (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
@@ -710,9 +763,13 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       // Transformation to reduce cost
       bool success;
       if (dubins) {
-        success = transform_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+        success = transform_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
       } else {
-        success = false; // transform_chromosome_no_dubins(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+        if (no_tw) {
+          success = transform_chromosome_no_dubins(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
+        } else {
+          success = false;
+        }
       }
       if (success && cost < (*updated_population_costs)[chromosome_idx]) {
         (*updated_population)[chromosome_idx] = Xnew;
@@ -750,12 +807,12 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
               MatrixXd local_modification = (*updated_population)[chromosome_idx];
               local_modification(gene_idx, 1) = new_theta;
 
-              bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params);
+              bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw);
               if (!repair_failed) {
                 double tmp_cost;
                 bool transformation_succeeded;
                 if (dubins) {
-                  transformation_succeeded = transform_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+                  transformation_succeeded = transform_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
                 } else {
                   transformation_succeeded = false; // transform_chromosome_no_dubins(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
                 }
@@ -780,15 +837,19 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
               MatrixXd local_modification = (*updated_population)[chromosome_idx];
               local_modification(gene_idx, 1) = new_theta;
 
-              bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params);
+              bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw);
               if (!repair_failed && new_cost < (*updated_population_costs)[chromosome_idx]) {
                 double tmp_cost;
                 bool transformation_succeeded;
                 MatrixXd tmp_local_modification = local_modification;
                 if (dubins) {
-                  transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+                  transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
                 } else {
-                  transformation_succeeded = false; // transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+                  if (no_tw) {
+                    transformation_succeeded = transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
+                  } else {
+                    transformation_succeeded = false;
+                  }
                 }
                 if (transformation_succeeded && tmp_cost < new_cost) {
                   (*updated_population)[chromosome_idx] = tmp_local_modification;
@@ -819,13 +880,13 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
             local_modifications[sample_idx] = (*updated_population)[chromosome_idx];
             local_modifications[sample_idx](gene_idx, 1) = new_theta;
 
-            bool repair_failed = repair_chromosome(local_modifications[sample_idx], tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params);
+            bool repair_failed = repair_chromosome(local_modifications[sample_idx], tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw);
 
             if (!(repair_failed || new_cost >= (*updated_population_costs)[chromosome_idx])) {
               if (dubins) {
                 double tmp_cost;
                 MatrixXd tmp_local_modification = local_modifications[sample_idx];
-                bool transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params);
+                bool transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
                 if (transformation_succeeded && tmp_cost < new_cost) {
                   local_modification_costs[sample_idx] = tmp_cost;
                 } else {
@@ -912,7 +973,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       selected_pts_per_target(target_idx, 2) = pos(1);
       selected_pts_per_target(target_idx, 3) = heading;
 
-      if (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4) {
+      if (!no_tw && (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4)) {
         throw std::runtime_error("t out of window");
       }
     }
@@ -929,7 +990,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       selected_pts_per_target(target_idx, 1) = pos(0);
       selected_pts_per_target(target_idx, 2) = pos(1);
 
-      if (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4) {
+      if (!no_tw && (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4)) {
         throw std::runtime_error("t out of window");
       }
     }
