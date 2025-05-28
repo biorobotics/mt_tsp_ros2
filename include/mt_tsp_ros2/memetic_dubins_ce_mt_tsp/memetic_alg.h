@@ -335,9 +335,9 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
 
     double theta = X(seq_idx, 1);
     double delta_t = X(seq_idx, 2);
+    double next_t = t + delta_t;
 
     if (seq_idx != num_targets - 1) {
-      double next_t = t + delta_t;
       // Check the encounter pattern to the target at seq_idx + 1. If catchup, then optimize the arrival time to target at seq_idx.
       // If meeting, don't optimize the arrival time. The following method of determining the encounter pattern was obtained
       // from correspondence with the authors
@@ -373,12 +373,18 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
       // Catch-up pattern
     }
 
-    double next_t = find_earliest_arrival_time_dubins(next_pos, next_heading, q_trj_per_target[target_idx], pos, heading, tw_per_target(target_idx, 0), tw_per_target(target_idx, 1), target_radii(target_idx), theta, t, vmax, rho, speed_upper_bounds(target_idx), max_bisection_iter_for_success_transformation, no_tw);
-    if (std::isinf(next_t)) {
-      // std::cout << "Transformation failed on seq_idx " << seq_idx << std::endl;
+    double next_t_tmp = find_earliest_arrival_time_dubins(next_pos, next_heading, q_trj_per_target[target_idx], pos, heading, tw_per_target(target_idx, 0), tw_per_target(target_idx, 1), target_radii(target_idx), theta, t, vmax, rho, speed_upper_bounds(target_idx), max_bisection_iter_for_success_transformation, no_tw);
+    if (std::isfinite(next_t_tmp)) {
+      next_t = next_t_tmp;
+      delta_t = next_t - t;
+    } else {
+      cost = std::numeric_limits<double>::infinity();
       return false;
+      // Comment the above two lines if we want to continue the transformation on subsequent targets even if bisection failed.
+      // However, I tried this on a 50 target instance and it brought the final cost from 522.868936 to 789.149723
+      next_pos = q_trj_per_target[target_idx](next_t);
+      next_heading(0) = tmp_next_heading;
     }
-    delta_t = next_t - t;
     X(seq_idx, 2) = delta_t;
 
     // Update cost, time, and position
