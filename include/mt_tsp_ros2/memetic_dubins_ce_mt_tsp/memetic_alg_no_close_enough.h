@@ -219,7 +219,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   if (repair_failed) {
     cost = std::numeric_limits<double>::infinity();
     if (no_tw) {
-      throw std::runtime_error("Repair failed and no time windows");
+      // throw std::runtime_error("Repair failed and no time windows");
     }
   }
   final_heading = heading;
@@ -240,8 +240,6 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
 
   RowMatrixXd turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_t(0), pos_t(1), rho);
   double length = turns.col(1).sum();
-
-  double length_min = length;
 
   double t_min = t + length/(vmax_agent + vmax_target);
   double t_max = t + length/(vmax_agent - vmax_target);
@@ -266,13 +264,52 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
   double delta_max = length - vmax_agent*(t_max - t);
   if (delta_min*delta_max > 0) {
     if (no_tw && !CC_detected) {
+      // TODO: comment this out if doing runtime comparison experiments
       /*
-      std::cout << t << " " << t_min << " " << t_max << " " << delta_min << " " << delta_max << " " << vmax_target << std::endl;
-      std::cout << pos_min.transpose() << std::endl;
-      std::cout << pos_max.transpose() << std::endl;
-      std::cout << "turns" << std::endl;
-      std::cout << turns << std::endl;
-      throw std::runtime_error("Transformation bisection no bracket and no CC path detected");
+      double dt = 1e-3;
+      bool found_CC = false;
+      bool found_sign_change = false;
+      double prev_delta = delta_min;
+      double prev_prev_CC = true;
+      double prev_CC = true;
+      double prev_change_in_delta = 0.;
+      for (double t_test = t + dt; t_test < t_max; t_test += dt) {
+        Vector2d pos_test = q_trj(t_test);
+        Vector2d deriv_test = q_trj.derivatives(t_test);
+        if (deriv_test.norm() > vmax_target) {
+          throw std::runtime_error("Target speed larger than computed max");
+        }
+        RowMatrixXd turns_test = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_test(0), pos_test(1), rho);
+        bool is_CC = turns_test(1, 0) != 0;
+        if (is_CC && !found_CC) {
+          std::cout << "Found CC" << std::endl;
+        }
+        found_CC |= is_CC;
+        double length_test = turns_test.col(1).sum();
+        double delta_test = length_test - vmax_agent*(t_test - t);
+        // std::cout << t_test << " " << delta_test << std::endl;
+        double change_in_delta = delta_test - prev_delta;
+        if (!prev_prev_CC && !prev_CC && !is_CC && change_in_delta*prev_change_in_delta < 0) {
+          throw std::runtime_error("Bisection query function is not monotonic outside turning circles");
+        }
+        if (prev_CC && is_CC && change_in_delta*prev_change_in_delta < 0) {
+          found_sign_change = true;
+        }
+        prev_prev_CC = prev_CC;
+        prev_CC = is_CC;
+        prev_change_in_delta = delta_test - prev_delta;
+        prev_delta = delta_test;
+      }
+
+      if (!found_CC) {
+        std::cout << tw_start << " " << tw_end << " " << t_min << " " << t_max << std::endl;
+        throw std::runtime_error("No bracket and target trajectory does not pass through turning circle");
+      }
+
+      if (!found_sign_change) {
+        throw std::runtime_error("No bracket and did not find sign change of bisection function when destination point is in turning circle");
+      }
+      std::cout << "No bracket and all tests passed" << std::endl;
       */
     }
     // throw std::runtime_error("No bracket"); 
@@ -414,65 +451,21 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
 }
 
 void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const RowMatrixXd> &tw_per_target) {
+  upper_bounds.setConstant(2.);
+  /*
   #pragma omp parallel for
   for (int target_idx = 0; target_idx < tw_per_target.rows(); ++target_idx) {
-    // Need to evaluate at three points to fit a quadratic
-    double t1 = tw_per_target(target_idx, 0);
-    double t2 = tw_per_target(target_idx, 1);
-    double t3 = 0.5*t1 + 0.5*t2;
-
-    Matrix3d lhs;
-    lhs(0, 0) = t1*t1;
-    lhs(0, 1) = t1;
-    lhs(0, 2) = 1;
-
-    lhs(1, 0) = t2*t2;
-    lhs(1, 1) = t2;
-    lhs(1, 2) = 1;
-
-    lhs(2, 0) = t3*t3;
-    lhs(2, 1) = t3;
-    lhs(2, 2) = 1;
-
-    Matrix<double, 3, 2> rhs;
-    rhs.row(0) = q_trj_per_target[target_idx].derivatives(t1).transpose();
-    rhs.row(1) = q_trj_per_target[target_idx].derivatives(t2).transpose();
-    rhs.row(2) = q_trj_per_target[target_idx].derivatives(t3).transpose();
-
-    Matrix<double, 3, 2> coeffs = lhs.colPivHouseholderQr().solve(rhs);
-
-    // x dimension
-    double a = coeffs(0);
-    double b = coeffs(1);
-    double c = coeffs(2);
-    double t_crit = -b/(2*a);
-
-    double max_speed_x = std::max(std::abs(rhs(0, 0)), std::abs(rhs(1, 0)));
-    max_speed_x = std::max(max_speed_x, std::abs(q_trj_per_target[target_idx].derivatives(t_crit)(0))); // Unnecessary computation of derivative in all dimensions here, fix if this overall procedure is slow
-
-    // y dimension
-    a = coeffs(0);
-    b = coeffs(1);
-    c = coeffs(2);
-    t_crit = -b/(2*a);
-
-    double max_speed_y = std::max(std::abs(rhs(0, 1)), std::abs(rhs(1, 1)));
-    max_speed_y = std::max(max_speed_y, std::abs(q_trj_per_target[target_idx].derivatives(t_crit)(1))); // Unnecessary computation of derivative in all dimensions here, fix if this overall procedure is slow
-
-    upper_bounds(target_idx) = sqrt(max_speed_x*max_speed_x + max_speed_y*max_speed_y);
-
-    /*
     int num_sample = 100;
     for (int sample_idx = 0; sample_idx < num_sample; ++sample_idx) {
       double alpha = sample_idx/(double)num_sample;
-      double t = alpha*t2 + (1 - alpha)*t1;
+      double t = alpha*tw_per_target(target_idx, 0) + (1 - alpha)*tw_per_target(target_idx, 1);
       Vector2d deriv = q_trj_per_target[target_idx].derivatives(t);
       if (deriv.norm() > upper_bounds(target_idx)) {
-        std::cout << "Upper bound incorrect" << std::endl;
+        throw std::runtime_error("Upper bound incorrect");
       }
     }
-    */
   }
+  */
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
