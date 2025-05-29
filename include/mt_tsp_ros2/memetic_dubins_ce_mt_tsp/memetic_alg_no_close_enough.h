@@ -159,7 +159,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
       if (no_tw) {
         bool found_ub = false;
-        t_high = 2*t;
+        t_high = t + 1;
         delta_t = t_high - t;
         for (int i = 0; i < 100; ++i) {
           // Check if travel is feasible to next_pos
@@ -790,13 +790,17 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
     }
   } else {
     double t = 0;
-    Vector2d pos;
+    Vector2d pos = p0;
     for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
       int target_idx = Xbest(seq_idx, 0);
       double delta_t = Xbest(seq_idx, 1);
       t += delta_t;
       selected_pts_per_target(target_idx, 0) = t;
-      pos = q_trj_per_target[target_idx](t) ;
+      Vector2d next_pos = q_trj_per_target[target_idx](t);
+      if ((next_pos - pos).norm() > vmax*delta_t) {
+        throw std::runtime_error("Speed constraint violated when getting trajectory associated with best chromosome");
+      }
+      pos = next_pos;
       selected_pts_per_target(target_idx, 1) = pos(0);
       selected_pts_per_target(target_idx, 2) = pos(1);
 

@@ -37,6 +37,32 @@ std::vector<size_t> sort_indexes(const std::vector<T> &v) {
   return idx;
 }
 
+void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double vmax, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii, std::string error_prefix, bool no_tw, double t0) {
+  int num_targets = tw_per_target.rows();
+  double t = t0;
+  Vector2d pos = p0;
+  for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+    int target_idx = chromosome(seq_idx, 0);
+    double theta = chromosome(seq_idx, 1);
+    double delta_t = chromosome(seq_idx, 2);
+    t += delta_t;
+
+    if (!no_tw && (t < tw_per_target(target_idx, 0) || t > tw_per_target(target_idx, 1))) {
+      throw std::runtime_error(error_prefix + "time outside window");
+    }
+
+    Vector2d next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+    Vector2d next_pos = q_trj_per_target[target_idx](t) + next_rel_pos;
+    double dist = (next_pos - pos).norm();
+
+    if (dist > vmax*delta_t + 1e-4) {
+      throw std::runtime_error(error_prefix + "speed constraint violated");
+    }
+    pos = next_pos;
+  }
+}
+
+
 bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double &final_heading, double t0) {
   int num_targets = tw_per_target.rows();
 
@@ -162,7 +188,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
       if (no_tw) {
         bool found_ub = false;
-        t_high = 2*t;
+        t_high = t + 1;
         delta_t = t_high - t;
         for (int i = 0; i < 100; ++i) {
           // Check if travel is feasible to next_pos
@@ -232,26 +258,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
   /*
   if (!dubins && !repair_failed) {
-    std::cout << "Checking after repair" << std::endl;
-    double t = t0;
-    Vector2d pos = p0;
-    for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
-      int target_idx = X(seq_idx, 0);
-      double theta = X(seq_idx, 1);
-      double delta_t = X(seq_idx, 2);
-      t += delta_t;
-      Vector2d next_pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
-      std::cout << t << " " << next_pos.transpose() << std::endl;
-      if ((next_pos - pos).norm() > vmax*delta_t) {
-        std::cout << (next_pos - pos).norm() - vmax*delta_t << std::endl;
-        throw std::runtime_error("Speed constraint violated after repair");
-      }
-      pos = next_pos;
-
-      if (!no_tw && (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4)) {
-        throw std::runtime_error("t out of window");
-      }
-    }
+    check_chromosome_feasible(X, tw_per_target, p0, vmax, q_trj_per_target, target_radii, "After repair: ", no_tw, t0);
   }
   */
 
@@ -473,7 +480,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     Vector2d next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
 
     int max_gd_iter = 10;
-    int max_backtrack_iter = 3;
+    int max_backtrack_iter = 10;
     double next_t = t + delta_t;
     for (int gd_iter = 0; gd_iter < max_gd_iter; ++gd_iter) {
       next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
@@ -482,9 +489,9 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
       // Limit step size to avoid going outside time window
       double step;
       if (no_tw) {
-        step = std::min(std::max(-deriv, tw_per_target(target_idx, 0) - next_t), tw_per_target(target_idx, 1) - next_t);
-      } else {
         step = -deriv;
+      } else {
+        step = std::min(std::max(-deriv, tw_per_target(target_idx, 0) - next_t), tw_per_target(target_idx, 1) - next_t);
       }
       double step_size = step/(-deriv);
 
@@ -498,7 +505,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
         // Armijo rule.
         // Mutliply change in next_t by derivative to get expected change in cost.
         // We're checking if the actual cost reduction is at least b times the expected
-        if (dist_cand - dist <= b*deriv*step) {
+        if (dist_cand < vmax*(next_t_cand - t) && dist_cand - dist <= b*deriv*step) {
           next_t = next_t_cand;
           next_pos = next_pos_cand;
           reduction = true;
@@ -521,30 +528,6 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     pos = next_pos;
   }
   return true;
-}
-
-void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double vmax, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii) {
-  int num_targets = tw_per_target.rows();
-  double t = 0.;
-  Vector2d pos = p0;
-  for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
-    int target_idx = chromosome(seq_idx, 0);
-    double theta = chromosome(seq_idx, 1);
-    double delta_t = chromosome(seq_idx, 2);
-    t += delta_t;
-
-    if (t < tw_per_target(target_idx, 0) || t > tw_per_target(target_idx, 1)) {
-      throw std::runtime_error("chromosome infeasible");
-    }
-
-    Vector2d next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
-    Vector2d next_pos = q_trj_per_target[target_idx](t) + next_rel_pos;
-    double dist = (next_pos - pos).norm();
-    if (dist > vmax*delta_t + 1e-4) {
-      throw std::runtime_error("chromosome infeasible");
-    }
-    pos = next_pos;
-  }
 }
 
 void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const RowMatrixXd> &tw_per_target) {
@@ -640,7 +623,11 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   #pragma omp parallel for
   for (int i = 0; i < pop_size; ++i) {
     population1[i] = initial_population.block(num_targets*i, 0, num_targets, gene_size);
-    // check_chromosome_feasible(population1[i], tw_per_target, p0, vmax, q_trj_per_target, target_radii);
+    /*
+    if (!dubins) {
+      check_chromosome_feasible(population1[i], tw_per_target, p0, vmax, q_trj_per_target, target_radii, "After population member initialization: ", no_tw, 0.);
+    }
+    */
   }
   cost_vs_time.push_back(std::pair<double, double>(0., Map<VectorXd>(population_costs1.data(), population_costs1.size()).minCoeff()));
   int num_finite_cost = 0;
@@ -759,7 +746,11 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         continue;
       }
 
-      // check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target, p0, vmax, q_trj_per_target, target_radii);
+      /*
+      if (!dubins) {
+        check_chromosome_feasible(Xnew, tw_per_target, p0, vmax, q_trj_per_target, target_radii, "After repair2: ", no_tw, 0.);
+      }
+      */
 
       (*updated_population)[chromosome_idx] = Xnew;
       (*updated_population_costs)[chromosome_idx] = cost;
@@ -776,18 +767,17 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         }
       }
       if (success && cost < (*updated_population_costs)[chromosome_idx]) {
+        /*
+        if (!dubins) {
+          check_chromosome_feasible(Xnew, tw_per_target, p0, vmax, q_trj_per_target, target_radii, "After transformation: ", no_tw, 0.);
+        }
+        */
         (*updated_population)[chromosome_idx] = Xnew;
         (*updated_population_costs)[chromosome_idx] = cost;
         // std::cout << "transformation reduced cost" << std::endl;
       }
     }
-
-    /*
-    for (int chromosome_idx = 0; chromosome_idx < pop_size; ++chromosome_idx) {
-      check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target);
-    }
-    */
-    
+ 
     ++gen_idx;
     // -1 means don't run local search
     if (params.Tlp != -1 && gen_idx%params.Tlp == 0) {
@@ -858,6 +848,11 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
                   }
                 }
                 if (transformation_succeeded && tmp_cost < new_cost) {
+                  /*
+                  if (!dubins) {
+                    check_chromosome_feasible(tmp_local_modification, tw_per_target, p0, vmax, q_trj_per_target, target_radii, "After transformation in gradient-based local search: ", no_tw, 0.);
+                  }
+                  */
                   (*updated_population)[chromosome_idx] = tmp_local_modification;
                   (*updated_population_costs)[chromosome_idx] = tmp_cost;
                 } else {
@@ -890,20 +885,30 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
             bool repair_failed = repair_chromosome(local_modifications[sample_idx], tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw, final_heading, 0.);
 
             if (!(repair_failed || new_cost >= (*updated_population_costs)[chromosome_idx])) {
+              double tmp_cost;
+              MatrixXd tmp_local_modification = local_modifications[sample_idx];
+              bool transformation_succeeded;
               if (dubins) {
-                double tmp_cost;
-                MatrixXd tmp_local_modification = local_modifications[sample_idx];
-                bool transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
-                if (transformation_succeeded && tmp_cost < new_cost) {
-                  local_modification_costs[sample_idx] = tmp_cost;
+                transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
+              } else {
+                if (no_tw) {
+                  transformation_succeeded = transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
                 } else {
-                  local_modification_costs[sample_idx] = new_cost;
-                  local_modifications[sample_idx] = tmp_local_modification;
+                  transformation_succeeded = false;
                 }
+              }
+              if (transformation_succeeded && tmp_cost < new_cost) {
+                /*
+                if (!dubins) {
+                  check_chromosome_feasible(tmp_local_modification, tw_per_target, p0, vmax, q_trj_per_target, target_radii, "After transformation in sample-based local search: ", no_tw, 0.);
+                }
+                */
+                local_modifications[sample_idx] = tmp_local_modification;
+                local_modification_costs[sample_idx] = tmp_cost;
               } else {
                 local_modification_costs[sample_idx] = new_cost;
               }
-              // check_chromosome_feasible(local_modifications[sample_idx], tw_per_target);
+
             } else {
               local_modification_costs[sample_idx] = std::numeric_limits<double>::infinity();
             }
@@ -914,7 +919,6 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
           if (local_modification_costs[min_idx] < (*updated_population_costs)[chromosome_idx]) {
             (*updated_population)[chromosome_idx] = local_modifications[min_idx];
             (*updated_population_costs)[chromosome_idx] = local_modification_costs[min_idx];
-            // check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target, p0, vmax, q_trj_per_target, target_radii);
           }
         } // Sampling-based local search instead of gradient
       } // Pick a chromosome for local search
@@ -986,14 +990,18 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
     }
   } else {
     double t = 0;
-    Vector2d pos;
+    Vector2d pos = p0;
     for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
       int target_idx = Xbest(seq_idx, 0);
       double theta = Xbest(seq_idx, 1);
       double delta_t = Xbest(seq_idx, 2);
       t += delta_t;
       selected_pts_per_target(target_idx, 0) = t;
-      pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+      Vector2d next_pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+      if ((next_pos - pos).norm() > vmax*delta_t) {
+        throw std::runtime_error("Speed constraint violated when getting trajectory associated with best chromosome");
+      }
+      pos = next_pos;
       selected_pts_per_target(target_idx, 1) = pos(0);
       selected_pts_per_target(target_idx, 2) = pos(1);
 
