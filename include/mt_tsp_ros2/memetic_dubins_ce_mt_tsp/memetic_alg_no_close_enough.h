@@ -256,12 +256,16 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
   bool CC_detected = turns(1, 0) != 0;
   length = turns.col(1).sum();
   double delta_min = length - vmax_agent*(t_min - t);
+  bool min_CC = turns(1, 0) != 0;
+  double length_min = length;
 
   Vector2d pos_max = q_trj(t_max);
   turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_max(0), pos_max(1), rho);
   CC_detected |= turns(1, 0) != 0;
   length = turns.col(1).sum();
   double delta_max = length - vmax_agent*(t_max - t);
+  bool max_CC = turns(1, 0) != 0;
+  double length_max = length;
   if (delta_min*delta_max > 0) {
     if (no_tw && !CC_detected) {
       // TODO: comment this out if doing runtime comparison experiments
@@ -337,8 +341,12 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
     }
     if (delta*delta_min > 0) {
       t_min = t_mid;
+      min_CC = turns(1, 0) != 0;
+      length_min = length;
     } else {
       t_max = t_mid;
+      max_CC = turns(1, 0) != 0;
+      length_max = length;
     }
   }
   // throw std::runtime_error("Transformation method bisection ran out of iterations"); 
