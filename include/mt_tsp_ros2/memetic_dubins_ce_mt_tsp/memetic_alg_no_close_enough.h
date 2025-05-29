@@ -138,8 +138,8 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         break;
       }
 
-      if (no_tw && seq_idx == num_targets - 1) {
-        cost = next_t;
+      if (no_tw) {
+        cost += next_t;
       } else {
         cost += next_t - tw_per_target(target_idx, 0);
       }
@@ -412,7 +412,9 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
         next_pos = q_trj_per_target[target_idx](next_t);
 
         // Meeting pattern
-        if (!no_tw) {
+        if (no_tw) {
+          cost += next_t;
+        } else {
           cost += next_t - tw_per_target(target_idx, 0);
         }
 
@@ -441,8 +443,8 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
 
     // Update cost, time, and position
     // Assume dubins
-    if (no_tw && seq_idx == num_targets - 1) {
-      cost = next_t;
+    if (no_tw) {
+      cost += next_t;
     } else {
       cost += next_t - tw_per_target(target_idx, 0);
     }
