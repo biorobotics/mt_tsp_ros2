@@ -163,9 +163,10 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       if (no_tw) {
         bool found_ub = false;
         t_high = 2*t;
+        delta_t = t_high - t;
         for (int i = 0; i < 100; ++i) {
           // Check if travel is feasible to next_pos
-          next_pos = q_trj_per_target[target_idx](t_high);
+          next_pos = q_trj_per_target[target_idx](t_high) + next_rel_pos;
           dist = (next_pos - pos).norm();
           if (dist <= vmax*delta_t) {
             found_ub = true;
@@ -173,6 +174,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             break;
           }
           t_high *= 2;
+          delta_t = t_high - t;
         }
         if (!found_ub) {
           throw std::runtime_error("Did not find upper bound for bisection");
@@ -180,6 +182,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       } else {
         // Check if travel is feasible to next_rel_pos at end of time window
         next_pos = q_trj_per_target[target_idx](tw_per_target(target_idx, 1)) + next_rel_pos;
+        delta_t = tw_per_target(target_idx, 1) - t;
         dist = (next_pos - pos).norm();
         if (dist > vmax*delta_t) {
           // Travel is infeasible even to end of time window
