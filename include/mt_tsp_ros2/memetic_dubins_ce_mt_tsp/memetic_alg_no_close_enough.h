@@ -196,7 +196,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       for (int bisection_iter = 0; bisection_iter < num_bisection_iter; ++bisection_iter) {
         double t_mid = 0.5*(t_low + t_high);
         delta_t = t_mid - t;
-        next_pos = q_trj_per_target[target_idx](t_mid);
+        Vector2d pos_mid = q_trj_per_target[target_idx](t_mid);
         dist = (next_pos - pos).norm();
         if (dist > vmax*delta_t) {
           // Travel is infeasible
@@ -205,6 +205,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
           // Travel is feasible
           t_high = t_mid;
           t_high_dist = dist;
+          next_pos = pos_mid;
         }
       }
 
@@ -221,8 +222,8 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   }
   if (repair_failed) {
     cost = std::numeric_limits<double>::infinity();
-    if (no_tw) {
-      // throw std::runtime_error("Repair failed and no time windows");
+    if (no_tw && !dubins) {
+      throw std::runtime_error("Repair failed and no time windows or min turning radius");
     }
   }
   final_heading = heading;
