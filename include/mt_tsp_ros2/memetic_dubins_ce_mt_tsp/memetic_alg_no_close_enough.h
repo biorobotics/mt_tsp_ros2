@@ -197,7 +197,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         double t_mid = 0.5*(t_low + t_high);
         delta_t = t_mid - t;
         Vector2d pos_mid = q_trj_per_target[target_idx](t_mid);
-        dist = (next_pos - pos).norm();
+        dist = (pos_mid - pos).norm();
         if (dist > vmax*delta_t) {
           // Travel is infeasible
           t_low = t_mid;

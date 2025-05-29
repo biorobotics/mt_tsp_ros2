@@ -200,7 +200,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         double t_mid = 0.5*(t_low + t_high);
         delta_t = t_mid - t;
         Vector2d pos_mid = q_trj_per_target[target_idx](t_mid) + next_rel_pos;
-        dist = (next_pos - pos).norm();
+        dist = (pos_mid - pos).norm();
         if (dist > vmax*delta_t) {
           // Travel is infeasible
           t_low = t_mid;
@@ -211,7 +211,6 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
           next_pos = pos_mid;
         }
       }
-
       next_t = t_high;
 
       delta_t = t_high - t;
@@ -230,6 +229,32 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     cost = std::numeric_limits<double>::infinity();
   }
   final_heading = heading;
+
+  /*
+  if (!dubins && !repair_failed) {
+    std::cout << "Checking after repair" << std::endl;
+    double t = t0;
+    Vector2d pos = p0;
+    for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+      int target_idx = X(seq_idx, 0);
+      double theta = X(seq_idx, 1);
+      double delta_t = X(seq_idx, 2);
+      t += delta_t;
+      Vector2d next_pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+      std::cout << t << " " << next_pos.transpose() << std::endl;
+      if ((next_pos - pos).norm() > vmax*delta_t) {
+        std::cout << (next_pos - pos).norm() - vmax*delta_t << std::endl;
+        throw std::runtime_error("Speed constraint violated after repair");
+      }
+      pos = next_pos;
+
+      if (!no_tw && (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4)) {
+        throw std::runtime_error("t out of window");
+      }
+    }
+  }
+  */
+
   return repair_failed;
 }
 
@@ -1029,14 +1054,19 @@ void get_selected_pts(Ref<RowMatrixXd> selected_pts_per_target, const std::vecto
     }
   } else {
     double t = 0;
-    Vector2d pos;
+    Vector2d pos = p0;
+    std::cout << "Checking feasibility in get selected pts" << std::endl;
     for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
       int target_idx = X(seq_idx, 0);
       double theta = X(seq_idx, 1);
       double delta_t = X(seq_idx, 2);
       t += delta_t;
       selected_pts_per_target(target_idx, 0) = t;
-      pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+      Vector2d next_pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
+      if ((next_pos - pos).norm() > vmax*delta_t) {
+        throw std::runtime_error("Speed constraint violated in get selected pts");
+      }
+      pos = next_pos;
       selected_pts_per_target(target_idx, 1) = pos(0);
       selected_pts_per_target(target_idx, 2) = pos(1);
 
