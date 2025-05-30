@@ -7,8 +7,6 @@
 using namespace Eigen;
 typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
-namespace py = pybind11;
-
 class ExtendedCppSpline : public CppSpline {
   public:
     ExtendedCppSpline(const Ref<const VectorXd> &knots, const Ref<const RowMatrixXd> &coeffs, double tw_start, double tw_end) : CppSpline(knots, coeffs), tw_start(tw_start), tw_end(tw_end) {

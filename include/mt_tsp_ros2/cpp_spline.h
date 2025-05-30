@@ -6,8 +6,6 @@
 using namespace Eigen;
 typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
-namespace py = pybind11;
-
 class CppSpline {
   public:
     CppSpline(const Ref<const VectorXd> &knots, const Ref<const RowMatrixXd> &coeffs) : knots(knots), coeffs(coeffs) {
