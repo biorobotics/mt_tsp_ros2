@@ -110,7 +110,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
 
         // std::cout << delta_t << " desired length " << vmax*delta_t << " shortest path length " << turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho).col(1).sum() << std::endl;
-        RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-2);
+        RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, params.elongation_tol);
         if (std::isfinite(turns(0, 0))) {
           max_newton_iter_for_success_repair = std::max(newton_iter, max_newton_iter_for_success_repair);
           newton_succeeded = true;
@@ -973,7 +973,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       selected_pts_per_target(target_idx, 0) = t;
       next_pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
 
-      RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-2);
+      RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, params.elongation_tol);
       if (std::isinf(turns(0, 0))) {
         throw std::runtime_error("elongated path generation failed");
       }
@@ -1031,7 +1031,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   return cost_vs_time_mat;
 }
 
-void get_selected_pts(Ref<RowMatrixXd> selected_pts_per_target, const std::vector<CircularTrajectory> q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const Ref<const MatrixXd> &X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, bool no_tw) {
+void get_selected_pts(Ref<RowMatrixXd> selected_pts_per_target, const std::vector<CircularTrajectory> q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const Ref<const MatrixXd> &X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, bool no_tw, double elongation_tol) {
   bool dubins = rho != 0.;
   int num_targets = tw_per_target.rows();
   if (dubins) {
@@ -1047,7 +1047,7 @@ void get_selected_pts(Ref<RowMatrixXd> selected_pts_per_target, const std::vecto
       selected_pts_per_target(target_idx, 0) = t;
       next_pos = q_trj_per_target[target_idx](t) + target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
 
-      RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-2);
+      RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, elongation_tol);
       if (std::isinf(turns(0, 0))) {
         throw std::runtime_error("elongated path generation failed");
       }
