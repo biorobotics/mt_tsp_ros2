@@ -6,6 +6,7 @@
 #include <set>
 #include "mt_tsp_ros2/cpp_spline.h"
 #include "mt_tsp_ros2/extended_cpp_spline.h"
+#include "mt_tsp_ros2/circular_trajectory.h"
 #include "mt_tsp_ros2/elongate_one_sided_dubins_path.h"
 #include "mt_tsp_ros2/memetic_dubins_ce_mt_tsp/memetic_alg_params.h"
 #include <iomanip>
@@ -38,7 +39,7 @@ std::vector<size_t> sort_indexes(const std::vector<T> &v) {
   return idx;
 }
 
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double &final_heading, double t0) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double &final_heading, double t0) {
   int num_targets = tw_per_target.rows();
 
   bool repair_failed = false;
@@ -230,7 +231,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   return repair_failed;
 }
 
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, Ref<Vector1d> cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, Ref<Vector1d> cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw) {
   double tmp_cost = 0.;
   double final_heading;
   bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, vmax, tmp_cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, 0.);
@@ -239,7 +240,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 }
 
 // next_heading is Ref<Vector1d> rather than double& so I can test in python
-double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const ExtendedCppSpline &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double t, double vmax_agent, double rho, double vmax_target, int &max_bisection_iter_for_success_transformation, bool no_tw) {
+double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const CircularTrajectory &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double t, double vmax_agent, double rho, double vmax_target, int &max_bisection_iter_for_success_transformation, bool no_tw) {
   Vector2d pos_t = q_trj(t);
 
   RowMatrixXd turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_t(0), pos_t(1), rho);
@@ -360,7 +361,7 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
   return std::numeric_limits<double>::infinity();
 }
 
-bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, double &cost, const Ref<const VectorXd> &speed_upper_bounds, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw) {
+bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, double &cost, const Ref<const VectorXd> &speed_upper_bounds, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw) {
   int num_targets = tw_per_target.rows();
 
   double t = 0;
@@ -374,7 +375,7 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
 
     // Changing previous delta_t values may make next interception infeasible. If so, repair
     double tmp_cost;
-    std::vector<ExtendedCppSpline> tmp_q_trj;
+    std::vector<CircularTrajectory> tmp_q_trj;
     tmp_q_trj.push_back(q_trj_per_target[target_idx]);
     MatrixXd tmp_chromosome = X.block(seq_idx, 0, 1, gene_size);
     tmp_chromosome(0, 0) = 0;
@@ -470,7 +471,7 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
   }
 }
 
-void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const RowMatrixXd> &tw_per_target) {
+void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const RowMatrixXd> &tw_per_target) {
   upper_bounds.setConstant(2.);
   /*
   #pragma omp parallel for
@@ -489,7 +490,7 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<Extend
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, bool no_tw) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CircularTrajectory> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, bool no_tw) {
   std::vector<std::pair<double, double>> cost_vs_time;
   
   auto timer_start = std::chrono::high_resolution_clock::now();
@@ -501,9 +502,9 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   int num_targets = tw_per_target.rows();
 
   // I'm doing this regardless of whether there are time windows because I'm worried about the GIL
-  std::vector<ExtendedCppSpline> q_trj_per_target;
+  std::vector<CircularTrajectory> q_trj_per_target;
   for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
-    q_trj_per_target.push_back(ExtendedCppSpline(q_trj_per_target_python[target_idx].get_knots(), q_trj_per_target_python[target_idx].get_coeffs(), tw_per_target(target_idx, 0), tw_per_target(target_idx, 1)));
+    q_trj_per_target.push_back(CircularTrajectory(q_trj_per_target_python[target_idx]));
   }
 
   bool dubins = rho != 0;
@@ -825,7 +826,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   return cost_vs_time_mat;
 }
 
-void get_selected_pts(Ref<RowMatrixXd> selected_pts_per_target, const std::vector<ExtendedCppSpline> q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const Ref<const MatrixXd> &X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, bool no_tw) {
+void get_selected_pts(Ref<RowMatrixXd> selected_pts_per_target, const std::vector<CircularTrajectory> q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const Ref<const MatrixXd> &X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, bool no_tw) {
   bool dubins = rho != 0.;
   int num_targets = tw_per_target.rows();
   if (dubins) {
