@@ -44,6 +44,10 @@ PYBIND11_MODULE(memetic_dubins_ce_mt_tsp, m) {
     .def(py::init<const Ref<const Vector2d>&, double, double, double>())
     .def("__call__", &CircularTrajectory::operator())
     .def("derivatives", &CircularTrajectory::derivatives)
+    .def("get_center", &CircularTrajectory::get_center)
+    .def("get_rad", &CircularTrajectory::get_rad)
+    .def("get_omega", &CircularTrajectory::get_omega)
+    .def("get_theta0", &CircularTrajectory::get_theta0)
     ;
 
   py::bind_vector<std::vector<py::object>>(m, "VectorOfPyObjects");

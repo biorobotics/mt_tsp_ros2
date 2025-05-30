@@ -19,6 +19,22 @@ class CircularTrajectory {
       return Vector2d(-rad*sin(theta)*omega, rad*cos(theta)*omega);
     }
 
+    Vector2d get_center() {
+      return center;
+    }
+
+    double get_rad() {
+      return rad;
+    }
+
+    double get_omega() {
+      return omega;
+    }
+
+    double get_theta0() {
+      return theta0;
+    }
+
   protected:
     Vector2d center;
     double rad;
