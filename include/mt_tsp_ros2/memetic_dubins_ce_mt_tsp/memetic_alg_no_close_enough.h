@@ -311,6 +311,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 }
 
 // next_heading is Ref<Vector1d> rather than double& so I can test in python
+// double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const CircularTrajectory &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double t, double vmax_agent, double rho, double vmax_target, int &max_bisection_iter_for_success_transformation, bool no_tw, std::vector<Vector2d> &delta_vs_iterations) {
 double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const CircularTrajectory &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double t, double vmax_agent, double rho, double vmax_target, int &max_bisection_iter_for_success_transformation, bool no_tw) {
   Vector2d pos_t = q_trj(t);
 
@@ -405,6 +406,7 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
     CC_detected |= turns(1, 0) != 0;
     double length = turns.col(1).sum();
     double delta = length - vmax_agent*(t_mid - t);
+    // delta_vs_iterations.push_back(Vector2d(bisection_iter, delta));
     if (std::abs(delta) < bisection_tol) {
       next_heading(0) = heading;
       for (int row = 0; row < turns.rows(); ++row) {
@@ -499,6 +501,8 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
       // Catch-up pattern
     }
 
+    // std::vector<Vector2d> delta_vs_iterations;
+    // double next_t_tmp = find_earliest_arrival_time_dubins(next_pos, next_heading, q_trj_per_target[target_idx], pos, heading, tw_per_target(target_idx, 0), tw_per_target(target_idx, 1), t, vmax, rho, speed_upper_bounds(target_idx), max_bisection_iter_for_success_transformation, no_tw, delta_vs_iterations);
     double next_t_tmp = find_earliest_arrival_time_dubins(next_pos, next_heading, q_trj_per_target[target_idx], pos, heading, tw_per_target(target_idx, 0), tw_per_target(target_idx, 1), t, vmax, rho, speed_upper_bounds(target_idx), max_bisection_iter_for_success_transformation, no_tw);
     if (std::isfinite(next_t_tmp)) {
       next_t = next_t_tmp;
