@@ -582,12 +582,15 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<Circul
 }
 
 
+// void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const VectorXd> &target_radii, bool no_tw, double t0, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, const Ref<const VectorXd> &speed_upper_bounds, int &max_bisection_iter_for_success_transformation, std::vector<Vector2d> &cost_vs_iterations) {
 void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const VectorXd> &target_radii, bool no_tw, double t0, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, const Ref<const VectorXd> &speed_upper_bounds, int &max_bisection_iter_for_success_transformation) {
   double theta = X(gene_idx, 1);
   bool dubins = rho != 0.;
 
   // Gradient-based local search
   bool improvement = true;
+  // int gd_iter = 0;
+  // cost_vs_iterations.push_back(Vector2d(gd_iter, cost));
   while (improvement) {
     int max_backtrack_fd = 3;
     double delta_theta = 0.01; // To compute approximate gradient
@@ -617,9 +620,6 @@ void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, co
         }
 
         break;
-      }
-      if (!no_tw) {
-        throw std::runtime_error("Failed to compute derivative for gradient-based local search even though there are no time windows");
       }
       delta_theta *= 0.1;
     }
@@ -670,6 +670,8 @@ void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, co
       }
       gd_step_size *= 0.1;
     }
+    // ++gd_iter;
+    // cost_vs_iterations.push_back(Vector2d(gd_iter, cost));
   }
 }
 
@@ -971,6 +973,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         double theta = (*updated_population)[chromosome_idx](gene_idx, 1);
         // Only run gradient-based local search on feasible solutions (only relevant if I do Dubins close-enough)
         if (std::isfinite((*updated_population_costs)[chromosome_idx]) && local_search_grad_vs_sampling_distribution(rngs_per_thread[omp_get_thread_num()]) == 0) {
+          // std::vector<Vector2d> cost_vs_iterations;
+          // gradient_based_local_search((*updated_population)[chromosome_idx], (*updated_population_costs)[chromosome_idx], gene_idx, tw_per_target, p0, heading0, vmax, rho, q_trj_per_target, target_radii, no_tw, 0., max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, speed_upper_bounds, max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], cost_vs_iterations);
           gradient_based_local_search((*updated_population)[chromosome_idx], (*updated_population_costs)[chromosome_idx], gene_idx, tw_per_target, p0, heading0, vmax, rho, q_trj_per_target, target_radii, no_tw, 0., max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, speed_upper_bounds, max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()]);
         } else {
           sample_based_local_search((*updated_population)[chromosome_idx], (*updated_population_costs)[chromosome_idx], gene_idx, tw_per_target, p0, heading0, vmax, rho, q_trj_per_target, target_radii, no_tw, 0., max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, speed_upper_bounds, max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()]);
