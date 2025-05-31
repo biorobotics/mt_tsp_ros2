@@ -39,6 +39,7 @@ std::vector<size_t> sort_indexes(const std::vector<T> &v) {
   return idx;
 }
 
+// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double &final_heading, double t0, std::vector<Vector2d> &delta_vs_iterations) {
 bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double &final_heading, double t0) {
   int num_targets = tw_per_target.rows();
 
@@ -96,6 +97,8 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         RowMatrixXd shortest_path_turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho);
         double shortest_path_dist = shortest_path_turns.col(1).sum();
         double c = shortest_path_dist - vmax*delta_t;
+
+        // delta_vs_iterations.push_back(Vector2d(newton_iter, c));
 
         // Finite-diff
         double delta_t_plus = delta_t + delta_delta_t_finite_diff;
@@ -302,9 +305,11 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   return repair_failed;
 }
 
+// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, Ref<Vector1d> cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double t0, std::vector<Vector2d> &delta_vs_iterations) {
 bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, Ref<Vector1d> cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double t0) {
   double tmp_cost = 0.;
   double final_heading;
+  // bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, vmax, tmp_cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, t0, delta_vs_iterations);
   bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, vmax, tmp_cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, t0);
   cost(0) = tmp_cost;
   return repair_failed;
@@ -453,6 +458,8 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
     MatrixXd tmp_chromosome = X.block(seq_idx, 0, 1, gene_size);
     tmp_chromosome(0, 0) = 0;
     double tmp_next_heading;
+    // std::vector<Vector2d> delta_vs_iterations;
+    // bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), tmp_q_trj, pos, heading, vmax, tmp_cost, true, rho, max_newton_iter_for_success_repair, params, no_tw, tmp_next_heading, t, delta_vs_iterations);
     bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), tmp_q_trj, pos, heading, vmax, tmp_cost, true, rho, max_newton_iter_for_success_repair, params, no_tw, tmp_next_heading, t);
     if (repair_failed) {
       cost = std::numeric_limits<double>::infinity();
@@ -739,6 +746,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       // Repair to restore feasibility
       double cost = 0.;
       double final_heading;
+      // std::vector<Vector2d> delta_vs_iterations;
+      // bool repair_failed = repair_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, vmax, cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw, final_heading, 0., delta_vs_iterations);
       bool repair_failed = repair_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, vmax, cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw, final_heading, 0.);
       if (repair_failed || cost >= (*population_costs)[chromosome_idx]) {
         (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];

@@ -10,6 +10,7 @@ PYBIND11_MAKE_OPAQUE(std::vector<Vector2d>)
 PYBIND11_MODULE(memetic_dubins_mt_tsp, m) {
   m.def("memetic_alg_no_ce", &memetic_alg);
   m.def("get_selected_pts_no_ce", &get_selected_pts);
+  // m.def("repair_chromosome_no_ce", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const std::vector<CircularTrajectory>&, const Ref<const Vector2d>&, double, double, Ref<Vector1d>, bool, double, int&, const MemeticAlgParams&, bool, double, std::vector<Vector2d>&>(&repair_chromosome));
   m.def("repair_chromosome_no_ce", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const std::vector<CircularTrajectory>&, const Ref<const Vector2d>&, double, double, Ref<Vector1d>, bool, double, int&, const MemeticAlgParams&, bool, double>(&repair_chromosome));
   m.def("find_earliest_arrival_time_dubins", &find_earliest_arrival_time_dubins);
   py::bind_vector<std::vector<Vector2d>>(m, "VectorOfVector2ds");
