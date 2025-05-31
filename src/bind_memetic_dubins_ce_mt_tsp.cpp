@@ -12,11 +12,13 @@ PYBIND11_MAKE_OPAQUE(std::vector<CppSpline>)
 PYBIND11_MAKE_OPAQUE(std::vector<ExtendedCppSpline>)
 PYBIND11_MAKE_OPAQUE(std::vector<CircularTrajectory>)
 PYBIND11_MAKE_OPAQUE(std::vector<RowMatrixXd>)
+PYBIND11_MAKE_OPAQUE(std::vector<Vector2d>)
 
 PYBIND11_MODULE(memetic_dubins_ce_mt_tsp, m) {
   m.def("memetic_alg", &memetic_alg);
   m.def("get_selected_pts", &get_selected_pts);
   m.def("repair_chromosome", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const Ref<const VectorXd>&, const std::vector<CircularTrajectory>&, const Ref<const Vector2d>&, double, double, Ref<Vector1d>, bool, double, int&, const MemeticAlgParams&, bool, double>(&repair_chromosome));
+  // m.def("repair_chromosome", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const Ref<const VectorXd>&, const std::vector<CircularTrajectory>&, const Ref<const Vector2d>&, double, double, Ref<Vector1d>, bool, double, int&, const MemeticAlgParams&, bool, double, std::vector<Vector2d>&>(&repair_chromosome));
   m.def("find_earliest_arrival_time_dubins", &find_earliest_arrival_time_dubins);
 
   py::class_<MemeticAlgParams>(m, "MemeticAlgParams")
@@ -57,4 +59,5 @@ PYBIND11_MODULE(memetic_dubins_ce_mt_tsp, m) {
   py::bind_vector<std::vector<ExtendedCppSpline>>(m, "VectorOfExtendedCppSplines");
   py::bind_vector<std::vector<CircularTrajectory>>(m, "VectorOfCircularTrajectories");
   py::bind_vector<std::vector<RowMatrixXd>>(m, "VectorOfMatrices");
+  py::bind_vector<std::vector<Vector2d>>(m, "VectorOfVector2ds");
 }
