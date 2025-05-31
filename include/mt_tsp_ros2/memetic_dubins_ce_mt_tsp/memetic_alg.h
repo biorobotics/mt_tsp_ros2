@@ -581,6 +581,155 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<Circul
   */
 }
 
+
+void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const VectorXd> &target_radii, bool no_tw, double t0, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, const Ref<const VectorXd> &speed_upper_bounds, int &max_bisection_iter_for_success_transformation) {
+  double theta = X(gene_idx, 1);
+  bool dubins = rho != 0.;
+
+  // Gradient-based local search
+  bool improvement = true;
+  while (improvement) {
+    int max_backtrack_fd = 3;
+    double delta_theta = 0.01; // To compute approximate gradient
+    double new_cost = std::numeric_limits<double>::infinity();
+    for (int backtrack_iter = 0; backtrack_iter < max_backtrack_fd; ++backtrack_iter) {
+      double new_theta = theta + delta_theta;
+
+      MatrixXd local_modification = X;
+      local_modification(gene_idx, 1) = new_theta;
+
+      double final_heading;
+      bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, 0.);
+      if (!repair_failed) {
+        double tmp_cost;
+        bool transformation_succeeded;
+        if (dubins) {
+          transformation_succeeded = transform_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+        } else {
+          if (no_tw) {
+            transformation_succeeded = transform_chromosome_no_dubins(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+          } else {
+            transformation_succeeded = false;
+          }
+        }
+        if (transformation_succeeded && tmp_cost < new_cost) {
+          new_cost = tmp_cost;
+        }
+
+        break;
+      }
+      if (!no_tw) {
+        throw std::runtime_error("Failed to compute derivative for gradient-based local search even though there are no time windows");
+      }
+      delta_theta *= 0.1;
+    }
+    if (std::isinf(new_cost)) {
+      break;
+    }
+    double gradient = (new_cost - cost)/delta_theta;
+
+    int max_backtrack_gd = 3;
+    double gd_step_size = params.local_search_gd_step_size;
+    improvement = false;
+    for (int backtrack_iter = 0; backtrack_iter < max_backtrack_gd; ++backtrack_iter) {
+      double new_theta = theta - gd_step_size*gradient;
+
+      MatrixXd local_modification = X;
+      local_modification(gene_idx, 1) = new_theta;
+
+      double final_heading;
+      bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, 0.);
+      if (!repair_failed && new_cost < cost) {
+        double tmp_cost;
+        bool transformation_succeeded;
+        MatrixXd tmp_local_modification = local_modification;
+        if (dubins) {
+          transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+        } else {
+          if (no_tw) {
+            transformation_succeeded = transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+          } else {
+            transformation_succeeded = false;
+          }
+        }
+        if (transformation_succeeded && tmp_cost < new_cost) {
+          /*
+          if (!dubins) {
+            check_chromosome_feasible(tmp_local_modification, tw_per_target, p0, vmax, q_trj_per_target, target_radii, "After transformation in gradient-based local search: ", no_tw, 0.);
+          }
+          */
+          X = tmp_local_modification;
+          cost = tmp_cost;
+          improvement = true;
+        } else {
+          X = local_modification;
+          cost = new_cost;
+          improvement = true;
+        }
+        break;
+      }
+      gd_step_size *= 0.1;
+    }
+  }
+}
+
+void sample_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const VectorXd> &target_radii, bool no_tw, double t0, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, const Ref<const VectorXd> &speed_upper_bounds, int &max_bisection_iter_for_success_transformation) {
+  double theta = X(gene_idx, 1);
+  bool dubins = rho != 0.;
+
+  // Do sampling-based local search
+  std::vector<MatrixXd> local_modifications(params.local_search_num_samples);
+  std::vector<double> local_modification_costs(params.local_search_num_samples);
+  #pragma omp parallel for
+  for (int sample_idx = 0; sample_idx < params.local_search_num_samples; ++sample_idx) {
+    // double new_theta = local_search_sampling_theta_distribution(rngs_per_thread[omp_get_thread_num()]);
+    double new_theta = (2*M_PI*sample_idx)/params.local_search_num_samples;
+
+    double new_cost;
+    local_modifications[sample_idx] = X;
+    local_modifications[sample_idx](gene_idx, 1) = new_theta;
+
+    double final_heading;
+    bool repair_failed = repair_chromosome(local_modifications[sample_idx], tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, 0.);
+
+    if (!(repair_failed || new_cost >= cost)) {
+      double tmp_cost;
+      MatrixXd tmp_local_modification = local_modifications[sample_idx];
+      bool transformation_succeeded;
+      if (dubins) {
+        transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+      } else {
+        if (no_tw) {
+          transformation_succeeded = transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+        } else {
+          transformation_succeeded = false;
+        }
+      }
+      if (transformation_succeeded && tmp_cost < new_cost) {
+        /*
+        if (!dubins) {
+          check_chromosome_feasible(tmp_local_modification, tw_per_target, p0, vmax, q_trj_per_target, target_radii, "After transformation in sample-based local search: ", no_tw, 0.);
+        }
+        */
+        local_modifications[sample_idx] = tmp_local_modification;
+        local_modification_costs[sample_idx] = tmp_cost;
+      } else {
+        local_modification_costs[sample_idx] = new_cost;
+      }
+
+    } else {
+      local_modification_costs[sample_idx] = std::numeric_limits<double>::infinity();
+    }
+  } // Sampling-based local search iterations
+
+  auto it = std::min_element(local_modification_costs.begin(), local_modification_costs.end());
+  int min_idx = it - local_modification_costs.begin();
+  if (local_modification_costs[min_idx] < cost) {
+    X = local_modifications[min_idx];
+    cost = local_modification_costs[min_idx];
+  }
+}
+
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
 RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<CircularTrajectory> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, bool no_tw) {
   std::vector<std::pair<double, double>> cost_vs_time;
@@ -822,144 +971,9 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         double theta = (*updated_population)[chromosome_idx](gene_idx, 1);
         // Only run gradient-based local search on feasible solutions (only relevant if I do Dubins close-enough)
         if (std::isfinite((*updated_population_costs)[chromosome_idx]) && local_search_grad_vs_sampling_distribution(rngs_per_thread[omp_get_thread_num()]) == 0) {
-          // Gradient-based local search
-          bool improvement = true;
-          while (improvement) {
-            int max_backtrack_fd = 3;
-            double delta_theta = 0.01; // To compute approximate gradient
-            double new_cost = std::numeric_limits<double>::infinity();
-            for (int backtrack_iter = 0; backtrack_iter < max_backtrack_fd; ++backtrack_iter) {
-              double new_theta = theta + delta_theta;
-
-              MatrixXd local_modification = (*updated_population)[chromosome_idx];
-              local_modification(gene_idx, 1) = new_theta;
-
-              double final_heading;
-              bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw, final_heading, 0.);
-              if (!repair_failed) {
-                double tmp_cost;
-                bool transformation_succeeded;
-                if (dubins) {
-                  transformation_succeeded = transform_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
-                } else {
-                  if (no_tw) {
-                    transformation_succeeded = transform_chromosome_no_dubins(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
-                  } else {
-                    transformation_succeeded = false;
-                  }
-                }
-                if (transformation_succeeded && tmp_cost < new_cost) {
-                  new_cost = tmp_cost;
-                }
-
-                break;
-              }
-              if (!no_tw) {
-                throw std::runtime_error("Failed to compute derivative for gradient-based local search even though there are no time windows");
-              }
-              delta_theta *= 0.1;
-            }
-            if (std::isinf(new_cost)) {
-              break;
-            }
-            double gradient = (new_cost - (*updated_population_costs)[chromosome_idx])/delta_theta;
-
-            int max_backtrack_gd = 3;
-            double gd_step_size = params.local_search_gd_step_size;
-            for (int backtrack_iter = 0; backtrack_iter < max_backtrack_gd; ++backtrack_iter) {
-              double new_theta = theta - gd_step_size*gradient;
-
-              MatrixXd local_modification = (*updated_population)[chromosome_idx];
-              local_modification(gene_idx, 1) = new_theta;
-
-              double final_heading;
-              bool repair_failed = repair_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw, final_heading, 0.);
-              if (!repair_failed && new_cost < (*updated_population_costs)[chromosome_idx]) {
-                double tmp_cost;
-                bool transformation_succeeded;
-                MatrixXd tmp_local_modification = local_modification;
-                if (dubins) {
-                  transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
-                } else {
-                  if (no_tw) {
-                    transformation_succeeded = transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
-                  } else {
-                    transformation_succeeded = false;
-                  }
-                }
-                if (transformation_succeeded && tmp_cost < new_cost) {
-                  /*
-                  if (!dubins) {
-                    check_chromosome_feasible(tmp_local_modification, tw_per_target, p0, vmax, q_trj_per_target, target_radii, "After transformation in gradient-based local search: ", no_tw, 0.);
-                  }
-                  */
-                  (*updated_population)[chromosome_idx] = tmp_local_modification;
-                  (*updated_population_costs)[chromosome_idx] = tmp_cost;
-                } else {
-                  (*updated_population)[chromosome_idx] = local_modification;
-                  (*updated_population_costs)[chromosome_idx] = new_cost;
-                }
-                break;
-              }
-              gd_step_size *= 0.1;
-            }
-
-            improvement = new_cost < (*updated_population_costs)[chromosome_idx] - 1e-4;
-          }
+          gradient_based_local_search((*updated_population)[chromosome_idx], (*updated_population_costs)[chromosome_idx], gene_idx, tw_per_target, p0, heading0, vmax, rho, q_trj_per_target, target_radii, no_tw, 0., max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, speed_upper_bounds, max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()]);
         } else {
-          double theta = (*updated_population)[chromosome_idx](gene_idx, 1);
-
-          // Do sampling-based local search
-          std::vector<MatrixXd> local_modifications(params.local_search_num_samples);
-          std::vector<double> local_modification_costs(params.local_search_num_samples);
-          #pragma omp parallel for
-          for (int sample_idx = 0; sample_idx < params.local_search_num_samples; ++sample_idx) {
-            // double new_theta = local_search_sampling_theta_distribution(rngs_per_thread[omp_get_thread_num()]);
-            double new_theta = (2*M_PI*sample_idx)/params.local_search_num_samples;
-
-            double new_cost;
-            local_modifications[sample_idx] = (*updated_population)[chromosome_idx];
-            local_modifications[sample_idx](gene_idx, 1) = new_theta;
-
-            double final_heading;
-            bool repair_failed = repair_chromosome(local_modifications[sample_idx], tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, new_cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw, final_heading, 0.);
-
-            if (!(repair_failed || new_cost >= (*updated_population_costs)[chromosome_idx])) {
-              double tmp_cost;
-              MatrixXd tmp_local_modification = local_modifications[sample_idx];
-              bool transformation_succeeded;
-              if (dubins) {
-                transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
-              } else {
-                if (no_tw) {
-                  transformation_succeeded = transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
-                } else {
-                  transformation_succeeded = false;
-                }
-              }
-              if (transformation_succeeded && tmp_cost < new_cost) {
-                /*
-                if (!dubins) {
-                  check_chromosome_feasible(tmp_local_modification, tw_per_target, p0, vmax, q_trj_per_target, target_radii, "After transformation in sample-based local search: ", no_tw, 0.);
-                }
-                */
-                local_modifications[sample_idx] = tmp_local_modification;
-                local_modification_costs[sample_idx] = tmp_cost;
-              } else {
-                local_modification_costs[sample_idx] = new_cost;
-              }
-
-            } else {
-              local_modification_costs[sample_idx] = std::numeric_limits<double>::infinity();
-            }
-          } // Sampling-based local search iterations
-
-          auto it = std::min_element(local_modification_costs.begin(), local_modification_costs.end());
-          int min_idx = it - local_modification_costs.begin();
-          if (local_modification_costs[min_idx] < (*updated_population_costs)[chromosome_idx]) {
-            (*updated_population)[chromosome_idx] = local_modifications[min_idx];
-            (*updated_population_costs)[chromosome_idx] = local_modification_costs[min_idx];
-          }
+          sample_based_local_search((*updated_population)[chromosome_idx], (*updated_population_costs)[chromosome_idx], gene_idx, tw_per_target, p0, heading0, vmax, rho, q_trj_per_target, target_radii, no_tw, 0., max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, speed_upper_bounds, max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()]);
         } // Sampling-based local search instead of gradient
       } // Pick a chromosome for local search
     } // Check if local search condition has been met
