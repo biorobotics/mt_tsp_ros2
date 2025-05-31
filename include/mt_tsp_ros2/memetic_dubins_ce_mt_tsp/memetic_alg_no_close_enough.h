@@ -136,6 +136,77 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
       if (!newton_succeeded) {
         repair_failed = true;
+
+        if (no_tw) {
+          // TODO: comment this out if doing runtime comparison experiments
+          /*
+          Vector2d pos_t = q_trj_per_target[target_idx](t);
+
+          RowMatrixXd turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_t(0), pos_t(1), rho);
+          double length = turns.col(1).sum();
+
+          double vmax_target = 2.;
+          double t_min = t + length/(vmax + vmax_target);
+          double t_max = t + length/(vmax - vmax_target);
+
+          Vector2d pos_min = q_trj_per_target[target_idx](t_min);
+          turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_min(0), pos_min(1), rho);
+          bool CC_detected = turns(1, 0) != 0;
+          length = turns.col(1).sum();
+          double delta_min = length - vmax*(t_min - t);
+          bool min_CC = turns(1, 0) != 0;
+          double length_min = length;
+
+          Vector2d pos_max = q_trj_per_target[target_idx](t_max);
+          turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_max(0), pos_max(1), rho);
+          CC_detected |= turns(1, 0) != 0;
+          length = turns.col(1).sum();
+          double delta_max = length - vmax*(t_max - t);
+          bool max_CC = turns(1, 0) != 0;
+          double length_max = length;
+
+          double dt = 1e-3;
+          bool found_CC = false;
+          bool found_sign_change = false;
+          double prev_delta = delta_min;
+          double prev_prev_CC = true;
+          double prev_CC = true;
+          double prev_change_in_delta = 0.;
+          for (double t_test = t + dt; t_test < t_max; t_test += dt) {
+            Vector2d pos_test = q_trj_per_target[target_idx](t_test);
+            RowMatrixXd turns_test = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, pos_test(0), pos_test(1), rho);
+            bool is_CC = turns_test(1, 0) != 0;
+            if (is_CC && !found_CC) {
+              std::cout << "Found CC" << std::endl;
+            }
+            found_CC |= is_CC;
+            double length_test = turns_test.col(1).sum();
+            double delta_test = length_test - vmax*(t_test - t);
+            // std::cout << t_test << " " << delta_test << std::endl;
+            double change_in_delta = delta_test - prev_delta;
+            if (!prev_prev_CC && !prev_CC && !is_CC && change_in_delta*prev_change_in_delta < 0) {
+              throw std::runtime_error("Query function is not monotonic outside turning circles");
+            }
+            if (prev_CC && is_CC && change_in_delta*prev_change_in_delta < 0) {
+              found_sign_change = true;
+            }
+            prev_prev_CC = prev_CC;
+            prev_CC = is_CC;
+            prev_change_in_delta = delta_test - prev_delta;
+            prev_delta = delta_test;
+          }
+
+          if (!found_CC) {
+            throw std::runtime_error("Newton failed and target trajectory does not pass through turning circle");
+          }
+
+          if (!found_sign_change) {
+            throw std::runtime_error("Newton failed and did not find sign change of query function when destination point is in turning circle");
+          }
+          std::cout << "Newton failed and all tests passed" << std::endl;
+          */
+        }
+
         break;
       }
 
