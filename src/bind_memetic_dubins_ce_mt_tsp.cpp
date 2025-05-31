@@ -20,6 +20,7 @@ PYBIND11_MODULE(memetic_dubins_ce_mt_tsp, m) {
   m.def("repair_chromosome", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const Ref<const VectorXd>&, const std::vector<CircularTrajectory>&, const Ref<const Vector2d>&, double, double, Ref<Vector1d>, bool, double, int&, const MemeticAlgParams&, bool, double>(&repair_chromosome));
   // m.def("repair_chromosome", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const Ref<const VectorXd>&, const std::vector<CircularTrajectory>&, const Ref<const Vector2d>&, double, double, Ref<Vector1d>, bool, double, int&, const MemeticAlgParams&, bool, double, std::vector<Vector2d>&>(&repair_chromosome));
   m.def("find_earliest_arrival_time_dubins", &find_earliest_arrival_time_dubins);
+  // m.def("transform_chromosome_no_dubins", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd> &, const Ref<const VectorXd> &, const std::vector<CircularTrajectory> &, const Ref<const Vector2d> &, double, Ref<Vector1d>, int &, int &, const MemeticAlgParams &, bool, std::vector<Vector2d>&>(&transform_chromosome_no_dubins));
 
   py::class_<MemeticAlgParams>(m, "MemeticAlgParams")
     .def(py::init<>())

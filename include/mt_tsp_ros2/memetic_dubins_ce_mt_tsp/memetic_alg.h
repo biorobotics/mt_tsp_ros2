@@ -459,6 +459,7 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
   return true;
 }
 
+// bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw, std::vector<Vector2d> &cost_vs_iterations) {
 bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw) {
   int num_targets = tw_per_target.rows();
 
@@ -499,6 +500,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     for (int gd_iter = 0; gd_iter < max_gd_iter; ++gd_iter) {
       next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
       double dist = (next_pos - pos).norm();
+      // cost_vs_iterations.push_back(Vector2d(gd_iter, dist));
       double deriv = (next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t));
       // Limit step size to avoid going outside time window
       double step;
@@ -513,9 +515,11 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
       double c = 0.5; // From Zac's class
       bool reduction = false;
       for (int backtrack_iter = 0; backtrack_iter < max_backtrack_iter; ++backtrack_iter) {
-        double next_t_cand = next_t - step_size*deriv;
+        double step = -step_size*deriv;
+        double next_t_cand = next_t + step;
         Vector2d next_pos_cand = q_trj_per_target[target_idx](next_t_cand) + next_rel_pos;
         double dist_cand = (next_pos_cand - pos).norm();
+        // std::cout << (dist_cand < vmax*(next_t_cand - t)) << " " << (dist_cand - dist < b*deriv*step) << " " << dist_cand - dist << " " << b*deriv*step << " " << step << std::endl;
         // Armijo rule.
         // Mutliply change in next_t by derivative to get expected change in cost.
         // We're checking if the actual cost reduction is at least b times the expected
@@ -531,6 +535,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
         break;
       }
     }
+    // std::cout << std::endl;
 
     delta_t = next_t - t;
     X(seq_idx, 2) = delta_t;
@@ -543,6 +548,20 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
   }
   return true;
 }
+
+/*
+bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw) {
+  std::vector<Vector2d> cost_vs_iterations;
+  transform_chromosome_no_dubins(X, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw, cost_vs_iterations);
+}
+
+bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, Ref<Vector1d> cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw, std::vector<Vector2d> &cost_vs_iterations) {
+  double tmp_cost;
+  bool success = transform_chromosome_no_dubins(X, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw, cost_vs_iterations);
+  cost(0) = tmp_cost;
+  return success;
+}
+*/
 
 void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const RowMatrixXd> &tw_per_target) {
   upper_bounds.setConstant(2.);
