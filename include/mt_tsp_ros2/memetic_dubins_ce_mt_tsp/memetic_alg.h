@@ -587,9 +587,6 @@ void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, co
 
         break;
       }
-      if (!no_tw) {
-        throw std::runtime_error("Failed to compute derivative for gradient-based local search even though there are no time windows");
-      }
       delta_theta *= 0.1;
     }
     if (std::isinf(new_cost)) {
