@@ -8,6 +8,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include "mt_tsp_ros2/dag_dfs.h"
+#include <random>
 
 typedef const Ref<const Matrix<long, Dynamic, Dynamic, RowMajor>> &RowMatrixXlRef_const;
 
@@ -46,6 +47,8 @@ class LifelongDAGDFSPlanner {
       auto timer_start = std::chrono::high_resolution_clock::now();
       VectorXd profiling_data = VectorXd::Zero(4);
       int num_targets = target_to_pt_ptr.size() - 1; // -1 because we have a dummy target associated with the depot
+
+      std::mt19937 rng;
 
       if (do_prune) {
         // Update the before sets
@@ -143,7 +146,12 @@ class LifelongDAGDFSPlanner {
           // profiling_data(1) += ((double)tmp_nanos)/1e9; // sort time
           std::reverse(sort_idx.begin(), sort_idx.end());
         } else {
-          throw std::runtime_error("Random successor ordering not implemented");
+          sort_idx.resize(neighbor_times.size());
+          for (int node_idx = 0; node_idx < neighbor_times.size(); ++node_idx) {
+            sort_idx[node_idx] = node_idx;
+          }
+          std::shuffle(sort_idx.begin(), sort_idx.end(), rng);
+          // throw std::runtime_error("Random successor ordering not implemented");
         }
         for (int neighbor_idx : sort_idx) {
           int pt_idx = neighbors[neighbor_idx];
