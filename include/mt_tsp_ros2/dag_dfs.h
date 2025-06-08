@@ -135,7 +135,7 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
     closed_list.insert(pop->key);
 
     std::vector<int> neighbors;
-    std::vector<double> neighbor_times;
+    std::vector<double> neighbor_costs;
     if (pop->visited_targets.all()) {
       std::vector<long> tour_vec;
       tour_vec.push_back(pop->final_pt_idx);
@@ -159,7 +159,7 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
           int node_idx = ptr(ptr_idx);
           if (std::isfinite(gtsp_cost_mat(pop->final_pt_idx, node_idx))) {
             neighbors.push_back(node_idx);
-            neighbor_times.push_back(all_pts(node_idx, 0));
+            neighbor_costs.push_back(gtsp_cost_mat(pop->final_pt_idx, node_idx));
           }
         }
       }
@@ -172,7 +172,7 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
     std::vector<size_t> sort_idx;
     if (do_sort) {
       // tmp_timer_start = std::chrono::high_resolution_clock::now();
-      sort_idx = sort_indexes(neighbor_times);
+      sort_idx = sort_indexes(neighbor_costs);
       // tmp_timer_stop = std::chrono::high_resolution_clock::now();
       // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
       // profiling_data(1) += ((double)tmp_nanos)/1e9; // sort time
@@ -305,7 +305,7 @@ VectorXd dag_dfs_unordered_set(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cos
     closed_list.insert(pop->key);
 
     std::vector<int> neighbors;
-    std::vector<double> neighbor_times;
+    std::vector<double> neighbor_costs;
     if (pop->visited_targets.size() == num_targets) {
       std::vector<long> tour_vec;
       tour_vec.push_back(pop->final_pt_idx);
@@ -329,7 +329,7 @@ VectorXd dag_dfs_unordered_set(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cos
           int node_idx = ptr(ptr_idx);
           if (std::isfinite(gtsp_cost_mat(pop->final_pt_idx, node_idx))) {
             neighbors.push_back(node_idx);
-            neighbor_times.push_back(all_pts(node_idx, 0));
+            neighbor_costs.push_back(gtsp_cost_mat(pop->final_pt_idx, node_idx));
           }
         }
       }
@@ -342,7 +342,7 @@ VectorXd dag_dfs_unordered_set(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cos
     std::vector<size_t> sort_idx;
     if (do_sort) {
       // tmp_timer_start = std::chrono::high_resolution_clock::now();
-      sort_idx = sort_indexes(neighbor_times);
+      sort_idx = sort_indexes(neighbor_costs);
       // tmp_timer_stop = std::chrono::high_resolution_clock::now();
       // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
       // profiling_data(1) += ((double)tmp_nanos)/1e9; // sort time
