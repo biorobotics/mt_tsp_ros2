@@ -103,7 +103,7 @@ class LifelongDAGDFSPlanner {
         closed_list.insert(pop->key);
 
         std::vector<int> neighbors;
-        std::vector<double> neighbor_costs;
+        std::vector<double> neighbor_times;
         if (pop->visited_targets.all()) {
           std::vector<long> tour_vec;
           tour_vec.push_back(pop->final_pt_idx);
@@ -127,7 +127,7 @@ class LifelongDAGDFSPlanner {
               int node_idx = ptr(ptr_idx);
               if (std::isfinite(gtsp_cost_mat(pop->final_pt_idx, node_idx))) {
                 neighbors.push_back(node_idx);
-                neighbor_costs.push_back(gtsp_cost_mat(pop->final_pt_idx, node_idx));
+                neighbor_times.push_back(all_pts(node_idx, 0));
               }
             }
           }
@@ -140,14 +140,14 @@ class LifelongDAGDFSPlanner {
         std::vector<size_t> sort_idx;
         if (do_sort) {
           // tmp_timer_start = std::chrono::high_resolution_clock::now();
-          sort_idx = sort_indexes(neighbor_costs);
+          sort_idx = sort_indexes(neighbor_times);
           // tmp_timer_stop = std::chrono::high_resolution_clock::now();
           // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
           // profiling_data(1) += ((double)tmp_nanos)/1e9; // sort time
           std::reverse(sort_idx.begin(), sort_idx.end());
         } else {
-          sort_idx.resize(neighbor_costs.size());
-          for (int node_idx = 0; node_idx < neighbor_costs.size(); ++node_idx) {
+          sort_idx.resize(neighbor_times.size());
+          for (int node_idx = 0; node_idx < neighbor_times.size(); ++node_idx) {
             sort_idx[node_idx] = node_idx;
           }
           std::shuffle(sort_idx.begin(), sort_idx.end(), rng);
@@ -290,7 +290,7 @@ class LifelongDAGDFSPlannerUnorderedSet {
         closed_list.insert(pop->key);
 
         std::vector<int> neighbors;
-        std::vector<double> neighbor_costs;
+        std::vector<double> neighbor_times;
         if (pop->visited_targets.size() == num_targets) {
           std::vector<long> tour_vec;
           tour_vec.push_back(pop->final_pt_idx);
@@ -314,7 +314,7 @@ class LifelongDAGDFSPlannerUnorderedSet {
               int node_idx = ptr(ptr_idx);
               if (std::isfinite(gtsp_cost_mat(pop->final_pt_idx, node_idx))) {
                 neighbors.push_back(node_idx);
-                neighbor_costs.push_back(gtsp_cost_mat(pop->final_pt_idx, node_idx));
+                neighbor_times.push_back(all_pts(node_idx, 0));
               }
             }
           }
@@ -327,7 +327,7 @@ class LifelongDAGDFSPlannerUnorderedSet {
         std::vector<size_t> sort_idx;
         if (do_sort) {
           // tmp_timer_start = std::chrono::high_resolution_clock::now();
-          sort_idx = sort_indexes(neighbor_costs);
+          sort_idx = sort_indexes(neighbor_times);
           // tmp_timer_stop = std::chrono::high_resolution_clock::now();
           // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
           // profiling_data(1) += ((double)tmp_nanos)/1e9; // sort time
