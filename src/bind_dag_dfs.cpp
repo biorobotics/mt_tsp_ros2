@@ -16,6 +16,7 @@ PYBIND11_MODULE(dag_dfs, m) {
   py::class_<LifelongDAGDFSPlanner>(m, "LifelongDAGDFSPlanner")
     .def(py::init<RowMatrixXdRef_const, VectorXlRef_const, const std::vector<py::array_t<long>> &, bool, bool, RowMatrixXdRef_const>())
     .def("plan", &LifelongDAGDFSPlanner::plan)
+    .def("plan_biased", &LifelongDAGDFSPlanner::plan_biased)
     .def("get_before_time", &LifelongDAGDFSPlanner::get_before_time)
     ;
 
