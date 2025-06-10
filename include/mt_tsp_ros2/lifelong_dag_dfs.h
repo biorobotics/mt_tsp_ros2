@@ -9,6 +9,7 @@
 #include <pybind11/numpy.h>
 #include "mt_tsp_ros2/dag_dfs.h"
 #include <random>
+#include <tuple>
 
 typedef const Ref<const Matrix<long, Dynamic, Dynamic, RowMajor>> &RowMatrixXlRef_const;
 
@@ -43,7 +44,7 @@ class LifelongDAGDFSPlanner {
       }
     }
 
-    VectorXd plan(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, RowMatrixXlRef_const deleted_edges) {
+    VectorXd plan_biased(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, RowMatrixXlRef_const deleted_edges, const Ref<const VectorXl> &bias_tour) {
       auto timer_start = std::chrono::high_resolution_clock::now();
       VectorXd profiling_data = VectorXd::Zero(4);
       int num_targets = target_to_pt_ptr.size() - 1; // -1 because we have a dummy target associated with the depot
@@ -76,6 +77,15 @@ class LifelongDAGDFSPlanner {
         before_time += profiling_data(0);
       }
 
+      std::vector<std::tuple<VectorXb, int, int>> bias_edges;
+      VectorXb visited_targets(num_targets);
+      for (int i = 0; i < bias_tour.size() - 1; ++i) {
+        bias_edges.push_back(std::tuple<VectorXb, int, int>(visited_targets, bias_tour(i), bias_tour(i + 1)));
+        if (bias_tour(i) != 0) {
+          visited_targets(pt_to_target_ptr(bias_tour(i))) = true;
+        }
+      }
+
       std::unordered_set<VectorXi, key_hash> closed_list;
       std::vector<DFSNodePtr> stack;
       stack.push_back(std::make_shared<DFSNode>(nullptr, 0, -1, num_targets));
@@ -104,7 +114,8 @@ class LifelongDAGDFSPlanner {
 
         std::vector<int> neighbors;
         std::vector<double> neighbor_times;
-        if (pop->visited_targets.all()) {
+        int num_visited_targets = pop->visited_targets.cast<int>().sum();
+        if (num_visited_targets == num_targets) {
           std::vector<long> tour_vec;
           tour_vec.push_back(pop->final_pt_idx);
           DFSNodePtr node = pop->parent;
@@ -153,6 +164,28 @@ class LifelongDAGDFSPlanner {
           std::shuffle(sort_idx.begin(), sort_idx.end(), rng);
           // throw std::runtime_error("Random successor ordering not implemented");
         }
+
+        if (bias_tour.size() && std::get<1>(bias_edges[num_visited_targets]) == pop->final_pt_idx) {
+          bool subset_same = true;
+          for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
+            bool subset_same = true;
+            if (pop->visited_targets(target_idx) != std::get<0>(bias_edges[num_visited_targets])(target_idx)) {
+              subset_same = false;
+              break;
+            }
+          }
+          if (subset_same) {
+            for (int i = 0; i < sort_idx.size(); ++i) {
+              int j = sort_idx[i];
+              if (std::get<2>(bias_edges[num_visited_targets]) == neighbors[j]) {
+                sort_idx.erase(sort_idx.begin() + i);
+                sort_idx.push_back(j);
+                break;
+              }
+            }
+          }
+        }
+
         for (int neighbor_idx : sort_idx) {
           int pt_idx = neighbors[neighbor_idx];
           if (do_prune) {
@@ -191,6 +224,11 @@ class LifelongDAGDFSPlanner {
       }
       tour(0) = -1;
       return profiling_data;
+    }
+
+    VectorXd plan(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, RowMatrixXlRef_const deleted_edges) {
+      VectorXl dummy_bias_tour(0);
+      return plan_biased(tour, gtsp_cost_mat, pt_to_target_ptr, target_to_pt_ptr, do_prune, do_sort, time_limit, other_tour_queue, all_pts, deleted_edges, dummy_bias_tour);
     }
 
     double get_before_time() {
