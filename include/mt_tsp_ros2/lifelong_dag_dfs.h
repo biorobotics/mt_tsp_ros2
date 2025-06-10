@@ -110,11 +110,34 @@ class LifelongDAGDFSPlanner {
           continue;
         }
 
+        int num_visited_targets = pop->visited_targets.cast<int>().sum();
+        if (num_visited_targets != num_targets && bias_tour.size() &&
+            std::get<1>(bias_edges[num_visited_targets]) == pop->final_pt_idx &&
+            std::isfinite(gtsp_cost_mat(pop->final_pt_idx, std::get<2>(bias_edges[num_visited_targets])))) {
+          bool subset_same = true;
+          for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
+            bool subset_same = true;
+            if (pop->visited_targets(target_idx) != std::get<0>(bias_edges[num_visited_targets])(target_idx)) {
+              subset_same = false;
+              break;
+            }
+          }
+          if (subset_same) {
+            int pt_idx = std::get<2>(bias_edges[num_visited_targets]);
+            DFSNodePtr neighbor_node = std::make_shared<DFSNode>(pop, pt_idx, pt_to_target_ptr(pt_idx));
+
+            if (closed_list.find(neighbor_node->key) == closed_list.end()) {
+              stack.push_back(pop);
+              stack.push_back(neighbor_node);
+              continue;
+            }
+          }
+        }
+
         closed_list.insert(pop->key);
 
         std::vector<int> neighbors;
         std::vector<double> neighbor_times;
-        int num_visited_targets = pop->visited_targets.cast<int>().sum();
         if (num_visited_targets == num_targets) {
           std::vector<long> tour_vec;
           tour_vec.push_back(pop->final_pt_idx);
@@ -163,27 +186,6 @@ class LifelongDAGDFSPlanner {
           }
           std::shuffle(sort_idx.begin(), sort_idx.end(), rng);
           // throw std::runtime_error("Random successor ordering not implemented");
-        }
-
-        if (bias_tour.size() && std::get<1>(bias_edges[num_visited_targets]) == pop->final_pt_idx) {
-          bool subset_same = true;
-          for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
-            bool subset_same = true;
-            if (pop->visited_targets(target_idx) != std::get<0>(bias_edges[num_visited_targets])(target_idx)) {
-              subset_same = false;
-              break;
-            }
-          }
-          if (subset_same) {
-            for (int i = 0; i < sort_idx.size(); ++i) {
-              int j = sort_idx[i];
-              if (std::get<2>(bias_edges[num_visited_targets]) == neighbors[j]) {
-                sort_idx.erase(sort_idx.begin() + i);
-                sort_idx.push_back(j);
-                break;
-              }
-            }
-          }
         }
 
         for (int neighbor_idx : sort_idx) {
