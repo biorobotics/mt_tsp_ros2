@@ -78,11 +78,11 @@ class LifelongDAGDFSPlanner {
       }
 
       std::vector<std::tuple<VectorXb, int, int>> bias_edges;
-      VectorXb visited_targets(num_targets);
+      VectorXb visited_targets = VectorXb::Zero(num_targets);
       for (int i = 0; i < bias_tour.size() - 1; ++i) {
         bias_edges.push_back(std::tuple<VectorXb, int, int>(visited_targets, bias_tour(i), bias_tour(i + 1)));
-        if (bias_tour(i) != 0) {
-          visited_targets(pt_to_target_ptr(bias_tour(i))) = true;
+        if (bias_tour(i + 1) != 0) {
+          visited_targets(pt_to_target_ptr(bias_tour(i + 1))) = true;
         }
       }
 
@@ -116,7 +116,6 @@ class LifelongDAGDFSPlanner {
             std::isfinite(gtsp_cost_mat(pop->final_pt_idx, std::get<2>(bias_edges[num_visited_targets])))) {
           bool subset_same = true;
           for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
-            bool subset_same = true;
             if (pop->visited_targets(target_idx) != std::get<0>(bias_edges[num_visited_targets])(target_idx)) {
               subset_same = false;
               break;
