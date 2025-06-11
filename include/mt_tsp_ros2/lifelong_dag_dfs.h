@@ -112,7 +112,6 @@ class LifelongDAGDFSPlanner {
 
         int num_visited_targets = pop->visited_targets.cast<int>().sum();
         if (num_visited_targets != num_targets && bias_tour.size() &&
-            std::get<1>(bias_edges[num_visited_targets]) == pop->final_pt_idx &&
             std::isfinite(gtsp_cost_mat(pop->final_pt_idx, std::get<2>(bias_edges[num_visited_targets])))) {
           bool subset_same = true;
           for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
