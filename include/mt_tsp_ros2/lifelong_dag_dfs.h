@@ -44,7 +44,7 @@ class LifelongDAGDFSPlanner {
       }
     }
 
-    VectorXd plan_biased(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, RowMatrixXlRef_const deleted_edges, const Ref<const VectorXl> &bias_tour) {
+    VectorXd plan_biased(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, RowMatrixXlRef_const deleted_edges, const Ref<const VectorXl> &bias_tour, bool sort_by_time) {
       auto timer_start = std::chrono::high_resolution_clock::now();
       VectorXd profiling_data = VectorXd::Zero(4);
       int num_targets = target_to_pt_ptr.size() - 1; // -1 because we have a dummy target associated with the depot
@@ -136,7 +136,7 @@ class LifelongDAGDFSPlanner {
         closed_list.insert(pop->key);
 
         std::vector<int> neighbors;
-        std::vector<double> neighbor_times;
+        std::vector<double> neighbor_sort_vals;
         if (num_visited_targets == num_targets) {
           std::vector<long> tour_vec;
           tour_vec.push_back(pop->final_pt_idx);
@@ -160,7 +160,12 @@ class LifelongDAGDFSPlanner {
               int node_idx = ptr(ptr_idx);
               if (std::isfinite(gtsp_cost_mat(pop->final_pt_idx, node_idx))) {
                 neighbors.push_back(node_idx);
-                neighbor_times.push_back(all_pts(node_idx, 0));
+                if (sort_by_time) {
+                  neighbor_sort_vals.push_back(all_pts(node_idx, 0));
+                } else {
+                  // Sort by cost
+                  neighbor_sort_vals.push_back(gtsp_cost_mat(pop->final_pt_idx, node_idx));
+                }
               }
             }
           }
@@ -173,14 +178,14 @@ class LifelongDAGDFSPlanner {
         std::vector<size_t> sort_idx;
         if (do_sort) {
           // tmp_timer_start = std::chrono::high_resolution_clock::now();
-          sort_idx = sort_indexes(neighbor_times);
+          sort_idx = sort_indexes(neighbor_sort_vals);
           // tmp_timer_stop = std::chrono::high_resolution_clock::now();
           // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
           // profiling_data(1) += ((double)tmp_nanos)/1e9; // sort time
           std::reverse(sort_idx.begin(), sort_idx.end());
         } else {
-          sort_idx.resize(neighbor_times.size());
-          for (int node_idx = 0; node_idx < neighbor_times.size(); ++node_idx) {
+          sort_idx.resize(neighbor_sort_vals.size());
+          for (int node_idx = 0; node_idx < neighbor_sort_vals.size(); ++node_idx) {
             sort_idx[node_idx] = node_idx;
           }
           std::shuffle(sort_idx.begin(), sort_idx.end(), rng);
@@ -227,9 +232,9 @@ class LifelongDAGDFSPlanner {
       return profiling_data;
     }
 
-    VectorXd plan(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, RowMatrixXlRef_const deleted_edges) {
+    VectorXd plan(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, RowMatrixXlRef_const deleted_edges, bool sort_by_time) {
       VectorXl dummy_bias_tour(0);
-      return plan_biased(tour, gtsp_cost_mat, pt_to_target_ptr, target_to_pt_ptr, do_prune, do_sort, time_limit, other_tour_queue, all_pts, deleted_edges, dummy_bias_tour);
+      return plan_biased(tour, gtsp_cost_mat, pt_to_target_ptr, target_to_pt_ptr, do_prune, do_sort, time_limit, other_tour_queue, all_pts, deleted_edges, dummy_bias_tour, sort_by_time);
     }
 
     double get_before_time() {
