@@ -10,12 +10,13 @@
 #include "mt_tsp_ros2/dag_dfs.h"
 #include <random>
 #include <tuple>
+#include <omp.h>
 
 typedef const Ref<const Matrix<long, Dynamic, Dynamic, RowMajor>> &RowMatrixXlRef_const;
 
 class LifelongDAGDFSPlanner {
   public:
-    LifelongDAGDFSPlanner(RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, RowMatrixXdRef_const all_pts) {
+    LifelongDAGDFSPlanner(RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, RowMatrixXdRef_const all_pts, int num_threads) : num_threads(num_threads) {
       before_time = 0.;
       if (do_prune) {
         auto timer_start = std::chrono::high_resolution_clock::now();
@@ -92,6 +93,8 @@ class LifelongDAGDFSPlanner {
 
       int num_nodes = gtsp_cost_mat.rows();
 
+      omp_set_num_threads(num_threads);
+
       while (stack.size()) {
         auto timer_stop = std::chrono::high_resolution_clock::now();
         auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
@@ -134,8 +137,8 @@ class LifelongDAGDFSPlanner {
 
         closed_list.insert(pop->key);
 
-        std::vector<int> neighbors;
-        std::vector<double> neighbor_sort_vals;
+        std::vector<std::vector<DFSNodePtr>> neighbors_per_thread(num_threads);
+        std::vector<std::vector<double>> neighbor_sort_vals_per_thread(num_threads);
         if (num_visited_targets == num_targets) {
           std::vector<long> tour_vec;
           tour_vec.push_back(pop->final_pt_idx);
@@ -150,27 +153,74 @@ class LifelongDAGDFSPlanner {
           tour = Map<VectorXl>(tour_vec.data(), tour_vec.size());
           return profiling_data;
         } else {
-          for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
+          #pragma omp parallel for
+          for (int node_idx = 1; node_idx < num_nodes; ++node_idx) {
+            int target_idx = pt_to_target_ptr(node_idx);
             if (pop->visited_targets(target_idx)) {
               continue;
             }
-            auto ptr = target_to_pt_ptr[target_idx].unchecked<1>();
-            for (int ptr_idx = 0; ptr_idx < ptr.size(); ++ptr_idx) {
-              int node_idx = ptr(ptr_idx);
-              if (std::isfinite(gtsp_cost_mat(pop->final_pt_idx, node_idx))) {
-                neighbors.push_back(node_idx);
-                if (sort_by_time) {
-                  neighbor_sort_vals.push_back(all_pts(node_idx, 0));
-                } else {
-                  // Sort by cost
-                  neighbor_sort_vals.push_back(gtsp_cost_mat(pop->final_pt_idx, node_idx));
+            if (std::isfinite(gtsp_cost_mat(pop->final_pt_idx, node_idx))) {
+              if (do_prune) {
+                // tmp_timer_start = std::chrono::high_resolution_clock::now();
+                bool prune = false;
+                for (int target_idx2 = 0; target_idx2 < num_targets; ++target_idx2) {
+                  if (target_idx2 != target_idx && before(node_idx, target_idx2) && !pop->visited_targets(target_idx2)) {
+                    prune = true;
+                    break;
+                  }
                 }
+
+                // tmp_timer_stop = std::chrono::high_resolution_clock::now();
+                // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
+                // profiling_data(2) += ((double)tmp_nanos)/1e9; // prune time
+
+                if (prune) {
+                  continue;
+                }
+              }
+
+              // tmp_timer_start = std::chrono::high_resolution_clock::now();
+
+              DFSNodePtr neighbor_node = std::make_shared<DFSNode>(pop, node_idx, target_idx);
+
+              // tmp_timer_stop = std::chrono::high_resolution_clock::now();
+              // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
+              // profiling_data(3) += ((double)tmp_nanos)/1e9; // node gen time
+
+              if (closed_list.find(neighbor_node->key) != closed_list.end()) {
+                continue;
+              }
+
+              neighbors_per_thread[omp_get_thread_num()].push_back(neighbor_node);
+              if (sort_by_time) {
+                neighbor_sort_vals_per_thread[omp_get_thread_num()].push_back(all_pts(node_idx, 0));
+              } else {
+                // Sort by cost
+                neighbor_sort_vals_per_thread[omp_get_thread_num()].push_back(gtsp_cost_mat(pop->final_pt_idx, node_idx));
               }
             }
           }
+        }
 
-          if (neighbors.size() == 0) {
-            continue;
+        int num_neighbors = 0;
+        for (int thread_idx = 0; thread_idx < num_threads; ++thread_idx) {
+          num_neighbors += neighbors_per_thread[thread_idx].size();
+        }
+        std::vector<double> neighbor_sort_vals(num_neighbors);
+        std::vector<DFSNodePtr> neighbors(num_neighbors);
+
+        int i = 0;
+        for (int thread_idx = 0; thread_idx < num_threads; ++thread_idx) {
+          if (neighbor_sort_vals_per_thread[thread_idx].size() != neighbors_per_thread[thread_idx].size()) {
+            throw std::runtime_error("Size error");
+          }
+          for (int neighbor_idx = 0; neighbor_idx < neighbor_sort_vals_per_thread[thread_idx].size(); ++neighbor_idx) {
+            if (i >= num_neighbors) {
+              throw std::runtime_error("Index error");
+            }
+            neighbor_sort_vals[i] = neighbor_sort_vals_per_thread[thread_idx][neighbor_idx];
+            neighbors[i] = neighbors_per_thread[thread_idx][neighbor_idx];
+            ++i;
           }
         }
 
@@ -192,39 +242,7 @@ class LifelongDAGDFSPlanner {
         }
 
         for (int neighbor_idx : sort_idx) {
-          int pt_idx = neighbors[neighbor_idx];
-          if (do_prune) {
-            // tmp_timer_start = std::chrono::high_resolution_clock::now();
-            bool prune = false;
-            for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
-              if (target_idx != pt_to_target_ptr(pt_idx) && before(pt_idx, target_idx) && !pop->visited_targets(target_idx)) {
-                prune = true;
-                break;
-              }
-            }
-
-            // tmp_timer_stop = std::chrono::high_resolution_clock::now();
-            // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
-            // profiling_data(2) += ((double)tmp_nanos)/1e9; // prune time
-
-            if (prune) {
-              continue;
-            }
-          }
-
-          // tmp_timer_start = std::chrono::high_resolution_clock::now();
-
-          DFSNodePtr neighbor_node = std::make_shared<DFSNode>(pop, pt_idx, pt_to_target_ptr(pt_idx));
-
-          // tmp_timer_stop = std::chrono::high_resolution_clock::now();
-          // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
-          // profiling_data(3) += ((double)tmp_nanos)/1e9; // node gen time
-
-          if (closed_list.find(neighbor_node->key) != closed_list.end()) {
-            continue;
-          }
-
-          stack.push_back(neighbor_node);
+          stack.push_back(neighbors[neighbor_idx]);
         }
       }
       tour(0) = -1;
@@ -242,6 +260,7 @@ class LifelongDAGDFSPlanner {
   private:
     MatrixXb before;
     double before_time;
+    int num_threads;
 };
 
 class LifelongDAGDFSPlannerUnorderedSet {

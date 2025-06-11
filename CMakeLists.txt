@@ -229,6 +229,7 @@ message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 pybind11_add_module(dag_dfs
   src/bind_dag_dfs.cpp
 )
+target_link_libraries(dag_dfs PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS dag_dfs
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
