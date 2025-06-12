@@ -18,7 +18,7 @@ find_package(pluginlib REQUIRED)
 find_package(rviz_common REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(OpenMP REQUIRED)
-# find_package(ompl REQUIRED)
+find_package(ompl REQUIRED)
 find_package(CGAL REQUIRED)
 
 # The following is for TFTrajectoryDisplay
@@ -140,17 +140,16 @@ install(TARGETS implicit_grid_astar
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
-#[[
 pybind11_add_module(time_constrained_dubins_planning
   src/bind_time_constrained_dubins_planning.cpp
   src/dubins.cpp
 )
+
 target_include_directories(time_constrained_dubins_planning PRIVATE ${OMPL_INCLUDE_DIRS})
-target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES} OpenMP::OpenMP_CXX CGAL::CGAL)
+target_link_libraries(time_constrained_dubins_planning PRIVATE /usr/local/lib/libompl.so OpenMP::OpenMP_CXX CGAL::CGAL)
 install(TARGETS time_constrained_dubins_planning
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
-]]
 
 pybind11_add_module(box_qp
   src/bind_box_qp.cpp
@@ -214,17 +213,15 @@ install(TARGETS mt_cbss
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
-#[[
 pybind11_add_module(nearest_neighbor_edge_posterior
   src/bind_nearest_neighbor_edge_posterior.cpp
 )
 target_include_directories(nearest_neighbor_edge_posterior PRIVATE ${OMPL_INCLUDE_DIRS})
-target_link_libraries(nearest_neighbor_edge_posterior PRIVATE ${OMPL_LIBRARIES} OpenMP::OpenMP_CXX)
+target_link_libraries(nearest_neighbor_edge_posterior PRIVATE /usr/local/lib/libompl.so OpenMP::OpenMP_CXX)
 install(TARGETS nearest_neighbor_edge_posterior
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
-#]]
 
 pybind11_add_module(dag_dfs
   src/bind_dag_dfs.cpp
