@@ -281,6 +281,15 @@ add_executable(compare_to_gdip
 )
 target_include_directories(compare_to_gdip PRIVATE $ENV{HOME}/gdip/gdip/include)
 
+pybind11_add_module(adjacency_list
+  src/bind_adjacency_list.cpp
+)
+target_link_libraries(adjacency_list PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS adjacency_list
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
