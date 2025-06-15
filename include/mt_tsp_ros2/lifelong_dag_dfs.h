@@ -115,6 +115,7 @@ class LifelongDAGDFSPlanner {
         }
 
         int num_visited_targets = pop->visited_targets.cast<int>().sum();
+        /*
         if (num_visited_targets != num_targets && bias_tour.size() &&
             std::isfinite(gtsp_cost_mat(pop->final_pt_idx, std::get<2>(bias_edges[num_visited_targets])))) {
           bool subset_same = true;
@@ -135,10 +136,32 @@ class LifelongDAGDFSPlanner {
             }
           }
         }
+        */
+        bool pushed = false;
+        for (auto edge : bias_edges) {
+          int pt_idx1 = std::get<1>(edge);
+          int pt_idx2 = std::get<2>(edge);
+          if (pt_idx2 == 0) {
+            continue;
+          }
+          if (pop->final_pt_idx == pt_idx1 && std::isfinite(gtsp_cost_mat(pop->final_pt_idx, pt_idx2)) && !pop->visited_targets(pt_to_target_ptr(pt_idx2))) {
+            DFSNodePtr neighbor_node = std::make_shared<DFSNode>(pop, pt_idx2, pt_to_target_ptr(pt_idx2));
+            if (closed_list.find(neighbor_node->key) == closed_list.end()) {
+              stack.push_back(pop);
+              stack.push_back(neighbor_node);
+              pushed = true;
+              break;
+            }
+          }
+        }
+        if (pushed) {
+          continue;
+        }
 
         closed_list.insert(pop->key);
 
         std::vector<std::vector<DFSNodePtr>> neighbors_per_thread(num_threads);
+        // First pair element is whether the edge is unevaluated, second pair is either cost or time depending on whether sort_by_time is true
         std::vector<std::vector<std::pair<bool, double>>> neighbor_sort_vals_per_thread(num_threads);
         if (num_visited_targets == num_targets) {
           std::vector<long> tour_vec;
