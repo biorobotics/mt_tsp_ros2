@@ -168,9 +168,25 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       }
 
       if (no_tw) {
-        cost += params.min_latency ? next_t : (seq_idx == num_targets - 1 ? vmax*next_t : 0.);
+        if (params.min_latency) {
+          cost += next_t;
+        } else if (seq_idx == num_targets - 1) {
+          if (params.min_time) {
+            cost += next_t;
+          } else {
+            cost += vmax*next_t;
+          }
+        }
       } else {
-        cost += params.min_latency ? next_t - tw_per_target(target_idx, 0) : (seq_idx == num_targets - 1 ? vmax*next_t : 0.);
+        if (params.min_latency) {
+          cost += next_t - tw_per_target(target_idx, 0);
+        } else if (seq_idx == num_targets - 1) {
+          if (params.min_time) {
+            cost += next_t;
+          } else {
+            cost += vmax*next_t;
+          }
+        }
       }
     } else {
       next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
@@ -178,9 +194,21 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       if (dist <= vmax*delta_t) {
         // Travel is feasible, no need to repair
         if (no_tw) {
-          cost += params.min_latency ? next_t : dist;
+          if (params.min_latency) {
+            cost += next_t;
+          } else if (params.min_time && seq_idx == num_targets - 1) {
+            cost += next_t;
+          } else {
+            cost += dist;
+          }
         } else {
-          cost += params.min_latency ? next_t - tw_per_target(target_idx, 0) : dist;
+          if (params.min_latency) {
+            cost += next_t - tw_per_target(target_idx, 0);
+          } else if (params.min_time && seq_idx == num_targets - 1) {
+            cost += next_t;
+          } else {
+            cost += dist;
+          }
         }
         t = next_t;
         pos = next_pos;
@@ -246,9 +274,21 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       delta_t = t_high - t;
       X(seq_idx, 2) = delta_t;
       if (no_tw) {
-        cost += params.min_latency ? next_t : t_high_dist;
+        if (params.min_latency) {
+          cost += next_t;
+        } else if (params.min_time && seq_idx == num_targets - 1) {
+          cost += next_t;
+        } else {
+           cost += t_high_dist;
+        }
       } else {
-        cost += params.min_latency ? next_t - tw_per_target(target_idx, 0) : t_high_dist;
+        if (params.min_latency) {
+          cost += next_t - next_t - tw_per_target(target_idx, 0);
+        } else if (params.min_time && seq_idx == num_targets - 1) {
+          cost += next_t;
+        } else {
+           cost += t_high_dist;
+        }
       }
     }
 
@@ -414,9 +454,14 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
 
         // Meeting pattern
         if (no_tw) {
-          cost += params.min_latency ? next_t : 0.; // We know seq_idx != num_targets - 1, so if not min_latency, add 0 to cost
+          if (params.min_latency) {
+            cost += next_t;
+          }
+          // We know seq_idx != num_targets - 1, so if not min_latency, add 0 to cost
         } else {
-          cost += params.min_latency ? next_t - tw_per_target(target_idx, 0) : 0.;
+          if (params.min_latency) {
+            cost += next_t - tw_per_target(target_idx, 0);
+          }
         }
         t = next_t;
         pos = next_pos;
@@ -444,9 +489,25 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
     // Update cost, time, and position
     // Assume dubins
     if (no_tw) {
-      cost += params.min_latency ? next_t : (seq_idx == num_targets - 1 ? vmax*next_t : 0.);
+      if (params.min_latency) {
+        cost += next_t;
+      } else if (seq_idx == num_targets - 1) {
+        if (params.min_time) {
+          cost += next_t;
+        } else {
+          cost += vmax*next_t;
+        }
+      }
     } else {
-      cost += params.min_latency ? next_t - tw_per_target(target_idx, 0) : (seq_idx == num_targets - 1 ? vmax*next_t : 0.);
+      if (params.min_latency) {
+        cost += next_t - tw_per_target(target_idx, 0);
+      } else if (seq_idx == num_targets - 1) {
+        if (params.min_time) {
+          cost += next_t;
+        } else {
+          cost += vmax*next_t;
+        }
+      }
     }
     t = next_t;
     pos = next_pos;
@@ -534,7 +595,13 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
 
     // Update cost, time, and position
     // Assume dubins
-    cost += params.min_latency ? next_t - tw_per_target(target_idx, 0) : (next_pos - pos).norm();
+    if (params.min_latency) {
+      cost += next_t - tw_per_target(target_idx, 0);
+    } else if (params.min_time && seq_idx == num_targets - 1) {
+      cost += next_t;
+    } else {
+      cost += (next_pos - pos).norm();
+    }
     t = next_t;
     pos = next_pos;
   }
