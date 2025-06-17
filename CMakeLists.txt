@@ -18,7 +18,7 @@ find_package(pluginlib REQUIRED)
 find_package(rviz_common REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(OpenMP REQUIRED)
-# find_package(ompl REQUIRED)
+find_package(ompl REQUIRED)
 find_package(CGAL REQUIRED)
 
 # The following is for TFTrajectoryDisplay
@@ -140,17 +140,16 @@ install(TARGETS implicit_grid_astar
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
-#[[
 pybind11_add_module(time_constrained_dubins_planning
   src/bind_time_constrained_dubins_planning.cpp
   src/dubins.cpp
 )
+
 target_include_directories(time_constrained_dubins_planning PRIVATE ${OMPL_INCLUDE_DIRS})
-target_link_libraries(time_constrained_dubins_planning PRIVATE ${OMPL_LIBRARIES} OpenMP::OpenMP_CXX CGAL::CGAL)
+target_link_libraries(time_constrained_dubins_planning PRIVATE /usr/local/lib/libompl.so OpenMP::OpenMP_CXX CGAL::CGAL)
 install(TARGETS time_constrained_dubins_planning
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
-]]
 
 pybind11_add_module(box_qp
   src/bind_box_qp.cpp
@@ -214,21 +213,20 @@ install(TARGETS mt_cbss
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
-#[[
 pybind11_add_module(nearest_neighbor_edge_posterior
   src/bind_nearest_neighbor_edge_posterior.cpp
 )
 target_include_directories(nearest_neighbor_edge_posterior PRIVATE ${OMPL_INCLUDE_DIRS})
-target_link_libraries(nearest_neighbor_edge_posterior PRIVATE ${OMPL_LIBRARIES} OpenMP::OpenMP_CXX)
+target_link_libraries(nearest_neighbor_edge_posterior PRIVATE /usr/local/lib/libompl.so OpenMP::OpenMP_CXX)
 install(TARGETS nearest_neighbor_edge_posterior
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
-#]]
 
 pybind11_add_module(dag_dfs
   src/bind_dag_dfs.cpp
 )
+target_link_libraries(dag_dfs PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS dag_dfs
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
@@ -282,6 +280,15 @@ add_executable(compare_to_gdip
   $ENV{HOME}/gdip/gdip/core/src/opendubins/state.cpp
 )
 target_include_directories(compare_to_gdip PRIVATE $ENV{HOME}/gdip/gdip/include)
+
+pybind11_add_module(adjacency_list
+  src/bind_adjacency_list.cpp
+)
+target_link_libraries(adjacency_list PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS adjacency_list
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
 # There by default
 if(BUILD_TESTING)
