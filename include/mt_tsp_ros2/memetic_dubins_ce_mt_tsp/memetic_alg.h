@@ -196,16 +196,20 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         if (no_tw) {
           if (params.min_latency) {
             cost += next_t;
-          } else if (params.min_time && seq_idx == num_targets - 1) {
-            cost += next_t;
+          } else if (params.min_time) {
+            if (seq_idx == num_targets - 1) {
+              cost += next_t;
+            }
           } else {
             cost += dist;
           }
         } else {
           if (params.min_latency) {
             cost += next_t - tw_per_target(target_idx, 0);
-          } else if (params.min_time && seq_idx == num_targets - 1) {
-            cost += next_t;
+          } else if (params.min_time) {
+            if (seq_idx == num_targets - 1) {
+              cost += next_t;
+            }
           } else {
             cost += dist;
           }
@@ -276,16 +280,20 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       if (no_tw) {
         if (params.min_latency) {
           cost += next_t;
-        } else if (params.min_time && seq_idx == num_targets - 1) {
-          cost += next_t;
+        } else if (params.min_time) {
+          if (seq_idx == num_targets - 1) {
+            cost += next_t;
+          }
         } else {
            cost += t_high_dist;
         }
       } else {
         if (params.min_latency) {
           cost += next_t - next_t - tw_per_target(target_idx, 0);
-        } else if (params.min_time && seq_idx == num_targets - 1) {
-          cost += next_t;
+        } else if (params.min_time) {
+          if (seq_idx == num_targets - 1) {
+            cost += next_t;
+          }
         } else {
            cost += t_high_dist;
         }
@@ -597,8 +605,10 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     // Assume dubins
     if (params.min_latency) {
       cost += next_t - tw_per_target(target_idx, 0);
-    } else if (params.min_time && seq_idx == num_targets - 1) {
-      cost += next_t;
+    } else if (params.min_time) {
+      if (seq_idx == num_targets - 1) {
+        cost += next_t;
+      }
     } else {
       cost += (next_pos - pos).norm();
     }
