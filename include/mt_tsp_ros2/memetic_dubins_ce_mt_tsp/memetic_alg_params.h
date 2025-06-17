@@ -6,7 +6,8 @@ class MemeticAlgParams {
                          local_search_gd_step_size(0.01),
                          local_search_num_samples(20), // From paper
                          Tlp(2), // From paper
-                         repair_step_size(0.01) {
+                         repair_step_size(0.01), 
+                         min_latency(false) {
     }
 
     // Use custom values
@@ -14,11 +15,13 @@ class MemeticAlgParams {
                      double local_search_gd_step_size, 
                      int local_search_num_samples, 
                      int Tlp, 
-                     double repair_step_size) : mutation_prob(mutation_prob),
-                                                                                                                                     local_search_gd_step_size(local_search_gd_step_size),
-                                                                                                                                     local_search_num_samples(local_search_num_samples),
-                                                                                                                                     Tlp(Tlp),
-                                                                                                                                     repair_step_size(repair_step_size) {
+                     double repair_step_size,
+                     bool min_latency) : mutation_prob(mutation_prob),
+                                         local_search_gd_step_size(local_search_gd_step_size),
+                                         local_search_num_samples(local_search_num_samples),
+                                         Tlp(Tlp),
+                                         repair_step_size(repair_step_size),
+                                         min_latency(min_latency) {
     }
 
     double get_mutation_prob() const {
@@ -41,9 +44,14 @@ class MemeticAlgParams {
       return repair_step_size;
     }
 
+    double get_min_latency() const {
+      return min_latency;
+    }
+
     const double mutation_prob;
     const double local_search_gd_step_size;
     const int local_search_num_samples;
     const int Tlp; // Perform local search every Tlp generations
     const double repair_step_size;
+    bool min_latency;
 };

@@ -76,7 +76,7 @@ struct DFSNode {
 
 typedef std::shared_ptr<DFSNode> DFSNodePtr;
 
-VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts) {
+VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, bool sort_by_time) {
   auto timer_start = std::chrono::high_resolution_clock::now();
 
   VectorXd profiling_data = VectorXd::Zero(4);
@@ -135,7 +135,7 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
     closed_list.insert(pop->key);
 
     std::vector<int> neighbors;
-    std::vector<double> neighbor_times;
+    std::vector<double> neighbor_sort_vals;
     if (pop->visited_targets.all()) {
       std::vector<long> tour_vec;
       tour_vec.push_back(pop->final_pt_idx);
@@ -159,7 +159,11 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
           int node_idx = ptr(ptr_idx);
           if (std::isfinite(gtsp_cost_mat(pop->final_pt_idx, node_idx))) {
             neighbors.push_back(node_idx);
-            neighbor_times.push_back(all_pts(node_idx, 0));
+            if (sort_by_time) {
+              neighbor_sort_vals.push_back(all_pts(node_idx, 0));
+            } else {
+              neighbor_sort_vals.push_back(gtsp_cost_mat(pop->final_pt_idx, node_idx));
+            }
           }
         }
       }
@@ -172,7 +176,7 @@ VectorXd dag_dfs(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorX
     std::vector<size_t> sort_idx;
     if (do_sort) {
       // tmp_timer_start = std::chrono::high_resolution_clock::now();
-      sort_idx = sort_indexes(neighbor_times);
+      sort_idx = sort_indexes(neighbor_sort_vals);
       // tmp_timer_stop = std::chrono::high_resolution_clock::now();
       // tmp_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(tmp_timer_stop - tmp_timer_start).count();
       // profiling_data(1) += ((double)tmp_nanos)/1e9; // sort time
