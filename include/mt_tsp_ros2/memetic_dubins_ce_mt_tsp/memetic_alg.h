@@ -319,7 +319,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       }
 
       // Run bisection to find earliest time such that interception is feasible
-      double t_low = feas ? t : next_t;
+      double t_low = feas ? std::max(t, tw_per_target(target_idx, 0)) : next_t;
       int num_bisection_iter = 10;
       for (int bisection_iter = 0; bisection_iter < num_bisection_iter; ++bisection_iter) {
         double t_mid = 0.5*(t_low + t_high);
