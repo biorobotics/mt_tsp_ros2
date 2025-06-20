@@ -162,72 +162,59 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     } else {
       next_pos = q_trj_per_target[target_idx](next_t);
       double dist = (next_pos - pos).norm();
-      if (dist <= vmax*delta_t) {
+      bool feas = dist <= vmax*delta_t;
+      if (feas && !params.min_latency && !params.min_time) {
         // Travel is feasible, no need to repair
         if (no_tw) {
-          if (params.min_latency) {
-            cost += next_t;
-          } else if (params.min_time) {
-            if (seq_idx == num_targets - 1) {
-              cost += next_t;
-            }
-          } else {
-            cost += dist;
-          }
+          cost += dist;
         } else {
-          if (params.min_latency) {
-            cost += next_t - tw_per_target(target_idx, 0);
-          } else if (params.min_time) {
-            if (seq_idx == num_targets - 1) {
-              cost += next_t;
-            }
-          } else {
-            cost += dist;
-          }
+          cost += dist;
         }
         t = next_t;
         pos = next_pos;
         continue;
       }
 
-      double t_high;
-      double t_high_dist;
+      double t_high = next_t;
+      double t_high_dist = dist;
 
-      if (no_tw) {
-        bool found_ub = false;
-        t_high = t + 1;
-        delta_t = t_high - t;
-        for (int i = 0; i < 100; ++i) {
-          // Check if travel is feasible to next_pos
-          next_pos = q_trj_per_target[target_idx](t_high);
+      if (!feas) {
+        if (no_tw) {
+          bool found_ub = false;
+          t_high = t + 1;
+          delta_t = t_high - t;
+          for (int i = 0; i < 100; ++i) {
+            // Check if travel is feasible to next_pos
+            next_pos = q_trj_per_target[target_idx](t_high);
+            dist = (next_pos - pos).norm();
+            if (dist <= vmax*delta_t) {
+              found_ub = true;
+              t_high_dist = dist;
+              break;
+            }
+            t_high *= 2;
+            delta_t = t_high - t;
+          }
+          if (!found_ub) {
+            throw std::runtime_error("Did not find upper bound for bisection");
+          }
+        } else {
+          // Check if travel is feasible to next_pos at end of time window
+          next_pos = q_trj_per_target[target_idx](tw_per_target(target_idx, 1));
+          delta_t = tw_per_target(target_idx, 1) - t;
           dist = (next_pos - pos).norm();
-          if (dist <= vmax*delta_t) {
-            found_ub = true;
-            t_high_dist = dist;
+          if (dist > vmax*delta_t) {
+            // Travel is infeasible even to end of time window
+            repair_failed = true;
             break;
           }
-          t_high *= 2;
-          delta_t = t_high - t;
+          t_high = tw_per_target(target_idx, 1);
+          t_high_dist = dist;
         }
-        if (!found_ub) {
-          throw std::runtime_error("Did not find upper bound for bisection");
-        }
-      } else {
-        // Check if travel is feasible to next_pos at end of time window
-        next_pos = q_trj_per_target[target_idx](tw_per_target(target_idx, 1));
-        delta_t = tw_per_target(target_idx, 1) - t;
-        dist = (next_pos - pos).norm();
-        if (dist > vmax*delta_t) {
-          // Travel is infeasible even to end of time window
-          repair_failed = true;
-          break;
-        }
-        t_high = tw_per_target(target_idx, 1);
-        t_high_dist = dist;
       }
 
       // Run bisection to find earliest time such that interception is feasible
-      double t_low = next_t;
+      double t_low = feas ? t : next_t;
       int num_bisection_iter = 10;
       for (int bisection_iter = 0; bisection_iter < num_bisection_iter; ++bisection_iter) {
         double t_mid = 0.5*(t_low + t_high);
@@ -261,7 +248,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         }
       } else {
         if (params.min_latency) {
-          cost += next_t - next_t - tw_per_target(target_idx, 0);
+          cost += next_t - tw_per_target(target_idx, 0);
         } else if (params.min_time) {
           if (seq_idx == num_targets - 1) {
             cost += next_t;
