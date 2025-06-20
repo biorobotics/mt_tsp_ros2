@@ -290,6 +290,14 @@ install(TARGETS adjacency_list
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
+pybind11_add_module(efat
+  src/bind_efat.cpp
+)
+install(TARGETS efat
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
