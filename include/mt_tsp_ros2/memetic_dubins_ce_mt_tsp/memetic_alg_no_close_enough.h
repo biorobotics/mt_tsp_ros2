@@ -38,6 +38,7 @@ std::vector<size_t> sort_indexes(const std::vector<T> &v) {
   return idx;
 }
 
+// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double &final_heading, double t0, std::vector<double> &delta_vs_iterations) {
 bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double &final_heading, double t0) {
   int num_targets = tw_per_target.rows();
 
@@ -164,17 +165,92 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       double dist = (next_pos - pos).norm();
       bool feas = dist <= vmax*delta_t;
       if (feas && !params.min_latency && !params.min_time) {
-        // Travel is feasible, no need to repair
-        if (no_tw) {
-          cost += dist;
-        } else {
-          cost += dist;
-        }
+        // Travel is feasible, no need to repair. Additionally, we are not using a time-based cost function,
+        // so there is not reason to further optimize the arrival time
+        cost += dist;
         t = next_t;
         pos = next_pos;
         continue;
       }
 
+      if (!no_tw) {
+        if (feas) {
+          // Check if we can intercept at start of time window
+          // Deliberately using local variables here so we can use the original
+          // next_t as a starting point for Newton
+          double next_t = tw_per_target(target_idx, 0);
+          Vector2d next_pos = q_trj_per_target[target_idx](next_t);
+          double dist = (next_pos - pos).norm();
+          double delta_t = next_t - t;
+          if (dist <= vmax*delta_t) {
+            // We can intercept at the start of the time window
+            // If min-latency, don't add anything, because latency = 0.
+            // We wouldn't reach here if min-dist
+            if (params.min_time && seq_idx == num_targets - 1) {
+              cost += next_t;
+            }
+            t = next_t;
+            pos = next_pos;
+            X(seq_idx, 1) = delta_t;
+            continue;
+          }
+        } else {
+          // Check if travel is feasible to next_pos at end of time window
+          // Deliberately using local variables here so we can use the original
+          // next_t as a starting point for Newton
+          double next_t = tw_per_target(target_idx, 1);
+          Vector2d next_pos = q_trj_per_target[target_idx](next_t);
+          double delta_t = next_t - t;
+          double dist = (next_pos - pos).norm();
+          if (dist > vmax*delta_t) {
+            // Travel is infeasible even to end of time window
+            repair_failed = true;
+            break;
+          }
+        }
+      }
+
+      int max_newton_iter = 10;
+      bool got_feas = feas;
+      double feas_next_t = next_t;
+      Vector2d feas_next_pos = next_pos;
+      double feas_dist = dist;
+      for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
+        // Find root of dist - vmax*delta_t
+        double resid = dist - vmax*delta_t;
+        // delta_vs_iterations.push_back(resid);
+        double deriv = 1/(2*dist)*(next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t)) - vmax;
+        delta_t -= resid/deriv;
+        next_t = t + delta_t;
+        next_pos = q_trj_per_target[target_idx](next_t);
+        dist = (next_pos - pos).norm();
+        if (dist <= vmax*delta_t) {
+          if (!got_feas) {
+            got_feas = true;
+            feas_next_t = next_t;
+            feas_next_pos = next_pos;
+            feas_dist = dist;
+            if (!params.min_latency && !params.min_time) {
+              break;
+            }
+          } else if (next_t < feas_next_t) {
+            feas_next_t = next_t;
+            feas_next_pos = next_pos;
+            feas_dist = dist;
+          }
+        }
+      }
+      if (!got_feas) {
+        throw std::runtime_error("Zero turning radius repair failed even though we know we can get to a point in the time window");
+      }
+
+      next_t = feas_next_t;
+      next_pos = feas_next_pos;
+      double next_dist = feas_dist;
+      delta_t = next_t - t;
+
+      // Bisection version
+      /*
       double t_high = next_t;
       double t_high_dist = dist;
 
@@ -233,8 +309,11 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       }
 
       next_t = t_high;
+      double next_dist = t_high_dist;
 
       delta_t = t_high - t;
+      */
+
       X(seq_idx, 1) = delta_t;
       if (no_tw) {
         if (params.min_latency) {
@@ -244,7 +323,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             cost += next_t;
           }
         } else {
-           cost += t_high_dist;
+           cost += next_dist;
         }
       } else {
         if (params.min_latency) {
@@ -254,7 +333,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             cost += next_t;
           }
         } else {
-           cost += t_high_dist;
+           cost += next_dist;
         }
       }
     }
@@ -273,13 +352,22 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   return repair_failed;
 }
 
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, Ref<Vector1d> cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw) {
+// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, Ref<Vector1d> cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double t0, std::vector<double> &delta_vs_iterations) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, Ref<Vector1d> cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double t0) {
   double tmp_cost = 0.;
   double final_heading;
-  bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, vmax, tmp_cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, 0.);
+  // bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, vmax, tmp_cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, t0, delta_vs_iterations);
+  bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, vmax, tmp_cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, t0);
   cost(0) = tmp_cost;
   return repair_failed;
 }
+
+/*
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double &final_heading, double t0) {
+  std::vector<double> delta_vs_iterations;
+  return repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, vmax, cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, 0., delta_vs_iterations);
+}
+*/
 
 // next_heading is Ref<Vector1d> rather than double& so I can test in python
 double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const ExtendedCppSpline &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double t, double vmax_agent, double rho, double vmax_target, int &max_bisection_iter_for_success_transformation, bool no_tw) {
