@@ -25,7 +25,7 @@ class EFAT {
     EFAT(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, bool no_tw, double t0) : tw_per_target(tw_per_target), q_trj_per_target(q_trj_per_target), p0(p0), vmax(vmax), no_tw(no_tw), t0(t0) {
     }
 
-    bool efat_chain(Ref<Vector1d> cost, Ref<RowMatrixXd> selected_pts_per_target, VectorXlRef_const target_seq) {
+    bool efat_chain(Ref<Vector1d> cost, Ref<RowMatrixXd> selected_pts_per_target, VectorXlRef_const target_seq, bool feasible_times) {
       int num_targets = tw_per_target.rows();
 
       if (selected_pts_per_target.rows() != num_targets || selected_pts_per_target.cols() != 3) {
@@ -45,11 +45,26 @@ class EFAT {
 
         double t_low;
 
-        double t_high = selected_pts_per_target(target_idx, 0);
+        double t_high = feasible_times ? selected_pts_per_target(target_idx, 0) : tw_per_target(target_idx, 1);
 
         if (no_tw) {
+          if (!feasible_times) {
+            throw std::runtime_error("Did not implement efat chain for no time window case without given upper bounds");
+          }
           t_low = t;
         } else {
+          if (!feasible_times) {
+            // Check if travel is feasible to next_rel_pos at end of time window
+            double next_t = tw_per_target(target_idx, 1);
+            Vector2d next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+            double delta_t = next_t - t;
+            double dist = (next_pos - pos).norm();
+            if (dist > vmax*delta_t) {
+              // Travel is infeasible to end of time window
+              return false;
+            }
+          }
+
           // Check if travel is feasible to next_rel_pos at start of time window
           double next_t = tw_per_target(target_idx, 0);
           Vector2d next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
