@@ -105,28 +105,46 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       // Run Newton to restore feasibility if needed
       int max_newton_iter = 2776; // On one of the 10 target instances I ran, we needed at most 1388 iterations for successful transformation so I'm using 2x that number to declare failure
       double delta_delta_t_finite_diff = 1e-4;
-      double repair_tol = 1e-4;
+      double repair_tol = 1e-2;
       bool newton_succeeded = false;
       // std::cout << "starting newton" << std::endl;
+      double feas_next_t = std::numeric_limits<double>::infinity();
+      Vector2d feas_next_pos = std::numeric_limits<double>::infinity()*Vector2d::Ones();
+      double feas_next_heading = std::numeric_limits<double>::infinity();
       for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
         next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
 
         // std::cout << delta_t << " desired length " << vmax*delta_t << " shortest path length " << turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho).col(1).sum() << std::endl;
-        RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-2);
-        if (std::isfinite(turns(0, 0))) {
+        RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, repair_tol);
+        if (std::isfinite(turns(0, 0)) && next_t < feas_next_t) {
           max_newton_iter_for_success_repair = std::max(newton_iter, max_newton_iter_for_success_repair);
           newton_succeeded = true;
+          feas_next_t = next_t;
+          feas_next_pos = next_pos;
+          feas_next_heading = heading;
           for (int row = 0; row < turns.rows(); ++row) {
             if (turns(row, 0) != 0) {
-              heading += turns(row, 1)/turns(row, 0);
+              feas_next_heading += turns(row, 1)/turns(row, 0);
             }
           }
-          break;
+          if (!optimization_during_repair) {
+            break;
+          }
         }
 
         RowMatrixXd shortest_path_turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho);
         double shortest_path_dist = shortest_path_turns.col(1).sum();
         double c = shortest_path_dist - vmax*delta_t;
+
+        if (std::abs(c) < repair_tol) {
+          if (std::isinf(turns(0, 0))) {
+            throw std::runtime_error("Path elongation should have just returned the shortest dubins path but the elongation actually failed");
+          }
+          if (!optimization_during_repair) {
+            throw std::runtime_error("We should not have queried the shortest Dubins path if we were able to generate a feasible path already and are not trying to optimize the path length");
+          }
+          break;
+        }
 
         // Finite-diff
         double delta_t_plus = delta_t + delta_delta_t_finite_diff;
@@ -162,13 +180,18 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             delta_t = next_t - t;
           }
         }
-        X(seq_idx, 2) = delta_t;
       }
 
       if (!newton_succeeded) {
         repair_failed = true;
         break;
       }
+
+      next_t = feas_next_t;
+      next_pos = feas_next_pos;
+      heading = feas_next_heading;
+      delta_t = next_t - t;
+      X(seq_idx, 2) = delta_t;
 
       if (no_tw) {
         if (params.min_latency) {
@@ -805,7 +828,11 @@ void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, co
         double tmp_cost;
         bool transformation_succeeded;
         if (dubins) {
-          transformation_succeeded = transform_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+          if (!optimization_during_repair) {
+            transformation_succeeded = transform_chromosome(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+          } else {
+            transformation_succeeded = false;
+          }
         } else {
           if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
             transformation_succeeded = transform_chromosome_no_dubins(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
@@ -842,7 +869,11 @@ void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, co
         bool transformation_succeeded;
         MatrixXd tmp_local_modification = local_modification;
         if (dubins) {
-          transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+          if (!optimization_during_repair) {
+            transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+          } else {
+            transformation_succeeded = false;
+          }
         } else {
           if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
             transformation_succeeded = transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
@@ -895,7 +926,11 @@ void sample_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, cons
       MatrixXd tmp_local_modification = local_modifications[sample_idx];
       bool transformation_succeeded;
       if (dubins) {
-        transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+        if (!optimization_during_repair) {
+          transformation_succeeded = transform_chromosome(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
+        } else {
+          transformation_succeeded = false;
+        }
       } else {
         if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
           transformation_succeeded = transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
@@ -1138,7 +1173,11 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       // Transformation to reduce cost
       bool success;
       if (dubins) {
-        success = transform_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
+        if (!optimization_during_repair) {
+          success = transform_chromosome(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
+        } else {
+          success = false;
+        }
       } else {
         if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
           success = transform_chromosome_no_dubins(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
