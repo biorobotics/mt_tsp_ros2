@@ -173,6 +173,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         continue;
       }
 
+      // Newton version
       if (!no_tw) {
         if (feas) {
           // Check if we can intercept at start of time window
@@ -254,7 +255,27 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       double t_high = next_t;
       double t_high_dist = dist;
 
-      if (!feas) {
+      if (feas) {
+        if (!no_tw) {
+          // Check if we can intercept at start of time window
+          double next_t = tw_per_target(target_idx, 0);
+          Vector2d next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+          double dist = (next_pos - pos).norm();
+          double delta_t = next_t - t;
+          if (dist <= vmax*delta_t) {
+            // We can intercept at the start of the time window
+            // If min-latency, don't add anything, because latency = 0.
+            // We wouldn't reach here if min-dist
+            if (params.min_time && seq_idx == num_targets - 1) {
+              cost += next_t;
+            }
+            t = next_t;
+            pos = next_pos;
+            X(seq_idx, 1) = delta_t;
+            continue;
+          }
+        }
+      } else {
         if (no_tw) {
           bool found_ub = false;
           t_high = t + 1;
@@ -290,7 +311,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       }
 
       // Run bisection to find earliest time such that interception is feasible
-      double t_low = feas ? std::max(t, tw_per_target(target_idx, 0)) : next_t;
+      double t_low = feas ? (no_tw ? t : std::max(t, tw_per_target(target_idx, 0))) : next_t;
       int num_bisection_iter = 10;
       for (int bisection_iter = 0; bisection_iter < num_bisection_iter; ++bisection_iter) {
         double t_mid = 0.5*(t_low + t_high);
