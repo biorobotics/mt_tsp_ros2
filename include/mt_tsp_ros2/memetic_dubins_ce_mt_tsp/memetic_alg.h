@@ -634,7 +634,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
     int target_idx = X(seq_idx, 0);
 
-    if (seq_idx != 0 && !params.min_latency && !params.min_time) {
+    if (seq_idx != 0) {
       // Changing previous delta_t values may make next interception infeasible. If so, repair
       double tmp_cost;
       std::vector<ExtendedCppSpline> tmp_q_trj;
