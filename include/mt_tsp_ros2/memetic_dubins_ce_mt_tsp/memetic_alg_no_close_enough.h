@@ -267,10 +267,10 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             feas_next_pos = next_pos;
             feas_dist = dist;
           }
-        }
 
-        if (std::abs(resid) < root_finding_tol) {
-          break;
+          if (std::abs(resid) < root_finding_tol) {
+            break;
+          }
         }
       }
       if (!got_feas) {
