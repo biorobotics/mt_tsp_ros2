@@ -80,7 +80,7 @@ class EFAT {
           // Find root of dist - vmax*delta_t
           double resid = dist - vmax*delta_t + 1e-4; // The 1e-4 is so we actually get to a feasible solution
           // delta_vs_iterations.push_back(resid);
-          double deriv = 1/(2*dist)*(next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t)) - vmax;
+          double deriv = 1/dist*(next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t)) - vmax;
           delta_t -= resid/deriv;
           next_t = t + delta_t;
           next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
