@@ -22,6 +22,8 @@ const int gene_size = 3; // target index, theta, and delta t
 
 const bool optimization_during_repair = true;
 
+const double root_finding_tol = 1e-2;
+
 template <typename T>
 std::vector<size_t> sort_indexes(const std::vector<T> &v) {
 
@@ -293,6 +295,10 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             feas_next_pos = next_pos;
             feas_dist = dist;
           }
+
+          if (std::abs(resid) < root_finding_tol) {
+            break;
+          }
         }
       }
       if (!got_feas) {
@@ -380,6 +386,10 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
           t_high = t_mid;
           t_high_dist = dist;
           next_pos = pos_mid;
+
+          if (std::abs(dist - vmax*delta_t) < root_finding_tol) {
+            break;
+          }
         }
       }
       next_t = t_high;
@@ -490,7 +500,6 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
   }
 
   int max_bisection_iter = no_tw ? 100 : 34; // On one of the 10 target instances I ran, we needed at most 17 iterations for successful transformation so I'm using 2x that number to declare failure. I just put the 100 in here just in case for the no_tw option
-  double bisection_tol = 1e-4;
   for (int bisection_iter = 0; bisection_iter < max_bisection_iter; ++bisection_iter) {
     double t_mid = 0.5*(t_min + t_max);
     next_pos = q_trj(t_mid) + next_rel_pos;
@@ -498,7 +507,7 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
     CC_detected |= turns(1, 0) != 0;
     double length = turns.col(1).sum();
     double delta = length - vmax_agent*(t_mid - t);
-    if (std::abs(delta) < bisection_tol) {
+    if (std::abs(delta) < root_finding_tol) {
       next_heading(0) = heading;
       for (int row = 0; row < turns.rows(); ++row) {
         if (turns(row, 0) != 0) {
