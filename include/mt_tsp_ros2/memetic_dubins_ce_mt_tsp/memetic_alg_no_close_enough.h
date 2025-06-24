@@ -787,9 +787,9 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     // Assume dubins
     if (params.min_latency) {
       if (no_tw) {
-        cost += next_t - tw_per_target(target_idx, 0);
-      } else {
         cost += next_t;
+      } else {
+        cost += next_t - tw_per_target(target_idx, 0);
       }
     } else if (params.min_time) {
       if (seq_idx == num_targets - 1) {
