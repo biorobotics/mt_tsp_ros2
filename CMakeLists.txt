@@ -298,6 +298,14 @@ install(TARGETS efat
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
+pybind11_add_module(dubins_trj_through_seq_of_targets
+  src/bind_dubins_trj_through_seq_of_targets.cpp
+)
+install(TARGETS dubins_trj_through_seq_of_targets
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
