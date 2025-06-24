@@ -22,6 +22,10 @@ typedef Matrix<double, 1, 1> Vector1d;
 
 const int gene_size = 2; // target index, and delta t
 
+const bool optimization_during_repair = true;
+
+const double root_finding_tol = 1e-2;
+
 template <typename T>
 std::vector<size_t> sort_indexes(const std::vector<T> &v) {
 
@@ -75,30 +79,48 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       // Run Newton to restore feasibility if needed
       int max_newton_iter = 2776; // On one of the 10 target instances I ran, we needed at most 1388 iterations for successful transformation so I'm using 2x that number to declare failure
       double delta_delta_t_finite_diff = 1e-4;
-      double repair_tol = 1e-4;
+      double repair_tol = 1e-2;
       bool newton_succeeded = false;
       // std::cout << "starting newton" << std::endl;
+      double feas_next_t = std::numeric_limits<double>::infinity();
+      Vector2d feas_next_pos = std::numeric_limits<double>::infinity()*Vector2d::Ones();
+      double feas_next_heading = std::numeric_limits<double>::infinity();
       for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
         next_pos = q_trj_per_target[target_idx](next_t);
 
         // std::cout << delta_t << " desired length " << vmax*delta_t << " shortest path length " << turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho).col(1).sum() << std::endl;
         RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, params.elongation_tol);
-        if (std::isfinite(turns(0, 0))) {
+        if (std::isfinite(turns(0, 0)) && next_t < feas_next_t) {
           max_newton_iter_for_success_repair = std::max(newton_iter, max_newton_iter_for_success_repair);
           newton_succeeded = true;
+          feas_next_t = next_t;
+          feas_next_pos = next_pos;
+          feas_next_heading = heading;
           for (int row = 0; row < turns.rows(); ++row) {
             if (turns(row, 0) != 0) {
-              heading += turns(row, 1)/turns(row, 0);
+              feas_next_heading += turns(row, 1)/turns(row, 0);
             }
           }
-          break;
+          if (!optimization_during_repair) {
+            break;
+          }
         }
 
         RowMatrixXd shortest_path_turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho);
         double shortest_path_dist = shortest_path_turns.col(1).sum();
+
         double c = shortest_path_dist - vmax*delta_t;
 
         // delta_vs_iterations.push_back(Vector2d(newton_iter, c));
+        if (std::abs(c) < params.elongation_tol) {
+          if (std::isinf(turns(0, 0))) {
+            throw std::runtime_error("Path elongation should have just returned the shortest dubins path but the elongation actually failed");
+          }
+          if (!optimization_during_repair) {
+            throw std::runtime_error("We should not have queried the shortest Dubins path if we were able to generate a feasible path already and are not trying to optimize the path length");
+          }
+          break;
+        }
 
         // Finite-diff
         double delta_t_plus = delta_t + delta_delta_t_finite_diff;
@@ -134,7 +156,6 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             delta_t = next_t - t;
           }
         }
-        X(seq_idx, 1) = delta_t;
       }
 
       if (!newton_succeeded) {
@@ -213,6 +234,12 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         break;
       }
 
+      next_t = feas_next_t;
+      next_pos = feas_next_pos;
+      heading = feas_next_heading;
+      delta_t = next_t - t;
+      X(seq_idx, 1) = delta_t;
+
       if (no_tw) {
         if (params.min_latency) {
           cost += next_t;
@@ -237,72 +264,159 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     } else {
       next_pos = q_trj_per_target[target_idx](next_t);
       double dist = (next_pos - pos).norm();
-      if (dist <= vmax*delta_t) {
-        // Travel is feasible, no need to repair
-        if (no_tw) {
-          if (params.min_latency) {
-            cost += next_t;
-          } else if (params.min_time) {
-            if (seq_idx == num_targets - 1) {
-              cost += next_t;
-            }
-          } else {
-            cost += dist;
-          }
-        } else {
-          if (params.min_latency) {
-            cost += next_t - tw_per_target(target_idx, 0);
-          } else if (params.min_time) {
-            if (seq_idx == num_targets - 1) {
-              cost += next_t;
-            }
-          } else {
-            cost += dist;
-          }
-        }
+      bool feas = dist <= vmax*delta_t;
+      if (feas && ((!params.min_latency && !params.min_time) || !optimization_during_repair)) {
+        // Travel is feasible, no need to repair. Additionally, we are not using a time-based cost function,
+        // so there is not reason to further optimize the arrival time
+        cost += dist;
         t = next_t;
         pos = next_pos;
         continue;
       }
 
-      double t_high;
-      double t_high_dist;
-
-      if (no_tw) {
-        bool found_ub = false;
-        t_high = t + 1;
-        delta_t = t_high - t;
-        for (int i = 0; i < 100; ++i) {
-          // Check if travel is feasible to next_pos
-          next_pos = q_trj_per_target[target_idx](t_high);
-          dist = (next_pos - pos).norm();
+      // Newton version
+      if (!no_tw) {
+        if (feas) {
+          // Check if we can intercept at start of time window
+          // Deliberately using local variables here so we can use the original
+          // next_t as a starting point for Newton
+          double next_t = tw_per_target(target_idx, 0);
+          Vector2d next_pos = q_trj_per_target[target_idx](next_t);
+          double dist = (next_pos - pos).norm();
+          double delta_t = next_t - t;
           if (dist <= vmax*delta_t) {
-            found_ub = true;
-            t_high_dist = dist;
+            // We can intercept at the start of the time window
+            // If min-latency, don't add anything, because latency = 0.
+            // We wouldn't reach here if min-dist
+            if (params.min_time && seq_idx == num_targets - 1) {
+              cost += next_t;
+            }
+            t = next_t;
+            pos = next_pos;
+            X(seq_idx, 1) = delta_t;
+            continue;
+          }
+        } else {
+          // Check if travel is feasible to next_pos at end of time window
+          // Deliberately using local variables here so we can use the original
+          // next_t as a starting point for Newton
+          double next_t = tw_per_target(target_idx, 1);
+          Vector2d next_pos = q_trj_per_target[target_idx](next_t);
+          double delta_t = next_t - t;
+          double dist = (next_pos - pos).norm();
+          if (dist > vmax*delta_t) {
+            // Travel is infeasible even to end of time window
+            repair_failed = true;
             break;
           }
-          t_high *= 2;
-          delta_t = t_high - t;
         }
-        if (!found_ub) {
-          throw std::runtime_error("Did not find upper bound for bisection");
+      }
+
+      int max_newton_iter = 10;
+      bool got_feas = feas;
+      double feas_next_t = next_t;
+      Vector2d feas_next_pos = next_pos;
+      double feas_dist = dist;
+      for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
+        // Find root of dist - vmax*delta_t
+        double resid = dist - vmax*delta_t + 1e-4; // The 1e-4 is so we actually get to a feasible solution
+        // delta_vs_iterations.push_back(resid);
+        double deriv = 1/dist*(next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t)) - vmax;
+        delta_t -= resid/deriv;
+        next_t = t + delta_t;
+        next_pos = q_trj_per_target[target_idx](next_t);
+        dist = (next_pos - pos).norm();
+        if (dist <= vmax*delta_t) {
+          if (!got_feas) {
+            got_feas = true;
+            feas_next_t = next_t;
+            feas_next_pos = next_pos;
+            feas_dist = dist;
+            if (!params.min_latency && !params.min_time) {
+              break;
+            }
+          } else if (next_t < feas_next_t) {
+            feas_next_t = next_t;
+            feas_next_pos = next_pos;
+            feas_dist = dist;
+          }
+
+          if (std::abs(resid) < root_finding_tol) {
+            break;
+          }
+        }
+      }
+      if (!got_feas) {
+        throw std::runtime_error("Zero turning radius repair failed even though we know we can get to a point in the time window");
+      }
+
+      next_t = feas_next_t;
+      next_pos = feas_next_pos;
+      double next_dist = feas_dist;
+      delta_t = next_t - t;
+
+      // Bisection version
+      /*
+      double t_high = next_t;
+      double t_high_dist = dist;
+
+      if (feas) {
+        if (!no_tw) {
+          // Check if we can intercept at start of time window
+          double next_t = tw_per_target(target_idx, 0);
+          Vector2d next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+          double dist = (next_pos - pos).norm();
+          double delta_t = next_t - t;
+          if (dist <= vmax*delta_t) {
+            // We can intercept at the start of the time window
+            // If min-latency, don't add anything, because latency = 0.
+            // We wouldn't reach here if min-dist
+            if (params.min_time && seq_idx == num_targets - 1) {
+              cost += next_t;
+            }
+            t = next_t;
+            pos = next_pos;
+            X(seq_idx, 1) = delta_t;
+            continue;
+          }
         }
       } else {
-        // Check if travel is feasible to next_pos at end of time window
-        next_pos = q_trj_per_target[target_idx](tw_per_target(target_idx, 1));
-        delta_t = tw_per_target(target_idx, 1) - t;
-        dist = (next_pos - pos).norm();
-        if (dist > vmax*delta_t) {
-          // Travel is infeasible even to end of time window
-          repair_failed = true;
-          break;
+        if (no_tw) {
+          bool found_ub = false;
+          t_high = t + 1;
+          delta_t = t_high - t;
+          for (int i = 0; i < 100; ++i) {
+            // Check if travel is feasible to next_pos
+            next_pos = q_trj_per_target[target_idx](t_high);
+            dist = (next_pos - pos).norm();
+            if (dist <= vmax*delta_t) {
+              found_ub = true;
+              t_high_dist = dist;
+              break;
+            }
+            t_high *= 2;
+            delta_t = t_high - t;
+          }
+          if (!found_ub) {
+            throw std::runtime_error("Did not find upper bound for bisection");
+          }
+        } else {
+          // Check if travel is feasible to next_pos at end of time window
+          next_pos = q_trj_per_target[target_idx](tw_per_target(target_idx, 1));
+          delta_t = tw_per_target(target_idx, 1) - t;
+          dist = (next_pos - pos).norm();
+          if (dist > vmax*delta_t) {
+            // Travel is infeasible even to end of time window
+            repair_failed = true;
+            break;
+          }
+          t_high = tw_per_target(target_idx, 1);
+          t_high_dist = dist;
         }
-        t_high = tw_per_target(target_idx, 1);
-        t_high_dist = dist;
       }
 
       // Run bisection to find earliest time such that interception is feasible
-      double t_low = next_t;
+      double t_low = feas ? (no_tw ? t : std::max(t, tw_per_target(target_idx, 0))) : next_t;
       int num_bisection_iter = 10;
       for (int bisection_iter = 0; bisection_iter < num_bisection_iter; ++bisection_iter) {
         double t_mid = 0.5*(t_low + t_high);
@@ -317,12 +431,19 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
           t_high = t_mid;
           t_high_dist = dist;
           next_pos = pos_mid;
+
+          if (std::abs(dist - vmax*delta_t) < root_finding_tol) {
+            break;
+          }
         }
       }
 
       next_t = t_high;
+      double next_dist = t_high_dist;
 
       delta_t = t_high - t;
+      */
+
       X(seq_idx, 1) = delta_t;
       if (no_tw) {
         if (params.min_latency) {
@@ -332,17 +453,17 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             cost += next_t;
           }
         } else {
-           cost += t_high_dist;
+           cost += next_dist;
         }
       } else {
         if (params.min_latency) {
-          cost += next_t - next_t - tw_per_target(target_idx, 0);
+          cost += next_t - tw_per_target(target_idx, 0);
         } else if (params.min_time) {
           if (seq_idx == num_targets - 1) {
             cost += next_t;
           }
         } else {
-           cost += t_high_dist;
+           cost += next_dist;
         }
       }
     }
@@ -370,6 +491,13 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   cost(0) = tmp_cost;
   return repair_failed;
 }
+
+/*
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double &cost, bool dubins, double rho, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, bool no_tw, double &final_heading, double t0) {
+  std::vector<double> delta_vs_iterations;
+  return repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, vmax, cost, dubins, rho, max_newton_iter_for_success_repair, params, no_tw, final_heading, 0., delta_vs_iterations);
+}
+*/
 
 // next_heading is Ref<Vector1d> rather than double& so I can test in python
 // double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> next_heading, const CircularTrajectory &q_trj, const Ref<const Vector2d> &pos, double heading, double tw_start, double tw_end, double t, double vmax_agent, double rho, double vmax_target, int &max_bisection_iter_for_success_transformation, bool no_tw, std::vector<Vector2d> &delta_vs_iterations) {
@@ -459,7 +587,6 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
   }
 
   int max_bisection_iter = no_tw ? 100 : 34; // On one of the 10 target instances I ran, we needed at most 17 iterations for successful transformation so I'm using 2x that number to declare failure
-  double bisection_tol = 1e-4;
   for (int bisection_iter = 0; bisection_iter < max_bisection_iter; ++bisection_iter) {
     double t_mid = 0.5*(t_min + t_max);
     next_pos = q_trj(t_mid);
@@ -467,8 +594,7 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
     CC_detected |= turns(1, 0) != 0;
     double length = turns.col(1).sum();
     double delta = length - vmax_agent*(t_mid - t);
-    // delta_vs_iterations.push_back(Vector2d(bisection_iter, delta));
-    if (std::abs(delta) < bisection_tol) {
+    if (std::abs(delta) < root_finding_tol) {
       next_heading(0) = heading;
       for (int row = 0; row < turns.rows(); ++row) {
         if (turns(row, 0) != 0) {
@@ -612,6 +738,146 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
     t = next_t;
     pos = next_pos;
     heading = next_heading(0);
+  }
+  return true;
+}
+
+bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw) {
+  int num_targets = tw_per_target.rows();
+
+  double t = 0;
+  Vector2d pos = p0;
+  Vector2d next_rel_pos;
+  Vector2d next_pos;
+  cost = 0;
+  bool made_change = false;
+  for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+    int target_idx = X(seq_idx, 0);
+
+    if (seq_idx != 0) {
+      // Changing previous delta_t values may make next interception infeasible. If so, repair
+      double tmp_cost;
+      std::vector<ExtendedCppSpline> tmp_q_trj;
+      tmp_q_trj.push_back(q_trj_per_target[target_idx]);
+      MatrixXd tmp_chromosome = X.block(seq_idx, 0, 1, gene_size);
+      tmp_chromosome(0, 0) = 0;
+      double dummy_next_heading;
+      bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), tmp_q_trj, pos, 0., vmax, tmp_cost, false, 0., max_newton_iter_for_success_repair, params, no_tw, dummy_next_heading, t);
+      if (repair_failed) {
+        cost = std::numeric_limits<double>::infinity();
+        return false;
+      }
+      X.block(seq_idx, 0, 1, gene_size) = tmp_chromosome;
+      X(seq_idx, 0) = target_idx;
+    }
+
+    double delta_t = X(seq_idx, 1);
+    double next_t = t + delta_t;
+
+    if (params.min_latency || params.min_time) {
+      double t_high = next_t;
+      next_pos = q_trj_per_target[target_idx](next_t);
+
+      if (!no_tw && t <= tw_per_target(target_idx, 0)) {
+        // Check if we can intercept at start of time window
+        double next_t = tw_per_target(target_idx, 0);
+        Vector2d next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+        double dist = (next_pos - pos).norm();
+        double delta_t = next_t - t;
+        if (dist <= vmax*delta_t) {
+          // We can intercept at the start of the time window
+          // If min-latency, don't add anything, because latency = 0.
+          // We wouldn't reach here if min-dist
+          if (params.min_time && seq_idx == num_targets - 1) {
+            cost += next_t;
+          }
+          t = next_t;
+          pos = next_pos;
+          X(seq_idx, 1) = delta_t;
+          continue;
+        }
+      }
+
+      // Run bisection to find earliest time such that interception is feasible
+      double t_low = no_tw ? t : std::max(t, tw_per_target(target_idx, 0));
+      int num_bisection_iter = 10;
+      for (int bisection_iter = 0; bisection_iter < num_bisection_iter; ++bisection_iter) {
+        double t_mid = 0.5*(t_low + t_high);
+        delta_t = t_mid - t;
+        Vector2d pos_mid = q_trj_per_target[target_idx](t_mid);
+        double dist = (pos_mid - pos).norm();
+        if (dist > vmax*delta_t) {
+          // Travel is infeasible
+          t_low = t_mid;
+        } else {
+          // Travel is feasible
+          t_high = t_mid;
+          next_pos = pos_mid;
+        }
+      }
+      next_t = t_high;
+    } else {
+      int max_gd_iter = 10;
+      int max_backtrack_iter = 10;
+      double next_t = t + delta_t;
+      for (int gd_iter = 0; gd_iter < max_gd_iter; ++gd_iter) {
+        next_pos = q_trj_per_target[target_idx](next_t);
+        double dist = (next_pos - pos).norm();
+        double deriv = (next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t));
+        // Limit step size to avoid going outside time window
+        double step;
+        if (no_tw) {
+          step = -deriv;
+        } else {
+          step = std::min(std::max(-deriv, tw_per_target(target_idx, 0) - next_t), tw_per_target(target_idx, 1) - next_t);
+        }
+        double step_size = step/(-deriv);
+
+        double b = 0.01; // From Zac's class (he mentioned to set b between 1e-4 and 0.1)
+        double c = 0.5; // From Zac's class
+        bool reduction = false;
+        for (int backtrack_iter = 0; backtrack_iter < max_backtrack_iter; ++backtrack_iter) {
+          double step = -step_size*deriv;
+          double next_t_cand = next_t + step;
+          Vector2d next_pos_cand = q_trj_per_target[target_idx](next_t_cand);
+          double dist_cand = (next_pos_cand - pos).norm();
+          // Armijo rule.
+          // Mutliply change in next_t by derivative to get expected change in cost.
+          // We're checking if the actual cost reduction is at least b times the expected
+          if (dist_cand < vmax*(next_t_cand - t) && dist_cand - dist <= b*deriv*step) {
+            next_t = next_t_cand;
+            next_pos = next_pos_cand;
+            reduction = true;
+            break;
+          }
+          step_size *= c;
+        }
+        if (!reduction) {
+          break;
+        }
+      }
+    }
+
+    delta_t = next_t - t;
+    X(seq_idx, 1) = delta_t;
+
+    // Update cost, time, and position
+    // Assume dubins
+    if (params.min_latency) {
+      if (no_tw) {
+        cost += next_t;
+      } else {
+        cost += next_t - tw_per_target(target_idx, 0);
+      }
+    } else if (params.min_time) {
+      if (seq_idx == num_targets - 1) {
+        cost += next_t;
+      }
+    } else {
+      cost += (next_pos - pos).norm();
+    }
+    t = next_t;
+    pos = next_pos;
   }
   return true;
 }
@@ -840,44 +1106,25 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       (*updated_population)[chromosome_idx] = Xnew;
       (*updated_population_costs)[chromosome_idx] = cost;
 
-      // Transformation to reduce cost (only for Dubins)
+      // Transformation to reduce cost
+      bool success;
       if (dubins) {
-        bool success = transform_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
-        if (success && cost < (*updated_population_costs)[chromosome_idx]) {
-          // std::cout << "transformation reduced cost" << std::endl;
-          (*updated_population)[chromosome_idx] = Xnew;
-          (*updated_population_costs)[chromosome_idx] = cost;
-
-          // Make sure transformation didn't mess up feasibility (TODO: take out if running paper experiments or any experiments where we are comparing different algorithm runtimes)
-          /*
-          double t = 0;
-          Vector2d pos = p0;
-          Vector2d next_pos;
-          double heading = heading0;
-          for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
-            int target_idx = Xnew(seq_idx, 0);
-            double delta_t = Xnew(seq_idx, 1);
-            t += delta_t;
-            next_pos = q_trj_per_target[target_idx](t);
-
-            RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, params.elongation_tol);
-            if (std::isinf(turns(0, 0))) {
-              throw std::runtime_error("elongated path generation failed after transformation");
-            }
-
-            pos = next_pos;
-            for (int row = 0; row < turns.rows(); ++row) {
-              if (turns(row, 0) != 0) {
-                heading += turns(row, 1)/turns(row, 0);
-              }
-            }
-
-            if (!no_tw && (t < tw_per_target(target_idx, 0) - 1e-4 || t > tw_per_target(target_idx, 1) + 1e-4)) {
-              throw std::runtime_error("t out of window");
-            }
-          }
-          */
+        if (!optimization_during_repair) {
+          success = transform_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
+        } else {
+          success = false;
         }
+      } else {
+        if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
+          success = transform_chromosome_no_dubins(Xnew, tw_per_target, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
+        } else {
+          success = false;
+        }
+      }
+      if (success && cost < (*updated_population_costs)[chromosome_idx]) {
+        // std::cout << "transformation reduced cost" << std::endl;
+        (*updated_population)[chromosome_idx] = Xnew;
+        (*updated_population_costs)[chromosome_idx] = cost;
       }
     }
 
@@ -901,6 +1148,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       throw std::runtime_error("Cost increased after memetic alg iteration");
     }
     if (cost_vs_time.size() == 0 || *it2 < cost_vs_time.back().second) {
+      std::cout << "New best cost: " << *it2 << std::endl;
       cost_vs_time.push_back(std::pair<double, double>(((double)nanos)/1e9, *it2));
     }
   } // Overall loop
