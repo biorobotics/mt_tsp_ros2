@@ -21,6 +21,8 @@ typedef const Ref<const Matrix<long, Dynamic, 1>> &VectorXlRef_const;
 typedef const Ref<const Matrix<double, Dynamic, 1>> &VectorXdRef_const;
 typedef const Ref<const RowMatrixXd> &RowMatrixXdRef_const;
 
+double tolerance = 1e-4;
+
 class DubinsTrjThroughSeqOfTargets {
   public:
     DubinsTrjThroughSeqOfTargets(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<CircularTrajectory> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, bool no_tw, double t0, bool min_latency, bool min_time, double newton_step_size) : tw_per_target(tw_per_target), q_trj_per_target(q_trj_per_target), p0(p0), heading0(heading0), vmax(vmax), rho(rho), no_tw(no_tw), t0(t0), min_latency(min_latency), min_time(min_time), newton_step_size(newton_step_size) {
@@ -49,7 +51,7 @@ class DubinsTrjThroughSeqOfTargets {
           next_t = tw_per_target(target_idx, 0);
           next_pos = q_trj_per_target[target_idx](next_t);
           double delta_t = next_t - t;
-          RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-4);
+          RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, tolerance);
           if (std::isfinite(turns(0, 0))) {
             selected_pts_per_target(target_idx, 0) = next_t;
             selected_pts_per_target(target_idx, 1) = next_pos(0);
@@ -71,7 +73,7 @@ class DubinsTrjThroughSeqOfTargets {
           next_t = tw_per_target(target_idx, 1);
           next_pos = q_trj_per_target[target_idx](next_t);
           delta_t = next_t - t;
-          turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-4);
+          turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, tolerance);
           if (std::isinf(turns(0, 0))) {
             return false;
           }
@@ -89,7 +91,7 @@ class DubinsTrjThroughSeqOfTargets {
         for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
           next_pos = q_trj_per_target[target_idx](next_t);
 
-          RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-4);
+          RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, tolerance);
           if (std::isfinite(turns(0, 0)) && next_t < feas_next_t) {
             newton_succeeded = true;
             feas_next_t = next_t;
@@ -107,7 +109,7 @@ class DubinsTrjThroughSeqOfTargets {
 
           double c = shortest_path_dist - vmax*delta_t;
 
-          if (std::abs(c) < 1e-4) {
+          if (std::abs(c) < tolerance) {
             if (std::isinf(turns(0, 0))) {
               throw std::runtime_error("Path elongation should have just returned the shortest dubins path but the elongation actually failed");
             }
