@@ -84,43 +84,22 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     double delta_t = X(seq_idx, 2);
     double next_t = t + delta_t;
 
-    if (!no_tw) {
-      if (next_t > tw_per_target(target_idx, 1)) {
-        next_t = tw_per_target(target_idx, 1);
-        delta_t = next_t - t;
-        if (delta_t < 0) {
-          repair_failed = true;
-          break;
-        }
-        X(seq_idx, 2) = delta_t;
-      } else if (next_t < tw_per_target(target_idx, 0)) {
-        next_t = tw_per_target(target_idx, 0);
-        delta_t = next_t - t;
-        X(seq_idx, 2) = delta_t;
-      }
-    }
-
     next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
 
     // Check if interception is feasible
     if (dubins) {
-      // Run Newton to restore feasibility if needed
       int max_newton_iter = 2776; // On one of the 10 target instances I ran, we needed at most 1388 iterations for successful transformation so I'm using 2x that number to declare failure
-      double delta_delta_t_finite_diff = 1e-4;
-      double repair_tol = 1e-2;
-      bool newton_succeeded = false;
-      // std::cout << "starting newton" << std::endl;
+
       double feas_next_t = std::numeric_limits<double>::infinity();
       Vector2d feas_next_pos = std::numeric_limits<double>::infinity()*Vector2d::Ones();
       double feas_next_heading = std::numeric_limits<double>::infinity();
-      for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
+      if (optimization_during_repair && !no_tw) {
+        // Check start of time window
+        next_t = tw_per_target(target_idx, 0);
         next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
-
-        // std::cout << delta_t << " desired length " << vmax*delta_t << " shortest path length " << turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho).col(1).sum() << std::endl;
-        RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, repair_tol);
-        if (std::isfinite(turns(0, 0)) && next_t < feas_next_t) {
-          max_newton_iter_for_success_repair = std::max(newton_iter, max_newton_iter_for_success_repair);
-          newton_succeeded = true;
+        delta_t = next_t - t;
+        RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, root_finding_tol);
+        if (std::isfinite(turns(0, 0))) {
           feas_next_t = next_t;
           feas_next_pos = next_pos;
           feas_next_heading = heading;
@@ -129,19 +108,45 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
               feas_next_heading += turns(row, 1)/turns(row, 0);
             }
           }
-          if (!optimization_during_repair) {
+          max_newton_iter = 0; // No need to run Newton because we can get to the start of the time window
+        } else {
+          // Check end of time window. If infeasible, return, and if feasible, use as starting point for Newton
+          next_t = tw_per_target(target_idx, 1);
+          next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+          delta_t = next_t - t;
+          turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, root_finding_tol);
+          if (std::isinf(turns(0, 0))) {
+            repair_failed = true;
             break;
           }
         }
+      } else {
+        // Clip delta t to satisfy time window if applicable, then use as starting point for Newton
+        if (!no_tw) {
+          if (next_t > tw_per_target(target_idx, 1)) {
+            next_t = tw_per_target(target_idx, 1);
+            delta_t = next_t - t;
+            if (delta_t < 0) {
+              repair_failed = true;
+              break;
+            }
+          } else if (next_t < tw_per_target(target_idx, 0)) {
+            next_t = tw_per_target(target_idx, 0);
+            delta_t = next_t - t;
+          }
+        }
+        next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+      }
 
+      // Run Newton to restore feasibility if needed
+      double delta_delta_t_finite_diff = 1e-4;
+      // std::cout << "starting newton" << std::endl;
+      for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
         RowMatrixXd shortest_path_turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho);
         double shortest_path_dist = shortest_path_turns.col(1).sum();
         double c = shortest_path_dist - vmax*delta_t;
 
-        if (std::abs(c) < repair_tol) {
-          if (std::isinf(turns(0, 0))) {
-            throw std::runtime_error("Path elongation should have just returned the shortest dubins path but the elongation actually failed");
-          }
+        if (std::abs(c) < root_finding_tol) {
           if (!optimization_during_repair) {
             throw std::runtime_error("We should not have queried the shortest Dubins path if we were able to generate a feasible path already and are not trying to optimize the path length");
           }
@@ -182,11 +187,25 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             delta_t = next_t - t;
           }
         }
-      }
 
-      if (!newton_succeeded) {
-        repair_failed = true;
-        break;
+        next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+
+        // std::cout << delta_t << " desired length " << vmax*delta_t << " shortest path length " << turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho).col(1).sum() << std::endl;
+        RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, root_finding_tol);
+        if (std::isfinite(turns(0, 0)) && next_t < feas_next_t) {
+          max_newton_iter_for_success_repair = std::max(newton_iter, max_newton_iter_for_success_repair);
+          feas_next_t = next_t;
+          feas_next_pos = next_pos;
+          feas_next_heading = heading;
+          for (int row = 0; row < turns.rows(); ++row) {
+            if (turns(row, 0) != 0) {
+              feas_next_heading += turns(row, 1)/turns(row, 0);
+            }
+          }
+          if (!optimization_during_repair) {
+            break;
+          }
+        }
       }
 
       next_t = feas_next_t;
@@ -217,6 +236,21 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         }
       }
     } else {
+      // Clip delta t to satisfy time window if applicable, then use as starting point for Newton
+      if (!no_tw) {
+        if (next_t > tw_per_target(target_idx, 1)) {
+          next_t = tw_per_target(target_idx, 1);
+          delta_t = next_t - t;
+          if (delta_t < 0) {
+            repair_failed = true;
+            break;
+          }
+        } else if (next_t < tw_per_target(target_idx, 0)) {
+          next_t = tw_per_target(target_idx, 0);
+          delta_t = next_t - t;
+        }
+      }
+
       next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
       double dist = (next_pos - pos).norm();
       bool feas = dist <= vmax*delta_t;

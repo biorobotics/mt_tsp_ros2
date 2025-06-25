@@ -22,7 +22,7 @@ double root_find(double rho, double s, double l_m) {
   int max_iter = 100;
   bool success = false;
   for (int i = 0; i < max_iter; ++i) {
-    if (abs(r) < 1e-4) {
+    if (abs(r) < 1e-2) {
       success = true;
       break;
     }
@@ -215,7 +215,7 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
     l_m = std::min(l_m, l_RSL);
   }
 
-  if (std::abs(l_m - s) < 1e-4) {
+  if (std::abs(l_m - s) < 1e-2) {
     return true;
   }
 
@@ -422,7 +422,7 @@ bool check_elongation_possible_with_profiling(double x_0, double y_0, double the
 
   timer_start = std::chrono::high_resolution_clock::now();
 
-  if (std::abs(l_m - s) < 1e-4) {
+  if (std::abs(l_m - s) < 1e-2) {
     timer_stop = std::chrono::high_resolution_clock::now();
     nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
     check_time = ((double)nanos)/1e9;
@@ -881,7 +881,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
     l_m = std::min(l_m, l_RSL);
   }
 
-  if (std::abs(l_m - s) < 1e-4) {
+  if (std::abs(l_m - s) < 1e-2) {
     return turns_for_dubins_path(x_0, y_0, theta_0, x_f, y_f, theta_f, rho);
   }
 
@@ -1212,7 +1212,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
         double q_mid[3] = {x_mid, y_mid, theta_mid};
         dubins_shortest_path(&path, q_mid, q_f, rho);
         double l = dubins_path_length(&path) + first_C_dist_mid;
-        if (abs(l - s) < 1e-4) {
+        if (abs(l - s) < 1e-2) {
           success = true;
           break;
         }
@@ -1375,7 +1375,7 @@ RowMatrixXd elongated_dubins_path(double x_0, double y_0, double theta_0, double
       double q_mid[3] = {x_mid, y_mid, theta_mid};
       dubins_shortest_path(&path, q_mid, q_f, rho);
       double l = dubins_path_length(&path) + first_C_dist_mid;
-      if (abs(l - s) < 1e-4) {
+      if (abs(l - s) < 1e-2) {
         success = true;
         break;
       }
