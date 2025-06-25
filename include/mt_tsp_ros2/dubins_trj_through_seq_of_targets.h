@@ -64,6 +64,29 @@ class DubinsTrjThroughSeqOfTargets {
             t = next_t;
             pos = next_pos;
             heading = next_heading;
+
+            if (no_tw) {
+              if (min_latency) {
+                cost(0) += next_t;
+              } else if (seq_idx == num_targets - 1) {
+                if (min_time) {
+                  cost(0) += next_t;
+                } else {
+                  cost(0) += vmax*next_t;
+                }
+              }
+            } else {
+              if (min_latency) {
+                cost(0) += next_t - tw_per_target(target_idx, 0);
+              } else if (seq_idx == num_targets - 1) {
+                if (min_time) {
+                  cost(0) += next_t;
+                } else {
+                  cost(0) += vmax*next_t;
+                }
+              }
+            }
+
             continue;
           }
 
