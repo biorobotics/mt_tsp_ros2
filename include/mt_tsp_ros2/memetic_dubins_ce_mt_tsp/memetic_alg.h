@@ -88,7 +88,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
     // Check if interception is feasible
     if (dubins) {
-      int max_newton_iter = 2776; // On one of the 10 target instances I ran, we needed at most 1388 iterations for successful transformation so I'm using 2x that number to declare failure
+      int max_newton_iter = 2000; // On one of the 10 target instances I ran, we needed at most 1388 iterations for successful repair
 
       double feas_next_t = std::numeric_limits<double>::infinity();
       Vector2d feas_next_pos = std::numeric_limits<double>::infinity()*Vector2d::Ones();

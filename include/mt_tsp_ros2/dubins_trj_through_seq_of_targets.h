@@ -101,7 +101,7 @@ class DubinsTrjThroughSeqOfTargets {
         }
 
         // Run Newton to restore feasibility if needed
-        int max_newton_iter = 2776; // On one of the 10 target instances I ran, we needed at most 1388 iterations for successful transformation so I'm using 2x that number to declare failure
+        int max_newton_iter = 2000;
         double delta_delta_t_finite_diff = 1e-4;
         bool newton_succeeded = false;
         // std::cout << "starting newton" << std::endl;
