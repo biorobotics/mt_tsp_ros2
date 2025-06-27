@@ -48,8 +48,7 @@ class MemeticPCGUtils {
         target_seq_per_thread.push_back(VectorXl::Zero(num_targets));
         inserted_targets_per_thread.push_back(VectorXb::Zero(num_targets));
       }
-
-      // Preallocate
+      omp_set_num_threads(num_openmp_threads);
     }
 
     void crossover(Ref<RowMatrixXd> population, Ref<VectorXd> population_costs) {
