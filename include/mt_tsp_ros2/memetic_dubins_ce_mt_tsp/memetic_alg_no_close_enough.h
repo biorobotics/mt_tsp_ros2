@@ -124,6 +124,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         RowMatrixXd shortest_path_turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho);
         double shortest_path_dist = shortest_path_turns.col(1).sum();
         double c = shortest_path_dist - vmax*delta_t;
+        // delta_vs_iterations.push_back(c);
 
         if (std::abs(c) < root_finding_tol) {
           if (!optimization_during_repair) {
