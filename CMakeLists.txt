@@ -265,6 +265,14 @@ install(TARGETS one_sided_dubins_elongation
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(memetic_pcg_utils
+  src/bind_memetic_pcg_utils.cpp
+)
+target_link_libraries(memetic_pcg_utils PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS memetic_pcg_utils
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 add_executable(compare_to_gdip 
   src/compare_to_gdip.cpp
   $ENV{HOME}/gdip/gdip/core/src/opendubins/angleinterval.cpp
@@ -302,6 +310,14 @@ pybind11_add_module(dubins_trj_through_seq_of_targets
   src/bind_dubins_trj_through_seq_of_targets.cpp
 )
 install(TARGETS dubins_trj_through_seq_of_targets
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
+pybind11_add_module(reopt_gtsp_tour
+  src/bind_reopt_gtsp_tour.cpp
+)
+install(TARGETS reopt_gtsp_tour
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
