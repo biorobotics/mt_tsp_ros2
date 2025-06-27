@@ -119,6 +119,14 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             repair_failed = true;
             break;
           }
+          feas_next_t = next_t;
+          feas_next_pos = next_pos;
+          feas_next_heading = heading;
+          for (int row = 0; row < turns.rows(); ++row) {
+            if (turns(row, 0) != 0) {
+              feas_next_heading += turns(row, 1)/turns(row, 0);
+            }
+          }
         }
       } else {
         // Clip delta t to satisfy time window if applicable, then use as starting point for Newton

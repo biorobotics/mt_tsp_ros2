@@ -40,15 +40,22 @@ class DubinsTrjThroughSeqOfTargets {
       Vector2d next_pos;
       for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
         int target_idx = target_seq(seq_idx);
-
         double next_t;
+        double delta_t;
+
+        int max_newton_iter = 2000;
+
+        double feas_next_t = std::numeric_limits<double>::infinity();
+        Vector2d feas_next_pos = std::numeric_limits<double>::infinity()*Vector2d::Ones();
+        double feas_next_heading = std::numeric_limits<double>::infinity();
+
         if (no_tw) {
           throw std::runtime_error("Did not implement no-time-window case");
         } else {
           // Check start of time window
           next_t = tw_per_target(target_idx, 0);
           next_pos = q_trj_per_target[target_idx](next_t);
-          double delta_t = next_t - t;
+          delta_t = next_t - t;
           RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-4);
           if (std::isfinite(turns(0, 0))) {
             selected_pts_per_target(target_idx, 0) = next_t;
@@ -98,42 +105,26 @@ class DubinsTrjThroughSeqOfTargets {
           if (std::isinf(turns(0, 0))) {
             return false;
           }
+          feas_next_t = next_t;
+          feas_next_pos = next_pos;
+          feas_next_heading = heading;
+          for (int row = 0; row < turns.rows(); ++row) {
+            if (turns(row, 0) != 0) {
+              feas_next_heading += turns(row, 1)/turns(row, 0);
+            }
+          }
         }
 
         // Run Newton to restore feasibility if needed
-        int max_newton_iter = 2000;
         double delta_delta_t_finite_diff = 1e-4;
-        bool newton_succeeded = false;
         // std::cout << "starting newton" << std::endl;
-        double feas_next_t = std::numeric_limits<double>::infinity();
-        Vector2d feas_next_pos = std::numeric_limits<double>::infinity()*Vector2d::Ones();
-        double feas_next_heading = std::numeric_limits<double>::infinity();
-        double delta_t = next_t - t;
         for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
-          next_pos = q_trj_per_target[target_idx](next_t);
-
-          RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-4);
-          if (std::isfinite(turns(0, 0)) && next_t < feas_next_t) {
-            newton_succeeded = true;
-            feas_next_t = next_t;
-            feas_next_pos = next_pos;
-            feas_next_heading = heading;
-            for (int row = 0; row < turns.rows(); ++row) {
-              if (turns(row, 0) != 0) {
-                feas_next_heading += turns(row, 1)/turns(row, 0);
-              }
-            }
-          }
-
           RowMatrixXd shortest_path_turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho);
           double shortest_path_dist = shortest_path_turns.col(1).sum();
 
           double c = shortest_path_dist - vmax*delta_t;
 
           if (std::abs(c) < 1e-4) {
-            if (std::isinf(turns(0, 0))) {
-              throw std::runtime_error("Path elongation should have just returned the shortest dubins path but the elongation actually failed");
-            }
             break;
           }
 
@@ -171,11 +162,20 @@ class DubinsTrjThroughSeqOfTargets {
               delta_t = next_t - t;
             }
           }
-        }
 
-        if (!newton_succeeded) {
-          std::cout << "newton failed at seq_idx" << seq_idx << std::endl;
-          return false;
+          next_pos = q_trj_per_target[target_idx](next_t);
+
+          RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-4);
+          if (std::isfinite(turns(0, 0)) && next_t < feas_next_t) {
+            feas_next_t = next_t;
+            feas_next_pos = next_pos;
+            feas_next_heading = heading;
+            for (int row = 0; row < turns.rows(); ++row) {
+              if (turns(row, 0) != 0) {
+                feas_next_heading += turns(row, 1)/turns(row, 0);
+              }
+            }
+          }
         }
 
         next_t = feas_next_t;
