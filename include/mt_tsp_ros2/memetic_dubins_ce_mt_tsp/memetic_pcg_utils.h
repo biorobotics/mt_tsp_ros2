@@ -19,7 +19,7 @@ typedef Matrix<double, 1, 1> Vector1d;
 
 class MemeticPCGUtils {
   public:
-    MemeticPCGUtils(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, bool min_latency, bool min_time, double newton_step_size, int num_openmp_threads) {
+    MemeticPCGUtils(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, bool min_latency, bool min_time, double newton_step_size, int num_openmp_threads, double mutation_prob) : mutation_prob(mutation_prob) {
       int num_targets = tw_per_target.rows();
       int gene_size;
       if (rho == 0) {
@@ -58,6 +58,8 @@ class MemeticPCGUtils {
 
       std::uniform_int_distribution<int> parent_distribution(0, pop_size - 1);
       std::uniform_int_distribution<int> crossover_distribution(0, 1);
+      std::uniform_real_distribution<double> mutation_distribution(0, 1);
+      std::uniform_int_distribution<int> mutation_operator1_distribution(0, num_targets - 1);
 
       RowMatrixXd updated_population = population;
       VectorXd updated_population_costs = population_costs;
@@ -105,6 +107,16 @@ class MemeticPCGUtils {
           }
         }
 
+        double mutation_sample = mutation_distribution(rngs_per_thread[omp_get_thread_num()]);
+        if (mutation_sample < mutation_prob) {
+          int seq_idx1 = mutation_operator1_distribution(rngs_per_thread[omp_get_thread_num()]);
+          int seq_idx2 = mutation_operator1_distribution(rngs_per_thread[omp_get_thread_num()]);
+          int target_idx1 = target_seq_per_thread[thread_idx](seq_idx1);
+          int target_idx2 = target_seq_per_thread[thread_idx](seq_idx2);
+          target_seq_per_thread[thread_idx](seq_idx1) = target_idx2;
+          target_seq_per_thread[thread_idx](seq_idx2) = target_idx1;
+        }
+
         bool success = false;
         Vector1d cost;
         if (efat_obj != nullptr) {
@@ -137,4 +149,5 @@ class MemeticPCGUtils {
     std::vector<RowMatrixXd> selected_pts_per_target_per_thread;
     std::vector<VectorXl> target_seq_per_thread;
     std::vector<VectorXb> inserted_targets_per_thread;
+    double mutation_prob;
 };

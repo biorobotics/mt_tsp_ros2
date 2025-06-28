@@ -7,7 +7,7 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(memetic_pcg_utils, m) {
   py::class_<MemeticPCGUtils>(m, "MemeticPCGUtils")
-    .def(py::init<const Ref<const RowMatrixXd> &, const std::vector<ExtendedCppSpline> &, const Ref<const Vector2d> &, double, double, double, bool, bool, double, int>())
+    .def(py::init<const Ref<const RowMatrixXd> &, const std::vector<ExtendedCppSpline> &, const Ref<const Vector2d> &, double, double, double, bool, bool, double, int, double>())
     .def("crossover", &MemeticPCGUtils::crossover)
     ;
 }
