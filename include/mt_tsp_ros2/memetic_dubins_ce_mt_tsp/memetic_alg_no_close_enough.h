@@ -115,6 +115,20 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
           }
         }
         next_pos = q_trj_per_target[target_idx](next_t);
+
+        RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, root_finding_tol);
+        if (std::isfinite(turns(0, 0))) {
+          max_newton_iter_for_success_repair = std::max(0, max_newton_iter_for_success_repair);
+          feas_next_t = next_t;
+          feas_next_pos = next_pos;
+          feas_next_heading = heading;
+          for (int row = 0; row < turns.rows(); ++row) {
+            if (turns(row, 0) != 0) {
+              feas_next_heading += turns(row, 1)/turns(row, 0);
+            }
+          }
+          max_newton_iter = 0; // No need to run Newton because we can get to the start of the time window
+        }
       }
 
       // Run Newton to restore feasibility if needed
