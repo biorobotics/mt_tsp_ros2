@@ -19,10 +19,10 @@ class LifelongDAGDFSPlanner {
   public:
     LifelongDAGDFSPlanner(RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, RowMatrixXdRef_const all_pts, int num_threads) : num_threads(num_threads) {
       before_time = 0.;
+      num_targets = target_to_pt_ptr.size() - 1; // -1 because we have a dummy target associated with the depot
       if (do_prune) {
         auto timer_start = std::chrono::high_resolution_clock::now();
         int num_nodes = gtsp_cost_mat.rows();
-        int num_targets = target_to_pt_ptr.size() - 1; // -1 because we have a dummy target associated with the depot
         before = MatrixXb::Ones(num_nodes, num_targets);
         for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
           auto ptr = target_to_pt_ptr[target_idx].unchecked<1>();
@@ -43,6 +43,36 @@ class LifelongDAGDFSPlanner {
         auto timer_stop = std::chrono::high_resolution_clock::now();
         auto nanos = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
         before_time = ((double)nanos)/1e9;
+      }
+    }
+
+    MatrixXb compute_before_target_to_target(const std::vector<py::array_t<long>> &target_to_pt_ptr) {
+      before_target_to_target = MatrixXb::Ones(num_targets, num_targets);
+      for (int target_idx1 = 0; target_idx1 < num_targets; ++target_idx1) {
+        for (int target_idx2 = 0; target_idx2 < num_targets; ++target_idx2) {
+          if (target_idx1 == target_idx2) {
+            continue;
+          }
+          auto ptr = target_to_pt_ptr[target_idx1].unchecked<1>();
+          for (int ptr_idx = 0; ptr_idx < ptr.size(); ++ptr_idx) {
+            int node_idx1 = ptr(ptr_idx);
+            if (!before(node_idx1, target_idx2)) {
+              before_target_to_target(target_idx1, target_idx2) = false;
+              break;
+            }
+          }
+        }
+      }
+      return before_target_to_target;
+    }
+
+    void adjust_before_using_tour(RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, VectorXlRef_const tour) {
+      for (int tour_idx = 1; tour_idx < tour.size() - 1; ++tour_idx) {
+        int node_idx = tour(tour_idx);
+        for (int next_tour_idx = tour_idx + 1; next_tour_idx < tour.size() - 1; ++next_tour_idx) {
+          int next_node_idx = tour(next_tour_idx);
+          before(node_idx, pt_to_target_ptr(next_node_idx)) = false;
+        }
       }
     }
 
@@ -478,6 +508,9 @@ class LifelongDAGDFSPlanner {
     }
 
     VectorXd plan(Ref<VectorXl> tour, RowMatrixXdRef_const gtsp_cost_mat, VectorXlRef_const pt_to_target_ptr, const std::vector<py::array_t<long>> &target_to_pt_ptr, bool do_prune, bool do_sort, double time_limit, py::object other_tour_queue, RowMatrixXdRef_const all_pts, RowMatrixXlRef_const deleted_edges, bool sort_by_time) {
+      // VectorXl dummy_bias_tour(0);
+      // return plan_biased(tour, gtsp_cost_mat, pt_to_target_ptr, target_to_pt_ptr, do_prune, do_sort, time_limit, other_tour_queue, all_pts, deleted_edges, dummy_bias_tour, sort_by_time);
+
       VectorXl dummy_bias_tour(0);
       return plan_biased(tour, gtsp_cost_mat, pt_to_target_ptr, target_to_pt_ptr, do_prune, do_sort, time_limit, other_tour_queue, all_pts, deleted_edges, dummy_bias_tour, sort_by_time);
     }
@@ -489,6 +522,8 @@ class LifelongDAGDFSPlanner {
     MatrixXb before;
     double before_time;
     int num_threads;
+    MatrixXb before_target_to_target;
+    int num_targets;
 };
 
 class LifelongDAGDFSPlannerUnorderedSet {

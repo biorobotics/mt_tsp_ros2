@@ -3,6 +3,7 @@
 #include <pybind11/stl_bind.h>
 #include "mt_tsp_ros2/dag_dfs.h"
 #include "mt_tsp_ros2/lifelong_dag_dfs.h"
+#include "mt_tsp_ros2/backward_dag_dfs.h"
 
 namespace py = pybind11;
 
@@ -19,11 +20,18 @@ PYBIND11_MODULE(dag_dfs, m) {
     .def("plan_considering_evaluations", &LifelongDAGDFSPlanner::plan_considering_evaluations)
     .def("plan_biased", &LifelongDAGDFSPlanner::plan_biased)
     .def("get_before_time", &LifelongDAGDFSPlanner::get_before_time)
+    .def("adjust_before_using_tour", &LifelongDAGDFSPlanner::adjust_before_using_tour)
+    .def("compute_before_target_to_target", &LifelongDAGDFSPlanner::compute_before_target_to_target)
     ;
 
   py::class_<LifelongDAGDFSPlannerUnorderedSet>(m, "LifelongDAGDFSPlannerUnorderedSet")
     .def(py::init<RowMatrixXdRef_const, VectorXlRef_const, const std::vector<py::array_t<long>> &, bool, bool, RowMatrixXdRef_const>())
     .def("plan", &LifelongDAGDFSPlannerUnorderedSet::plan)
     .def("get_before_time", &LifelongDAGDFSPlannerUnorderedSet::get_before_time)
+    ;
+
+  py::class_<BackwardDAGDFSPlanner>(m, "BackwardDAGDFSPlanner")
+    .def(py::init<RowMatrixXdRef_const, VectorXlRef_const, const std::vector<py::array_t<long>> &, bool, bool, RowMatrixXdRef_const, int>())
+    .def("plan", &BackwardDAGDFSPlanner::plan)
     ;
 }
