@@ -234,8 +234,8 @@ message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
 pybind11_add_module(memetic_dubins_ce_mt_tsp
   src/bind_memetic_dubins_ce_mt_tsp.cpp
+  src/dubins.cpp
 )
-target_include_directories(memetic_dubins_ce_mt_tsp PRIVATE)
 target_link_libraries(memetic_dubins_ce_mt_tsp PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS memetic_dubins_ce_mt_tsp
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
@@ -243,8 +243,8 @@ install(TARGETS memetic_dubins_ce_mt_tsp
 
 pybind11_add_module(memetic_dubins_mt_tsp
   src/bind_memetic_dubins_mt_tsp.cpp
+  src/dubins.cpp
 )
-target_include_directories(memetic_dubins_mt_tsp PRIVATE)
 target_link_libraries(memetic_dubins_mt_tsp PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS memetic_dubins_mt_tsp
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
@@ -260,13 +260,16 @@ install(TARGETS cpp_spline
 
 pybind11_add_module(one_sided_dubins_elongation
   src/bind_one_sided_dubins_elongation.cpp
+  src/dubins.cpp
 )
+target_link_libraries(one_sided_dubins_elongation PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS one_sided_dubins_elongation
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
 pybind11_add_module(memetic_pcg_utils
   src/bind_memetic_pcg_utils.cpp
+  src/dubins.cpp
 )
 target_link_libraries(memetic_pcg_utils PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS memetic_pcg_utils
@@ -275,6 +278,7 @@ install(TARGETS memetic_pcg_utils
 
 add_executable(compare_to_gdip 
   src/compare_to_gdip.cpp
+  src/dubins.cpp
   $ENV{HOME}/gdip/gdip/core/src/opendubins/angleinterval.cpp
   $ENV{HOME}/gdip/gdip/core/src/opendubins/arc.cpp
   $ENV{HOME}/gdip/gdip/core/src/opendubins/circle.cpp
@@ -288,6 +292,7 @@ add_executable(compare_to_gdip
   $ENV{HOME}/gdip/gdip/core/src/opendubins/state.cpp
 )
 target_include_directories(compare_to_gdip PRIVATE $ENV{HOME}/gdip/gdip/include)
+target_link_libraries(compare_to_gdip PRIVATE OpenMP::OpenMP_CXX)
 
 pybind11_add_module(adjacency_list
   src/bind_adjacency_list.cpp
@@ -308,7 +313,9 @@ message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
 pybind11_add_module(dubins_trj_through_seq_of_targets
   src/bind_dubins_trj_through_seq_of_targets.cpp
+  src/dubins.cpp
 )
+target_link_libraries(dubins_trj_through_seq_of_targets PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS dubins_trj_through_seq_of_targets
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )

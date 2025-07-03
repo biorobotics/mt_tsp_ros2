@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 #include "mt_tsp_ros2/time_constrained_dubins_planning/angle_mod.h"
+#include "mt_tsp_ros2/elongate_dubins_path.h"
 #include <iomanip>
 
 using namespace Eigen;
@@ -335,7 +336,15 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
   double length = shortest_turns.col(1).sum();
 
   if (std::abs(length - s) < tol) {
-    return shortest_turns;
+    double theta_f = theta_0;
+    for (int row = 0; row < shortest_turns.rows(); ++row) {
+      if (shortest_turns(row, 0) != 0) {
+        theta_f += shortest_turns(row, 1)/shortest_turns(row, 0);
+      }
+    }
+    if (check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho)) {
+      return shortest_turns;
+    }
   }
 
   if (length > s) {
@@ -453,7 +462,16 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
           turns(0, 0) = left_turn ? -rho : rho; // If left turn, opposite turn is right turn, and vice versa
           turns(0, 1) = rho*theta_opposite_mid;
           turns.bottomRows<2>() = remaining_turns.bottomRows<2>();
-          return turns;
+
+          double theta_f = theta_0;
+          for (int row = 0; row < turns.rows(); ++row) {
+            if (turns(row, 0) != 0) {
+              theta_f += turns(row, 1)/turns(row, 0);
+            }
+          }
+          if (check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho)) {
+            return turns;
+          }
         }
         if (dist > s) {
           theta_opposite_max = theta_opposite_mid;
@@ -492,7 +510,16 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
           turns(0, 0) = left_turn ? -rho : rho; // If left turn, opposite turn is right turn, and vice versa
           turns(0, 1) = rho*M_PI;
           turns.bottomRows<2>() = remaining_turns.bottomRows<2>();
-          return turns;
+
+          double theta_f = theta_0;
+          for (int row = 0; row < turns.rows(); ++row) {
+            if (turns(row, 0) != 0) {
+              theta_f += turns(row, 1)/turns(row, 0);
+            }
+          }
+          if (check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho)) {
+            return turns;
+          }
         }
         if (dist > s) {
           rho_max = rho_mid;
@@ -505,6 +532,7 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
   }
 
   // Now we're in D_III. Handle LS paths via mirroring
+  Vector2d P_original = P;
   if (left_turn) {
     P = P - 2*perp_0*perp_0.dot(P - p_0);
     x_f = P(0);
@@ -546,7 +574,16 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
         if (left_turn) {
           turns(0, 0) = -turns(0, 0);
         }
-        return turns;
+
+        double theta_f = theta_0;
+        for (int row = 0; row < turns.rows(); ++row) {
+          if (turns(row, 0) != 0) {
+            theta_f += turns(row, 1)/turns(row, 0);
+          }
+        }
+        if (check_elongation_possible(x_0, y_0, theta_0, P_original(0), P_original(1), theta_f, s, rho)) {
+          return turns;
+        }
       }
       if (dist > s) {
         rho_max = rho_mid;
@@ -591,7 +628,16 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
         if (left_turn) {
           turns.col(0) = -turns.col(0);
         }
-        return turns;
+
+        double theta_f = theta_0;
+        for (int row = 0; row < turns.rows(); ++row) {
+          if (turns(row, 0) != 0) {
+            theta_f += turns(row, 1)/turns(row, 0);
+          }
+        }
+        if (check_elongation_possible(x_0, y_0, theta_0, P_original(0), P_original(1), theta_f, s, rho)) {
+          return turns;
+        }
       }
       // This is reversed because decreasing rho increases path length
       if (dist > s) {
@@ -632,7 +678,29 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
       if (left_turn) {
         turns.col(0) = -turns.col(0);
       }
-      return turns;
+      double theta_f = theta_0;
+      // double x = x_0;
+      // double y = y_0;
+      for (int row = 0; row < turns.rows(); ++row) {
+        if (turns(row, 0) != 0) {
+          // double theta_f_before = theta_f;
+          theta_f += turns(row, 1)/turns(row, 0);
+          /*
+          x += turns(row, 0)*(-sin(theta_f_before) + sin(theta_f));
+          y += turns(row, 0)*(cos(theta_f_before) - cos(theta_f));
+          */
+        } else {
+          throw std::runtime_error("Supposed to be CC path");
+        }
+      }
+      if (check_elongation_possible(x_0, y_0, theta_0, P_original(0), P_original(1), theta_f, s, rho)) {
+        return turns;
+      }
+      /*
+      Dubins path(AngleInterval(Point(x_0, y_0), theta_0, 0), AngleInterval(Point(P_original(0), P_original(1)), theta_f, 1e-4), rho);
+      // std::cout << turns_for_dubins_path(x_0, y_0, theta_0, x_f, y_f, theta_f, rho).col(1).sum() << " " << s << " " << dist << std::endl;
+      std::cout << path.getLength() << " " << s << " " << dist << " " << x << " " << y << " " << P_original(0) << " " << P_original(1) << " " << left_turn << std::endl;
+      */
     }
     if (dist > s) {
       rho_max = rho_mid;
