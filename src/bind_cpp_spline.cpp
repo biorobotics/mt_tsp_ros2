@@ -15,6 +15,11 @@ PYBIND11_MODULE(cpp_spline, m) {
     .def(py::init<const Ref<const VectorXd>&, const Ref<const RowMatrixXd>&>())
     .def("__call__", &CppSpline::operator())
     ;
+
+  py::class_<CppSpline3D>(m, "CppSpline3D")
+    .def(py::init<const Ref<const VectorXd>&, const Ref<const RowMatrixXd>&>())
+    .def("__call__", &CppSpline3D::operator())
+    ;
     
   py::class_<CppPPoly>(m, "CppPPoly")
     .def(py::init<const py::array_t<double> &, const Ref<const VectorXd> &>())
@@ -27,7 +32,7 @@ PYBIND11_MODULE(cpp_spline, m) {
     ;
 
   py::class_<SE3Spline>(m, "SE3Spline")
-    .def(py::init<SE3Spline>())
+    .def(py::init<const CppSpline3D &, const RotationSpline &>())
     .def("__call__", &SE3Spline::operator())
     ;
 
