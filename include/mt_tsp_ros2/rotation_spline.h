@@ -20,7 +20,7 @@ class RotationSpline {
       }
     }
 
-    virtual Matrix3d operator()(double t) {
+    virtual Matrix3d operator()(double t) const {
       int interval;
       Vector3d rotvec = ppoly(t, interval);
       double angle = rotvec.norm();
