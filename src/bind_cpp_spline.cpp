@@ -3,6 +3,8 @@
 #include <pybind11/stl_bind.h>
 #include "mt_tsp_ros2/cpp_spline.h"
 #include "mt_tsp_ros2/cpp_ppoly.h"
+#include "mt_tsp_ros2/rotation_spline.h"
+#include "mt_tsp_ros2/SE3_spline.h"
 
 namespace py = pybind11;
 
@@ -16,7 +18,17 @@ PYBIND11_MODULE(cpp_spline, m) {
     
   py::class_<CppPPoly>(m, "CppPPoly")
     .def(py::init<const py::array_t<double> &, const Ref<const VectorXd> &>())
-    .def("__call__", &CppPPoly::operator())
+    .def("__call__", py::overload_cast<double>(&CppPPoly::operator(), py::const_))
+    ;
+
+  py::class_<RotationSpline>(m, "RotationSpline")
+    .def(py::init<CppPPoly, const py::array_t<double> &>())
+    .def("__call__", &RotationSpline::operator())
+    ;
+
+  py::class_<SE3Spline>(m, "SE3Spline")
+    .def(py::init<SE3Spline>())
+    .def("__call__", &SE3Spline::operator())
     ;
 
   py::bind_vector<std::vector<py::array_t<double>>>(m, "VectorOfDoubles");

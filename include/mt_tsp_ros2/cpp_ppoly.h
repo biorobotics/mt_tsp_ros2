@@ -30,11 +30,10 @@ class CppPPoly {
       }
     }
 
-    virtual VectorXd operator()(double xp) const {
+    virtual VectorXd operator()(double xp, int &i) const {
       VectorXd ret = VectorXd::Zero(output_dim);
       // Iterate over intervals
       bool found_interval = false;
-      int i;
       if (xp < x(0)) {
         i = 0;
         found_interval = true;
@@ -57,6 +56,11 @@ class CppPPoly {
         ret += c[m].row(i)*pow(xp - x(i), degree - m);
       }
       return ret;
+    }
+
+    virtual VectorXd operator()(double xp) const {
+      int i;
+      return this->operator()(xp, i);
     }
 
   private:
