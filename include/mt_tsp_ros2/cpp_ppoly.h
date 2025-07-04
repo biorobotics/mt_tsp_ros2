@@ -6,6 +6,8 @@
 using namespace Eigen;
 namespace py = pybind11;
 
+typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
+
 class CppPPoly {
   public:
     CppPPoly(const py::array_t<double> &c, const Ref<const VectorXd> &x) : x(x) {
@@ -37,12 +39,12 @@ class CppPPoly {
       if (xp < x(0)) {
         i = 0;
         found_interval = true;
-      } else if (xp > num_breakpoints) {
+      } else if (xp > x(num_breakpoints - 1)) {
         i = num_intervals - 1;
         found_interval = true;
       } else {
         for (i = 0; i < num_intervals; ++i) {
-          if (x(i) <= xp && xp <= x(i + 1)) {
+          if (x(i) <= xp && xp < x(i + 1)) {
             found_interval = true;
             break;
           }
