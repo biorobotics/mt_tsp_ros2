@@ -7,7 +7,7 @@ class SE3Spline {
     SE3Spline(const CppSpline3D &pos_spline, const RotationSpline &rot_spline) : pos_spline(pos_spline), rot_spline(rot_spline) {
     }
 
-    virtual Matrix4d operator()(double t) {
+    virtual Matrix4d operator()(double t) const {
       Matrix4d ret = Matrix4d::Identity();
       ret.topLeftCorner<3, 3>() = rot_spline(t);
       ret.topRightCorner<3, 1>() = pos_spline(t);
