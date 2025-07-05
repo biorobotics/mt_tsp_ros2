@@ -39,7 +39,7 @@ class CppPPoly {
       if (xp < x(0)) {
         i = 0;
         found_interval = true;
-      } else if (xp > x(num_breakpoints - 1)) {
+      } else if (xp >= x(num_breakpoints - 1)) {
         i = num_intervals - 1;
         found_interval = true;
       } else {
@@ -51,6 +51,8 @@ class CppPPoly {
         }
       }
       if (!found_interval) {
+        std::cout << "xp " << xp << std::endl;
+        std::cout << "x = " << x.transpose() << std::endl;
         throw std::runtime_error("Did not find interval");
       }
 

@@ -5,10 +5,13 @@
 #include "mt_tsp_ros2/cpp_ppoly.h"
 #include "mt_tsp_ros2/rotation_spline.h"
 #include "mt_tsp_ros2/SE3_spline.h"
+#include "mt_tsp_ros2/extended_cpp_spline.h"
 
 namespace py = pybind11;
 
 PYBIND11_MAKE_OPAQUE(std::vector<py::array_t<double>>)
+PYBIND11_MAKE_OPAQUE(std::vector<CppSpline>)
+PYBIND11_MAKE_OPAQUE(std::vector<ExtendedCppSpline>)
 
 PYBIND11_MODULE(cpp_spline, m) {
   py::class_<CppSpline>(m, "CppSpline")
@@ -36,5 +39,13 @@ PYBIND11_MODULE(cpp_spline, m) {
     .def("__call__", &SE3Spline::operator())
     ;
 
-  py::bind_vector<std::vector<py::array_t<double>>>(m, "VectorOfDoubles");
+  py::bind_vector<std::vector<py::array_t<double>>>(m, "VectorOfDoubleArrays");
+
+  py::class_<ExtendedCppSpline>(m, "ExtendedCppSpline")
+    .def(py::init<const Ref<const VectorXd>&, const Ref<const RowMatrixXd>&, double, double>())
+    .def("__call__", &ExtendedCppSpline::operator())
+    ;
+
+  py::bind_vector<std::vector<CppSpline>>(m, "VectorOfCppSplines");
+  py::bind_vector<std::vector<ExtendedCppSpline>>(m, "VectorOfExtendedCppSplines");
 }

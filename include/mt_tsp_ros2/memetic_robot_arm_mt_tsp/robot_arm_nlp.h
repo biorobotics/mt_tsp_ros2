@@ -464,8 +464,8 @@ class RobotArmNLP : public Ipopt::TNLP {
         prev_t = t;
         prev_q = q;
       }
-      // throw std::runtime_error("done");
       if (constraint_idx < num_constraints) {
+        std::cout << "Did not populate all constraints" << std::endl;
         throw std::runtime_error("Did not populate all constraints");
       }
       return true;
@@ -489,6 +489,7 @@ class RobotArmNLP : public Ipopt::TNLP {
         Map<VectorXIndex>(iRow, nele_jac) = Jrows;
         Map<VectorXIndex>(jCol, nele_jac) = Jcols;
       } else {
+        std::cout << "Did not implement exact constraint Jacobian" << std::endl;
         throw std::runtime_error("Did not implement exact constraint Jacobian");
       }
       return true;
@@ -515,6 +516,7 @@ class RobotArmNLP : public Ipopt::TNLP {
         Map<VectorXIndex>(iRow, nele_hess) = Hrows;
         Map<VectorXIndex>(jCol, nele_hess) = Hcols;
       } else {
+        std::cout << "Did not implement exact constraint Hessian" << std::endl;
         throw std::runtime_error("Did not implement exact constraint Hessian");
 
         // Gauss-Newton with quadratic cost
@@ -622,6 +624,8 @@ class RobotArmNLP : public Ipopt::TNLP {
 
     void set_warm_start(const Ref<const VectorXd> &warm_start) {
       this->warm_start = warm_start;
+      // this->x_l = warm_start;
+      // this->x_u = warm_start;
     }
 
   private:
@@ -657,7 +661,7 @@ class RobotArmNLP : public Ipopt::TNLP {
 
 class RobotArmNLPSolver {
   public:
-    void initialize(std::shared_ptr<RobotArmNLPInfo> info, const Ref<const VectorXl> &target_seq, int max_iter) {
+    void initialize(std::shared_ptr<RobotArmNLPInfo> info, const Ref<const VectorXl> &target_seq, int max_iter, int print_level) {
       num_targets = target_seq.size();
       nlp = new RobotArmNLP(info, target_seq);
 
@@ -680,6 +684,8 @@ class RobotArmNLPSolver {
       // app->Options()->SetStringValue("gradient_approximation", "finite-difference-values");
       app->Options()->SetStringValue("hessian_approximation", "limited-memory");
 
+      app->Options()->SetIntegerValue("print_level", print_level);
+
       // Initialize the IpoptApplication and process the options
       Ipopt::ApplicationReturnStatus status;
       status = app->Initialize();
@@ -691,13 +697,13 @@ class RobotArmNLPSolver {
       }
     }
 
-    RobotArmNLPSolver(std::shared_ptr<RobotArmNLPInfo> info, const Ref<const VectorXl> &target_seq, int max_iter) {
-      initialize(info, target_seq, max_iter);
+    RobotArmNLPSolver(std::shared_ptr<RobotArmNLPInfo> info, const Ref<const VectorXl> &target_seq, int max_iter, int print_level) {
+      initialize(info, target_seq, max_iter, print_level);
     }
 
-    RobotArmNLPSolver(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<SE3Spline> &q_trj_per_target, const Ref<const VectorXd> &q0, const Ref<const VectorXl> &target_seq, int max_iter, const Ref<const VectorXd> &joint_limits, const Ref<const VectorXd> &vmax, const Ref<const Vector4d> &l, const Ref<const RowMatrixXd> &dh) {
+    RobotArmNLPSolver(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<SE3Spline> &q_trj_per_target, const Ref<const VectorXd> &q0, const Ref<const VectorXl> &target_seq, int max_iter, const Ref<const VectorXd> &joint_limits, const Ref<const VectorXd> &vmax, const Ref<const Vector4d> &l, const Ref<const RowMatrixXd> &dh, int print_level) {
       std::shared_ptr<RobotArmNLPInfo> info = std::make_shared<RobotArmNLPInfo>(tw_per_target, q_trj_per_target, q0, joint_limits, vmax, l, dh);
-      initialize(info, target_seq, max_iter);
+      initialize(info, target_seq, max_iter, print_level);
     }
 
     VectorXIndex get_Jrows() {
