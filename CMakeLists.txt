@@ -7,6 +7,8 @@ endif()
 
 add_compile_options(-fopenmp)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake_modules)
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in
@@ -20,6 +22,10 @@ find_package(pybind11 REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(ompl REQUIRED)
 find_package(CGAL REQUIRED)
+# find_package(IPOPT 3.11.9 REQUIRED)
+find_package(IPOPT REQUIRED)
+
+set(IPOPT_INCLUDE_DIRS /usr/include/coin)
 
 # The following is for TFTrajectoryDisplay
 
@@ -328,6 +334,16 @@ install(TARGETS reopt_gtsp_tour
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
+pybind11_add_module(memetic_robot_arm
+  src/bind_memetic_robot_arm.cpp
+)
+target_include_directories(memetic_robot_arm PRIVATE ${IPOPT_INCLUDE_DIRS})
+target_link_libraries(memetic_robot_arm PRIVATE OpenMP::OpenMP_CXX ${IPOPT_LIBRARIES} ${IPOPT_LINK_FLAGS})
+target_compile_definitions(memetic_robot_arm PRIVATE ${IPOPT_DEFINITIONS})
+install(TARGETS memetic_robot_arm
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
 
 # There by default
 if(BUILD_TESTING)
