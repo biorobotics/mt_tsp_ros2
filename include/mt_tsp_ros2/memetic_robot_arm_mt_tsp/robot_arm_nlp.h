@@ -20,7 +20,8 @@ using namespace std::chrono;
 
 using namespace Eigen;
 
-typedef Matrix<Ipopt::Index, Dynamic, 1> VectorXl;
+typedef Matrix<Ipopt::Index, Dynamic, 1> VectorXIndex;
+typedef Matrix<long, Dynamic, 1> VectorXl;
 typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
 const double inf_val = 1e19;
@@ -76,8 +77,8 @@ class RobotArmNLP : public Ipopt::TNLP {
       // H_nnz = num_decision_vars*num_decision_vars; // Dense
 
       // Populate Jacobian sparsity
-      Jrows = VectorXl(J_nnz);
-      Jcols = VectorXl(J_nnz);
+      Jrows = VectorXIndex(J_nnz);
+      Jcols = VectorXIndex(J_nnz);
       
       int constraint_idx = 0;
       int nnz_idx = 0;
@@ -133,8 +134,8 @@ class RobotArmNLP : public Ipopt::TNLP {
       */
 
       // Populate Hessian sparsity
-      Hrows = VectorXl(H_nnz);
-      Hcols = VectorXl(H_nnz);
+      Hrows = VectorXIndex(H_nnz);
+      Hcols = VectorXIndex(H_nnz);
 
       nnz_idx = 0;
       for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
@@ -164,8 +165,8 @@ class RobotArmNLP : public Ipopt::TNLP {
 
       // Gauss-Newton for quadratic cost 
       /*
-      Hrows = VectorXl(H_nnz);
-      Hcols = VectorXl(H_nnz);
+      Hrows = VectorXIndex(H_nnz);
+      Hcols = VectorXIndex(H_nnz);
 
       nnz_idx = 0;
       for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
@@ -485,8 +486,8 @@ class RobotArmNLP : public Ipopt::TNLP {
        Ipopt::Number*       values
     ) {
       if (values == NULL) {
-        Map<VectorXl>(iRow, nele_jac) = Jrows;
-        Map<VectorXl>(jCol, nele_jac) = Jcols;
+        Map<VectorXIndex>(iRow, nele_jac) = Jrows;
+        Map<VectorXIndex>(jCol, nele_jac) = Jcols;
       } else {
         throw std::runtime_error("Did not implement exact constraint Jacobian");
       }
@@ -511,8 +512,8 @@ class RobotArmNLP : public Ipopt::TNLP {
        Ipopt::Number*       values
     ) {
       if (values == NULL) {
-        Map<VectorXl>(iRow, nele_hess) = Hrows;
-        Map<VectorXl>(jCol, nele_hess) = Hcols;
+        Map<VectorXIndex>(iRow, nele_hess) = Hrows;
+        Map<VectorXIndex>(jCol, nele_hess) = Hcols;
       } else {
         throw std::runtime_error("Did not implement exact constraint Hessian");
 
@@ -595,19 +596,19 @@ class RobotArmNLP : public Ipopt::TNLP {
       return cost;
     }
 
-    const VectorXl &get_Jrows() {
+    const VectorXIndex &get_Jrows() {
       return Jrows;
     }
 
-    const VectorXl &get_Jcols() {
+    const VectorXIndex &get_Jcols() {
       return Jcols;
     }
 
-    const VectorXl &get_Hrows() {
+    const VectorXIndex &get_Hrows() {
       return Hrows;
     }
 
-    const VectorXl &get_Hcols() {
+    const VectorXIndex &get_Hcols() {
       return Hcols;
     }
     
@@ -635,11 +636,11 @@ class RobotArmNLP : public Ipopt::TNLP {
     int H_nnz;
     int num_constraints;
 
-    VectorXl Jrows;
-    VectorXl Jcols;
+    VectorXIndex Jrows;
+    VectorXIndex Jcols;
 
-    VectorXl Hrows;
-    VectorXl Hcols;
+    VectorXIndex Hrows;
+    VectorXIndex Hcols;
 
     VectorXd x_l;
     VectorXd x_u;
@@ -699,19 +700,19 @@ class RobotArmNLPSolver {
       initialize(info, target_seq, max_iter);
     }
 
-    VectorXl get_Jrows() {
+    VectorXIndex get_Jrows() {
       return nlp->get_Jrows();
     }
 
-    VectorXl get_Jcols() {
+    VectorXIndex get_Jcols() {
       return nlp->get_Jcols();
     }
 
-    VectorXl get_Hrows() {
+    VectorXIndex get_Hrows() {
       return nlp->get_Hrows();
     }
 
-    VectorXl get_Hcols() {
+    VectorXIndex get_Hcols() {
       return nlp->get_Hcols();
     }
 
