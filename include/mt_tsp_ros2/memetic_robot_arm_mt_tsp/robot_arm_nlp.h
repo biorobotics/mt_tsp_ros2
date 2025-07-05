@@ -25,6 +25,8 @@ typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 
 const double inf_val = 1e19;
 
+const bool multiply_speed_constraint_by_delta_t = true;
+
 struct RobotArmNLPInfo {
   RobotArmNLPInfo(const Ref<const RowMatrixXd> &tw_per_target,
                   const std::vector<SE3Spline> &q_trj_per_target,
@@ -59,9 +61,15 @@ class RobotArmNLP : public Ipopt::TNLP {
       vars_per_step = 1 + dim_q; // t and q
       num_decision_vars = vars_per_step*num_targets;
       warm_start = VectorXd::Zero(0);
-      int constraints_per_step = 3 + 3 + dim_q + dim_q;
+      int constraints_per_step;
+      if (multiply_speed_constraint_by_delta_t) {
+        constraints_per_step = 3 + 3 + dim_q + dim_q;
+        J_nnz = 6*vars_per_step*num_targets + 2*2*dim_q + 2*4*dim_q*(num_targets - 1);
+      } else {
+        constraints_per_step = 3 + 3 + dim_q;
+        J_nnz = 6*vars_per_step*num_targets + 2*dim_q + 4*dim_q*(num_targets - 1);
+      }
       num_constraints = constraints_per_step*num_targets;
-      J_nnz = 6*vars_per_step*num_targets + 2*2*dim_q + 2*4*dim_q*(num_targets - 1);
       // J_nnz = num_constraints*num_decision_vars; // Dense
       H_nnz = vars_per_step*(vars_per_step + 1)/2 + (vars_per_step*(vars_per_step + 1)/2 + vars_per_step*vars_per_step)*(num_targets - 1); // vars_per_step*(vars_per_step + 1)/2 is for step 0 and (vars_per_step*(vars_per_step + 1)/2 + vars_per_step*vars_per_step) is for subsequent steps
       // H_nnz = dim_q + 2*dim_q*(num_targets - 1); // For Gauss-Newton with quadratic cost
@@ -86,22 +94,22 @@ class RobotArmNLP : public Ipopt::TNLP {
 
         // Joint velocity limits satisfied
         int nnz_per_q_component = seq_idx == 0 ? 2 : 4;
-        for (int sign_idx = 0; sign_idx < 2; ++sign_idx) {
+        for (int sign_idx = 0; sign_idx < (multiply_speed_constraint_by_delta_t ? 2 : 1); ++sign_idx) {
           for (int i = 0; i < dim_q; ++i) {
-            Jrows(nnz_idx + nnz_per_q_component*i) = constraint_idx + i; // ith element of vmax*(t - prev_t) - (q - prev_q) 
+            Jrows(nnz_idx + nnz_per_q_component*i) = constraint_idx + i; // ith element of constraint
             Jcols(nnz_idx + nnz_per_q_component*i) = vars_per_step*seq_idx + 1 + i; // ith element of q
 
-            Jrows(nnz_idx + nnz_per_q_component*i + 1) = constraint_idx + i; // ith element of vmax*(t - prev_t) - (q - prev_q) 
+            Jrows(nnz_idx + nnz_per_q_component*i + 1) = constraint_idx + i; // ith element of constraint
             Jcols(nnz_idx + nnz_per_q_component*i + 1) = vars_per_step*seq_idx; // current t
 
             if (seq_idx == 0) {
               continue;
             }
 
-            Jrows(nnz_idx + nnz_per_q_component*i + 2) = constraint_idx + i; // ith element of vmax*(t - prev_t) - (q - prev_q) 
+            Jrows(nnz_idx + nnz_per_q_component*i + 2) = constraint_idx + i; // ith element of constraint
             Jcols(nnz_idx + nnz_per_q_component*i + 2) = vars_per_step*(seq_idx - 1) + 1 + i; // ith element of prev_q
 
-            Jrows(nnz_idx + nnz_per_q_component*i + 3) = constraint_idx + i; // ith element of vmax*(t - prev_t) - (q - prev_q) 
+            Jrows(nnz_idx + nnz_per_q_component*i + 3) = constraint_idx + i; // ith element of constraint
             Jcols(nnz_idx + nnz_per_q_component*i + 3) = vars_per_step*(seq_idx - 1); // prev_t
           }
           constraint_idx += dim_q;
@@ -112,6 +120,8 @@ class RobotArmNLP : public Ipopt::TNLP {
       if (nnz_idx != J_nnz) {
         throw std::runtime_error("Number of added nonzeros not equal to J_nnz");
       }
+
+      // Dense
       /*
       int nnz_idx = 0;
       for (int row = 0; row < num_constraints; ++row) {
@@ -180,6 +190,7 @@ class RobotArmNLP : public Ipopt::TNLP {
       }
       */
 
+      // Dense
       /*
       for (int row = 0; row < num_decision_vars; ++row) {
         for (int col = 0; col < num_decision_vars; ++col) {
@@ -228,21 +239,27 @@ class RobotArmNLP : public Ipopt::TNLP {
         */
         constraint_idx += 3;
 
-        // Joint velocity limits satisfied
-        g_l.segment(constraint_idx, dim_q).setZero();
-        g_u.segment(constraint_idx, dim_q).setConstant(inf_val);
-        /*
-        g_l.segment(constraint_idx, dim_q).setConstant(-inf_val);
-        g_u.segment(constraint_idx, dim_q).setConstant(inf_val);
-        */
-        constraint_idx += dim_q;
-        g_l.segment(constraint_idx, dim_q).setZero();
-        g_u.segment(constraint_idx, dim_q).setConstant(inf_val);
-        /*
-        g_l.segment(constraint_idx, dim_q).setConstant(-inf_val);
-        g_u.segment(constraint_idx, dim_q).setConstant(inf_val);
-        */
-        constraint_idx += dim_q;
+        // Joint velocity limits
+        if (multiply_speed_constraint_by_delta_t) {
+          // vmax*delta_t - delta_q >= 0
+          g_l.segment(constraint_idx, dim_q).setZero();
+          g_u.segment(constraint_idx, dim_q).setConstant(inf_val);
+          constraint_idx += dim_q;
+
+          // delta_q - -vmax*delta_t >= 0
+          g_l.segment(constraint_idx, dim_q).setZero();
+          g_u.segment(constraint_idx, dim_q).setConstant(inf_val);
+          constraint_idx += dim_q;
+        } else {
+          // -vmax <= delta_q/delta_t <= vmax
+          g_l.segment(constraint_idx, dim_q) = -info->vmax;
+          g_u.segment(constraint_idx, dim_q) = info->vmax;
+          /*
+          g_l.segment(constraint_idx, dim_q).setConstant(-inf_val);
+          g_u.segment(constraint_idx, dim_q).setConstant(inf_val);
+          */
+          constraint_idx += dim_q;
+        }
       }
     }
 
@@ -430,23 +447,18 @@ class RobotArmNLP : public Ipopt::TNLP {
         */
 
         // Joint velocity limits
-        double delta_t = t - prev_t;
-        Map<VectorXd>(g + constraint_idx, dim_q) = info->vmax*delta_t - (q - prev_q); // >= 0
-        /*
-        if (Map<VectorXd>(g + constraint_idx, dim_q).minCoeff() < -1e-4) {
-          std::cout << "upper bound velocity constraint violated" << std::endl;
-          throw std::runtime_error("error");
+        if (multiply_speed_constraint_by_delta_t) {
+          double delta_t = t - prev_t;
+          Map<VectorXd>(g + constraint_idx, dim_q) = info->vmax*delta_t - (q - prev_q);
+          constraint_idx += dim_q;
+
+          Map<VectorXd>(g + constraint_idx, dim_q) = (q - prev_q) - -info->vmax*delta_t;
+          constraint_idx += dim_q;
+        } else {
+          double delta_t = t - prev_t;
+          Map<VectorXd>(g + constraint_idx, dim_q) = (q - prev_q)/delta_t;
+          constraint_idx += dim_q;
         }
-        */
-        constraint_idx += dim_q;
-        Map<VectorXd>(g + constraint_idx, dim_q) = (q - prev_q) - (-info->vmax*delta_t); // >= 0
-        /*
-        if (Map<VectorXd>(g + constraint_idx, dim_q).minCoeff() < -1e-4) {
-          std::cout << "lower bound velocity constraint violated" << std::endl;
-          throw std::runtime_error("error");
-        }
-        */
-        constraint_idx += dim_q;
 
         prev_t = t;
         prev_q = q;
@@ -504,23 +516,32 @@ class RobotArmNLP : public Ipopt::TNLP {
       } else {
         throw std::runtime_error("Did not implement exact constraint Hessian");
 
-        /*
         // Gauss-Newton with quadratic cost
+        /*
         int nnz_idx = 0;
         VectorXd prev_q = info->q0;
         for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
           if (seq_idx == 0) {
             for (int i = 1; i < vars_per_step; ++i) {
-              values[nnz_idx] = 2;
+              values[nnz_idx] = 2*obj_factor;
+              ++nnz_idx;
+            }
+          } else if (seq_idx == num_targets - 1) {
+            for (int i = 1; i < vars_per_step; ++i) {
+              values[nnz_idx] = 2*obj_factor;
+              ++nnz_idx;
+            }
+            for (int i = 1; i < vars_per_step; ++i) {
+              values[nnz_idx] = -2*obj_factor;
               ++nnz_idx;
             }
           } else {
             for (int i = 1; i < vars_per_step; ++i) {
-              values[nnz_idx] = 4;
+              values[nnz_idx] = 4*obj_factor;
               ++nnz_idx;
             }
             for (int i = 1; i < vars_per_step; ++i) {
-              values[nnz_idx] = -2;
+              values[nnz_idx] = -2*obj_factor;
               ++nnz_idx;
             }
           }
@@ -648,16 +669,16 @@ class RobotArmNLPSolver {
       // Change some options
       // Note: The following choices are only examples, they might not be
       //       suitable for your optimization problem.
+      app->Options()->SetNumericValue("tol", 1.0);
+      app->Options()->SetNumericValue("compl_inf_tol", 1e-2);
       /*
-      app->Options()->SetIntegerValue("tol", 1.0);
-      app->Options()->SetIntegerValue("constr_vio_tol", 1e-4);
-      app->Options()->SetIntegerValue("compl_inf_tol", 1e-2);
+      app->Options()->SetNumericValue("constr_vio_tol", 1e-4);
       */
       app->Options()->SetIntegerValue("max_iter", max_iter);
       app->Options()->SetStringValue("jacobian_approximation", "finite-difference-values");
       // app->Options()->SetStringValue("gradient_approximation", "finite-difference-values");
       app->Options()->SetStringValue("hessian_approximation", "limited-memory");
-      
+
       // Initialize the IpoptApplication and process the options
       Ipopt::ApplicationReturnStatus status;
       status = app->Initialize();
@@ -704,6 +725,23 @@ class RobotArmNLPSolver {
 
     void set_warm_start(const Ref<const VectorXd> &warm_start) {
       nlp->set_warm_start(warm_start);
+    }
+
+    MatrixXd get_dense_jacobian(const Ref<const VectorXd> &x) {
+      MatrixXd J(nlp->get_num_constraints(), nlp->get_num_decision_vars());
+      VectorXd g(nlp->get_num_constraints());
+      VectorXd gplus(nlp->get_num_constraints());
+      VectorXd xplus(x);
+      nlp->eval_g(nlp->get_num_decision_vars(), xplus.data(), true, nlp->get_num_constraints(), g.data());
+      double eps = 1e-4;
+      for (int i = 0; i < nlp->get_num_decision_vars(); ++i) {
+        xplus(i) += eps;
+        nlp->eval_g(nlp->get_num_decision_vars(), xplus.data(), true, nlp->get_num_constraints(), gplus.data());
+        xplus(i) = x(i);
+
+        J.col(i) = (gplus - g)/eps;
+      }
+      return J;
     }
 
     double solve(Ref<RowMatrixXd> trajectory, bool get_trajectory) {
