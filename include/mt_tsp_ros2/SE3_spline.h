@@ -14,6 +14,14 @@ class SE3Spline {
       return ret;
     }
 
+    const CppSpline3D &get_pos_spline() const {
+      return pos_spline;
+    }
+
+    const RotationSpline &get_rot_spline() const {
+      return rot_spline;
+    }
+
   private:
     CppSpline3D pos_spline;
     RotationSpline rot_spline;
