@@ -38,11 +38,17 @@ double root_find(double rho, double s, double l_m) {
 
 double arclength(const Vector2d &v1, const Vector2d &v2, bool left, double rho) {
   double theta = atan2(v2(1), v2(0)) - atan2(v1(1), v1(0));
+
+  if (abs(theta) < 1e-10 || abs(theta - 2*M_PI) < 1e-10 || abs(theta + 2*M_PI) < 1e-10) {
+    return 0;
+  }
+
   if (theta < 0 && left) {
     theta += 2*M_PI;
   } else if (theta > 0 && !left) {
     theta -= 2*M_PI;
   }
+
   return abs(theta*rho);
 }
 
@@ -90,7 +96,7 @@ RowMatrixXd turns_for_dubins_path(double x_0, double y_0, double theta_0, double
   return turns;
 }
 
-bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double s, double rho) {
+bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double s, double rho, bool verbose) {
   // LRL
   double LRL_dist_A = std::numeric_limits<double>::infinity();
   double LRL_dist_B = std::numeric_limits<double>::infinity();
@@ -282,6 +288,10 @@ bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_
   }
 
   return s <= l1 || s >= l2;
+}
+
+bool check_elongation_possible(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double s, double rho) {
+  return check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho, false);
 }
 
 bool check_elongation_possible_with_profiling(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double s, double rho, double &CCC_time, double &CSC_time, double &check_time) {

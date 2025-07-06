@@ -384,6 +384,16 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
 
     turns(4, 0) = rho; // Turn left
     turns(4, 1) = shortest_turns(1, 1) - turns(2, 1);
+
+    double theta_f = theta_0;
+    for (int row = 0; row < turns.rows(); ++row) {
+      if (turns(row, 0) != 0) {
+        theta_f += turns(row, 1)/turns(row, 0);
+      }
+    }
+    if (!check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho)) {
+      throw std::runtime_error("RL elongation inconsistent");
+    }
     return turns;
   }
 
@@ -412,6 +422,16 @@ RowMatrixXd elongated_dubins_path_one_sided(double x_0, double y_0, double theta
 
     turns(4, 0) = -rho; // Turn right
     turns(4, 1) = shortest_turns(1, 1) - turns(2, 1);
+
+    double theta_f = theta_0;
+    for (int row = 0; row < turns.rows(); ++row) {
+      if (turns(row, 0) != 0) {
+        theta_f += turns(row, 1)/turns(row, 0);
+      }
+    }
+    if (!check_elongation_possible(x_0, y_0, theta_0, x_f, y_f, theta_f, s, rho)) {
+      throw std::runtime_error("LR elongation inconsistent");
+    }
     return turns;
   }
 

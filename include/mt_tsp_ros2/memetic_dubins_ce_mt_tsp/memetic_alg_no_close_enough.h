@@ -1046,7 +1046,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       double mutation_sample = mutation_distribution(rngs_per_thread[omp_get_thread_num()]);
       if (mutation_sample < params.mutation_prob) {
         // Mutation
-        if (mutation_sample < params.mutation_prob/2) {
+        if (dubins || mutation_sample < params.mutation_prob/2) {
           int seq_idx1 = mutation_operator1_distribution(rngs_per_thread[omp_get_thread_num()]);
           int seq_idx2 = mutation_operator1_distribution(rngs_per_thread[omp_get_thread_num()]);
           RowVectorXd tmp = Xnew.row(seq_idx1);

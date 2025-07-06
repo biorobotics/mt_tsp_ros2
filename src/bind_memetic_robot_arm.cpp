@@ -22,6 +22,9 @@ PYBIND11_MODULE(memetic_robot_arm, m) {
     .def("get_num_decision_vars", &RobotArmNLPSolver::get_num_decision_vars)
     .def("set_warm_start", &RobotArmNLPSolver::set_warm_start)
     .def("get_dense_jacobian", &RobotArmNLPSolver::get_dense_jacobian)
+    .def("get_hessian", &RobotArmNLPSolver::get_hessian)
+    .def("set_finite_diff_gradient", &RobotArmNLPSolver::set_finite_diff_gradient)
+    .def("get_gradient", &RobotArmNLPSolver::get_gradient)
     ;
 
   py::bind_vector<std::vector<SE3Spline>>(m, "VectorOfSE3Splines");

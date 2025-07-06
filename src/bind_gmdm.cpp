@@ -13,7 +13,7 @@ PYBIND11_MODULE(gmdm_wrapper, m) {
   m.def("ccc_inverse_free_v2", &ccc_inverse_free_v2);
   m.def("csc_inverse", &csc_inverse);
   m.def("ccc_inverse", &ccc_inverse);
-  m.def("check_elongation_possible", &check_elongation_possible);
+  m.def("check_elongation_possible", py::overload_cast<double, double, double, double, double, double, double, double>(&check_elongation_possible));
   m.def("get_elongation_intervals", &get_elongation_intervals);
   m.def("elongated_dubins_path", &elongated_dubins_path);
   m.def("batch_elongation_check", &batch_elongation_check);
