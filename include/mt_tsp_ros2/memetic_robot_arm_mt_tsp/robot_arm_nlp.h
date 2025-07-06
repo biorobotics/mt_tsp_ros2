@@ -28,6 +28,10 @@ const double inf_val = 1e19;
 
 const bool multiply_speed_constraint_by_delta_t = true;
 
+const bool gauss_newton_hessian = false;
+
+const bool quadratic_cost = false;
+
 struct RobotArmNLPInfo {
   RobotArmNLPInfo(const Ref<const RowMatrixXd> &tw_per_target,
                   const std::vector<SE3Spline> &q_trj_per_target,
@@ -58,6 +62,7 @@ class RobotArmNLP : public Ipopt::TNLP {
     RobotArmNLP(std::shared_ptr<RobotArmNLPInfo> info,
                 const Ref<const VectorXl> &target_seq) : info(info),
                                                          target_seq(target_seq) {
+      finite_diff_gradient = false;
       num_targets = info->tw_per_target.rows();
       vars_per_step = 1 + dim_q; // t and q
       num_decision_vars = vars_per_step*num_targets;
@@ -72,8 +77,16 @@ class RobotArmNLP : public Ipopt::TNLP {
       }
       num_constraints = constraints_per_step*num_targets;
       // J_nnz = num_constraints*num_decision_vars; // Dense
-      H_nnz = vars_per_step*(vars_per_step + 1)/2 + (vars_per_step*(vars_per_step + 1)/2 + vars_per_step*vars_per_step)*(num_targets - 1); // vars_per_step*(vars_per_step + 1)/2 is for step 0 and (vars_per_step*(vars_per_step + 1)/2 + vars_per_step*vars_per_step) is for subsequent steps
-      // H_nnz = dim_q + 2*dim_q*(num_targets - 1); // For Gauss-Newton with quadratic cost
+
+      if (gauss_newton_hessian) {
+        if (quadratic_cost) {
+          H_nnz = dim_q + 2*dim_q*(num_targets - 1);
+        } else {
+          H_nnz = dim_q*(dim_q + 1)/2 + (dim_q*(dim_q + 1)/2 + dim_q*dim_q)*(num_targets - 1); // dim_q*(dim_q + 1)/2 is for step 0 and (dim_q*(dim_q + 1)/2 + dim_q*dim_q) is for subsequent steps
+        }
+      } else {
+        H_nnz = vars_per_step*(vars_per_step + 1)/2 + (vars_per_step*(vars_per_step + 1)/2 + vars_per_step*vars_per_step)*(num_targets - 1); // vars_per_step*(vars_per_step + 1)/2 is for step 0 and (vars_per_step*(vars_per_step + 1)/2 + vars_per_step*vars_per_step) is for subsequent steps
+      }
       // H_nnz = num_decision_vars*num_decision_vars; // Dense
 
       // Populate Jacobian sparsity
@@ -137,59 +150,77 @@ class RobotArmNLP : public Ipopt::TNLP {
       Hrows = VectorXIndex(H_nnz);
       Hcols = VectorXIndex(H_nnz);
 
-      nnz_idx = 0;
-      for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
-        for (int i = 0; i < vars_per_step; ++i) {
-          for (int j = 0; j <= i; ++j) { // Only filling lower triangle
-            Hrows(nnz_idx) = seq_idx*vars_per_step + i;
-            Hcols(nnz_idx) = seq_idx*vars_per_step + j;
-            ++nnz_idx;
+      if (gauss_newton_hessian) {
+        if (quadratic_cost) {
+          nnz_idx = 0;
+          for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+            for (int i = 1; i < vars_per_step; ++i) {
+              Hrows(nnz_idx) = seq_idx*vars_per_step + i;
+              Hcols(nnz_idx) = seq_idx*vars_per_step + i;
+              ++nnz_idx;
+            }
+
+            if (seq_idx == 0) {
+              continue;
+            }
+
+            for (int i = 1; i < vars_per_step; ++i) {
+              Hrows(nnz_idx) = seq_idx*vars_per_step + i;
+              Hcols(nnz_idx) = (seq_idx - 1)*vars_per_step + i;
+              ++nnz_idx;
+            }
+          }
+        } else {
+          nnz_idx = 0;
+          for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+            for (int i = 1; i < vars_per_step; ++i) {
+              for (int j = 1; j <= i; ++j) { // Only filling lower triangle
+                Hrows(nnz_idx) = seq_idx*vars_per_step + i;
+                Hcols(nnz_idx) = seq_idx*vars_per_step + j;
+                ++nnz_idx;
+              }
+            }
+
+            if (seq_idx == 0) {
+              continue;
+            }
+
+            for (int i = 1; i < vars_per_step; ++i) {
+              for (int j = 1; j < vars_per_step; ++j) {
+                Hrows(nnz_idx) = seq_idx*vars_per_step + i;
+                Hcols(nnz_idx) = (seq_idx - 1)*vars_per_step + j;
+                ++nnz_idx;
+              }
+            }
           }
         }
+      } else {
+        nnz_idx = 0;
+        for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+          for (int i = 0; i < vars_per_step; ++i) {
+            for (int j = 0; j <= i; ++j) { // Only filling lower triangle
+              Hrows(nnz_idx) = seq_idx*vars_per_step + i;
+              Hcols(nnz_idx) = seq_idx*vars_per_step + j;
+              ++nnz_idx;
+            }
+          }
 
-        if (seq_idx == 0) {
-          continue;
-        }
+          if (seq_idx == 0) {
+            continue;
+          }
 
-        for (int i = 0; i < vars_per_step; ++i) {
-          for (int j = 0; j < vars_per_step; ++j) {
-            Hrows(nnz_idx) = seq_idx*vars_per_step + i;
-            Hcols(nnz_idx) = (seq_idx - 1)*vars_per_step + j;
-            ++nnz_idx;
+          for (int i = 0; i < vars_per_step; ++i) {
+            for (int j = 0; j < vars_per_step; ++j) {
+              Hrows(nnz_idx) = seq_idx*vars_per_step + i;
+              Hcols(nnz_idx) = (seq_idx - 1)*vars_per_step + j;
+              ++nnz_idx;
+            }
           }
         }
       }
       if (nnz_idx != H_nnz) {
         throw std::runtime_error("Number of added nonzeros not equal to H_nnz");
       }
-
-      // Gauss-Newton for quadratic cost 
-      /*
-      Hrows = VectorXIndex(H_nnz);
-      Hcols = VectorXIndex(H_nnz);
-
-      nnz_idx = 0;
-      for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
-        for (int i = 1; i < vars_per_step; ++i) {
-          Hrows(nnz_idx) = seq_idx*vars_per_step + i;
-          Hcols(nnz_idx) = seq_idx*vars_per_step + i;
-          ++nnz_idx;
-        }
-
-        if (seq_idx == 0) {
-          continue;
-        }
-
-        for (int i = 1; i < vars_per_step; ++i) {
-          Hrows(nnz_idx) = seq_idx*vars_per_step + i;
-          Hcols(nnz_idx) = (seq_idx - 1)*vars_per_step + i;
-          ++nnz_idx;
-        }
-      }
-      if (nnz_idx != H_nnz) {
-        throw std::runtime_error("Number of added nonzeros not equal to H_nnz");
-      }
-      */
 
       // Dense
       /*
@@ -347,8 +378,11 @@ class RobotArmNLP : public Ipopt::TNLP {
       VectorXd prev_q = info->q0;
       for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
         Map<const VectorXd> q(x + seq_idx*vars_per_step + 1, dim_q);
-        obj_value += sqrt((q - prev_q).squaredNorm() + 1e-8);
-        // obj_value += (q - prev_q).squaredNorm();
+        if (quadratic_cost) {
+          obj_value += (q - prev_q).squaredNorm();
+        } else {
+          obj_value += sqrt((q - prev_q).squaredNorm() + 1e-8);
+        }
         prev_q = q;
       }
       return true;
@@ -361,35 +395,41 @@ class RobotArmNLP : public Ipopt::TNLP {
        bool          new_x,
        Ipopt::Number*       grad_f
     ) {
-      // Map<VectorXd>(grad_f, num_decision_vars).setZero();
-      VectorXd prev_q = info->q0;
-      for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
-        Map<const VectorXd> q(x + seq_idx*vars_per_step + 1, dim_q);
-        double dist = sqrt((q - prev_q).squaredNorm() + 1e-8);
-        Map<VectorXd>(grad_f + seq_idx*vars_per_step + 1, dim_q) = 1/dist*(q - prev_q);
-        // Map<VectorXd>(grad_f + seq_idx*vars_per_step + 1, dim_q) = 2*(q - prev_q);
-        grad_f[seq_idx*vars_per_step] = 0.;
-        if (seq_idx != 0) {
-          Map<VectorXd>(grad_f + (seq_idx - 1)*vars_per_step + 1, dim_q) += -1/dist*(q - prev_q);
-          // Map<VectorXd>(grad_f + (seq_idx - 1)*vars_per_step + 1, dim_q) += -2*(q - prev_q);
+      if (finite_diff_gradient) {
+        double eps = 1e-4;
+        double o;
+        eval_f(n, x, new_x, o);
+        VectorXd xplus(Map<const VectorXd>(x, num_decision_vars));
+        for (int i = 0; i < num_decision_vars; ++i) {
+          xplus(i) += eps;
+          double oplus;
+          eval_f(n, xplus.data(), new_x, oplus);
+          xplus(i) = x[i];
+          grad_f[i] = (oplus - o)/eps;
         }
+      } else {
+        // Map<VectorXd>(grad_f, num_decision_vars).setZero();
+        VectorXd prev_q = info->q0;
+        for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+          Map<const VectorXd> q(x + seq_idx*vars_per_step + 1, dim_q);
+          double dist = sqrt((q - prev_q).squaredNorm() + 1e-8);
+          if (quadratic_cost) {
+            Map<VectorXd>(grad_f + seq_idx*vars_per_step + 1, dim_q) = 2*(q - prev_q);
+          } else {
+            Map<VectorXd>(grad_f + seq_idx*vars_per_step + 1, dim_q) = 1/dist*(q - prev_q);
+          }
+          grad_f[seq_idx*vars_per_step] = 0.;
+          if (seq_idx != 0) {
+            if (quadratic_cost) {
+              Map<VectorXd>(grad_f + (seq_idx - 1)*vars_per_step + 1, dim_q) += -2*(q - prev_q);
+            } else {
+              Map<VectorXd>(grad_f + (seq_idx - 1)*vars_per_step + 1, dim_q) += -1/dist*(q - prev_q);
+            }
+          }
 
-        prev_q = q;
+          prev_q = q;
+        }
       }
-      // Map<VectorXd>(grad_f, num_decision_vars).setZero();
-      /*
-      double eps = 1e-4;
-      double o;
-      eval_f(n, x, new_x, o);
-      VectorXd xplus(Map<const VectorXd>(x, num_decision_vars));
-      for (int i = 0; i < num_decision_vars; ++i) {
-        xplus(i) += eps;
-        double oplus;
-        eval_f(n, xplus.data(), new_x, oplus);
-        xplus(i) = x[i];
-        grad_f[i] = (oplus - o)/eps;
-      }
-      */
       return true;
     }
 
@@ -516,40 +556,45 @@ class RobotArmNLP : public Ipopt::TNLP {
         Map<VectorXIndex>(iRow, nele_hess) = Hrows;
         Map<VectorXIndex>(jCol, nele_hess) = Hcols;
       } else {
-        std::cout << "Did not implement exact constraint Hessian" << std::endl;
-        throw std::runtime_error("Did not implement exact constraint Hessian");
+        if (!gauss_newton_hessian) {
+          std::cout << "Did not implement exact constraint Hessian for non-Gauss-Newton case" << std::endl;
+          throw std::runtime_error("Did not implement exact constraint Hessian for non-Gauss-Newton case");
+        }
 
         // Gauss-Newton with quadratic cost
-        /*
-        int nnz_idx = 0;
-        VectorXd prev_q = info->q0;
-        for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
-          if (seq_idx == 0) {
-            for (int i = 1; i < vars_per_step; ++i) {
-              values[nnz_idx] = 2*obj_factor;
-              ++nnz_idx;
-            }
-          } else if (seq_idx == num_targets - 1) {
-            for (int i = 1; i < vars_per_step; ++i) {
-              values[nnz_idx] = 2*obj_factor;
-              ++nnz_idx;
-            }
-            for (int i = 1; i < vars_per_step; ++i) {
-              values[nnz_idx] = -2*obj_factor;
-              ++nnz_idx;
-            }
-          } else {
-            for (int i = 1; i < vars_per_step; ++i) {
-              values[nnz_idx] = 4*obj_factor;
-              ++nnz_idx;
-            }
-            for (int i = 1; i < vars_per_step; ++i) {
-              values[nnz_idx] = -2*obj_factor;
-              ++nnz_idx;
+        if (quadratic_cost) {
+          int nnz_idx = 0;
+          VectorXd prev_q = info->q0;
+          for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+            if (seq_idx == 0) {
+              for (int i = 1; i < vars_per_step; ++i) {
+                values[nnz_idx] = 4*obj_factor;
+                ++nnz_idx;
+              }
+            } else if (seq_idx == num_targets - 1) {
+              for (int i = 1; i < vars_per_step; ++i) {
+                values[nnz_idx] = 2*obj_factor;
+                ++nnz_idx;
+              }
+              for (int i = 1; i < vars_per_step; ++i) {
+                values[nnz_idx] = -2*obj_factor;
+                ++nnz_idx;
+              }
+            } else {
+              for (int i = 1; i < vars_per_step; ++i) {
+                values[nnz_idx] = 4*obj_factor;
+                ++nnz_idx;
+              }
+              for (int i = 1; i < vars_per_step; ++i) {
+                values[nnz_idx] = -2*obj_factor;
+                ++nnz_idx;
+              }
             }
           }
+        } else {
+          std::cout << "Did not implement Gauss-Newton hessian for distance cost" << std::endl;
+          throw std::runtime_error("Did not implement Gauss-Newton hessian for distance cost");
         }
-        */
       }
       return true;
     }
@@ -628,6 +673,10 @@ class RobotArmNLP : public Ipopt::TNLP {
       // this->x_u = warm_start;
     }
 
+    void set_finite_diff_gradient(bool finite_diff_gradient) {
+      this->finite_diff_gradient = finite_diff_gradient;
+    }
+
   private:
     std::shared_ptr<RobotArmNLPInfo> info;
     VectorXl target_seq;
@@ -657,6 +706,8 @@ class RobotArmNLP : public Ipopt::TNLP {
     double cost;
 
     VectorXd warm_start;
+
+    bool finite_diff_gradient;
 };
 
 class RobotArmNLPSolver {
@@ -682,7 +733,9 @@ class RobotArmNLPSolver {
       app->Options()->SetIntegerValue("max_iter", max_iter);
       app->Options()->SetStringValue("jacobian_approximation", "finite-difference-values");
       // app->Options()->SetStringValue("gradient_approximation", "finite-difference-values");
-      app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+      if (!gauss_newton_hessian) {
+        app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+      }
 
       app->Options()->SetIntegerValue("print_level", print_level);
 
@@ -704,6 +757,10 @@ class RobotArmNLPSolver {
     RobotArmNLPSolver(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<SE3Spline> &q_trj_per_target, const Ref<const VectorXd> &q0, const Ref<const VectorXl> &target_seq, int max_iter, const Ref<const VectorXd> &joint_limits, const Ref<const VectorXd> &vmax, const Ref<const Vector4d> &l, const Ref<const RowMatrixXd> &dh, int print_level) {
       std::shared_ptr<RobotArmNLPInfo> info = std::make_shared<RobotArmNLPInfo>(tw_per_target, q_trj_per_target, q0, joint_limits, vmax, l, dh);
       initialize(info, target_seq, max_iter, print_level);
+    }
+
+    void set_finite_diff_gradient(bool finite_diff_gradient) {
+      nlp->set_finite_diff_gradient(finite_diff_gradient);
     }
 
     VectorXIndex get_Jrows() {
@@ -751,6 +808,30 @@ class RobotArmNLPSolver {
       return J;
     }
 
+    VectorXd get_gradient(const Ref<const VectorXd> &x) {
+      VectorXd grad(x.size());
+      nlp->eval_grad_f(nlp->get_num_decision_vars(), x.data(), true, grad.data());
+      return grad;
+    }
+
+    VectorXd get_hessian(const Ref<const VectorXd> &x) {
+      VectorXd ret(nlp->get_Hrows().size());
+      nlp->eval_h(
+         nlp->get_num_decision_vars(),
+         x.data(),
+         true,
+         1.,
+         nlp->get_num_constraints(),
+         NULL,
+         true,
+         nlp->get_Hrows().size(),
+         NULL,
+         NULL,
+         ret.data()
+      );
+      return ret;
+    }
+
     double solve(Ref<RowMatrixXd> trajectory, bool get_trajectory) {
       // Ask Ipopt to solve the problem
       Ipopt::ApplicationReturnStatus status;
@@ -776,6 +857,7 @@ class RobotArmNLPSolver {
       }
       else
       {
+         throw std::runtime_error("Ipopt failed");
          return std::numeric_limits<double>::infinity();
       }
       
