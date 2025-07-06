@@ -56,7 +56,7 @@ class DubinsTrjThroughSeqOfTargets {
           next_t = tw_per_target(target_idx, 0);
           next_pos = q_trj_per_target[target_idx](next_t);
           delta_t = next_t - t;
-          RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-4);
+          RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-2);
           if (std::isfinite(turns(0, 0))) {
             selected_pts_per_target(target_idx, 0) = next_t;
             selected_pts_per_target(target_idx, 1) = next_pos(0);
@@ -101,7 +101,7 @@ class DubinsTrjThroughSeqOfTargets {
           next_t = tw_per_target(target_idx, 1);
           next_pos = q_trj_per_target[target_idx](next_t);
           delta_t = next_t - t;
-          turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-4);
+          turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-2);
           if (std::isinf(turns(0, 0))) {
             return false;
           }
@@ -124,7 +124,7 @@ class DubinsTrjThroughSeqOfTargets {
 
           double c = shortest_path_dist - vmax*delta_t;
 
-          if (std::abs(c) < 1e-4) {
+          if (std::abs(c) < 1e-2) {
             break;
           }
 
@@ -165,7 +165,7 @@ class DubinsTrjThroughSeqOfTargets {
 
           next_pos = q_trj_per_target[target_idx](next_t);
 
-          RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-4);
+          RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), vmax*delta_t, rho, 1e-2);
           if (std::isfinite(turns(0, 0)) && next_t < feas_next_t) {
             feas_next_t = next_t;
             feas_next_pos = next_pos;
