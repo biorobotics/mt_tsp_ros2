@@ -35,6 +35,8 @@ const bool quadratic_cost = false;
 
 const bool linearize_target_trj = false;
 
+const bool constant_orientation = false;
+
 struct RobotArmNLPInfo {
   RobotArmNLPInfo(const Ref<const RowMatrixXd> &tw_per_target,
                   const std::vector<SE3Spline> &q_trj_per_target,
@@ -691,6 +693,16 @@ class RobotArmNLP : public Ipopt::TNLP {
         for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
           int seq_idx = seq_idx_per_target(target_idx);
           info->q_trj_per_target_linearized.push_back(ConstantVelocitySE3Trajectory(info->q_trj_per_target[target_idx], warm_start(vars_per_step*seq_idx)));
+        }
+      } else if (constant_orientation) {
+        VectorXi seq_idx_per_target(num_targets);
+        for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
+          int target_idx = target_seq(seq_idx);
+          seq_idx_per_target(target_idx) = seq_idx;
+        }
+        for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
+          int seq_idx = seq_idx_per_target(target_idx);
+          info->q_trj_per_target[target_idx].set_constant_orientation(true, info->q_trj_per_target[target_idx].get_rot_spline()(warm_start(vars_per_step*seq_idx)));
         }
       }
     }
