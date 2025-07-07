@@ -62,6 +62,7 @@ class RobotArmNLP : public Ipopt::TNLP {
     RobotArmNLP(std::shared_ptr<RobotArmNLPInfo> info,
                 const Ref<const VectorXl> &target_seq) : info(info),
                                                          target_seq(target_seq) {
+      restoration_invoked = false;
       finite_diff_gradient = false;
       num_targets = info->tw_per_target.rows();
       vars_per_step = 1 + dim_q; // t and q
