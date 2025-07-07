@@ -256,6 +256,15 @@ install(TARGETS memetic_dubins_mt_tsp
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(memetic_vs_dubins_mt_tsp
+  src/bind_memetic_vs_dubins_mt_tsp.cpp
+  src/dubins.cpp
+)
+target_link_libraries(memetic_vs_dubins_mt_tsp PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS memetic_vs_dubins_mt_tsp
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 pybind11_add_module(cpp_spline
   src/bind_cpp_spline.cpp
 )
