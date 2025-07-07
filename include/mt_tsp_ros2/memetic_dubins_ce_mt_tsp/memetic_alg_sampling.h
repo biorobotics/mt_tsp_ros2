@@ -69,7 +69,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const py::array_t<long> &gtsp_cost_mat_r
   return false;
 }
 
-RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, double time_limit, int num_openmp_threads, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, py::object sample_point_graph_generator, int num_random_points_per_target, int nonimproving_iterations_between_resample, long inf_val) {
+RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, double time_limit, int num_openmp_threads, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, py::object sample_point_graph_generator, int num_random_points_per_target, int nonimproving_iterations_between_resample, long inf_val, Ref<VectorXd> timing_info) {
   std::vector<std::pair<double, double>> cost_vs_time;
 
   auto timer_start = std::chrono::high_resolution_clock::now();
@@ -151,6 +151,12 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
 
   int num_nodes;
 
+  double resampling_time = 0.;
+  double crossover_mutation_repair_time = 0.;
+  if (timing_info.size() != 2) {
+    throw std::runtime_error("timing_info should be size 2");
+  }
+
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
     auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
@@ -160,12 +166,17 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
 
     if (gen_idx == 0 || nonimproving_iterations_since_resample == nonimproving_iterations_between_resample) {
       // std::cout << "resampling" << std::endl;
+      auto timer_start = std::chrono::high_resolution_clock::now();
       num_nodes = sample_point_graph_generator.attr("__call__")(std::ref(*population), 
                                                                 gtsp_cost_mat_flat, 
                                                                 gtsp_cost_mat_rounded_and_scaled_flat,
                                                                 all_pts,
                                                                 std::ref(target_to_pt_ptr), 
                                                                 num_random_points_per_target).cast<int>();
+
+      auto timer_stop = std::chrono::high_resolution_clock::now();
+      auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
+      resampling_time += ((double)nanos)/1e9;
       /*
       std::cout << "flat cost mat" << std::endl;
       auto gtsp_cost_mat_flat_unchecked = gtsp_cost_mat_flat.unchecked<1>();
@@ -223,6 +234,8 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
       updated_population = &population2;
       updated_population_costs = &population_costs2;
     }
+    
+    auto crossover_mutation_repair_timer_start = std::chrono::high_resolution_clock::now();
 
     #pragma omp parallel for
     for (int chromosome_idx = 0; chromosome_idx < pop_size; ++chromosome_idx) {
@@ -288,6 +301,10 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
       (*updated_population)[chromosome_idx] = Xnew;
       (*updated_population_costs)[chromosome_idx] = cost;
     }
+    
+    auto crossover_mutation_repair_timer_stop = std::chrono::high_resolution_clock::now();
+    auto crossover_mutation_repair_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(crossover_mutation_repair_timer_stop - crossover_mutation_repair_timer_start).count();
+    crossover_mutation_repair_time += ((double)crossover_mutation_repair_nanos)/1e9;
 
     ++gen_idx;
 
@@ -348,5 +365,9 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
   }
 
   std::cout << "Spent " << min_cost_record_time << " s tracking what the min cost was after each iteration (just making sure this is not too large)" << std::endl;
+
+  timing_info(0) = resampling_time;
+  timing_info(1) = crossover_mutation_repair_time;
+
   return cost_vs_time_mat;
 }
