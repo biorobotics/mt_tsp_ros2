@@ -643,6 +643,11 @@ class RobotArmNLP : public Ipopt::TNLP {
        const Ipopt::IpoptData*           ip_data,
        Ipopt::IpoptCalculatedQuantities* ip_cq
     ) {
+      if (mode == Ipopt::AlgorithmMode::RestorationPhaseMode) {
+        std::cout << "In restoration mode" << std::endl;
+        // throw std::runtime_error("In restoration mode");
+        restoration_invoked = true;
+      }
       return true;
     }
 
@@ -676,6 +681,10 @@ class RobotArmNLP : public Ipopt::TNLP {
 
     int get_num_decision_vars() {
       return num_decision_vars;
+    }
+
+    bool get_restoration_invoked() {
+      return restoration_invoked;
     }
 
     void set_warm_start(const Ref<const VectorXd> &warm_start) {
@@ -742,6 +751,8 @@ class RobotArmNLP : public Ipopt::TNLP {
     VectorXd warm_start;
 
     bool finite_diff_gradient;
+
+    bool restoration_invoked;
 };
 
 class RobotArmNLPSolver {
@@ -866,7 +877,7 @@ class RobotArmNLPSolver {
       return ret;
     }
 
-    double solve(Ref<RowMatrixXd> trajectory, bool get_trajectory) {
+    double solve(Ref<RowMatrixXd> trajectory, bool get_trajectory, bool &restoration_invoked, bool &restoration_failed) {
       // Ask Ipopt to solve the problem
       Ipopt::ApplicationReturnStatus status;
       status = app->OptimizeTNLP(nlp);
@@ -885,13 +896,16 @@ class RobotArmNLPSolver {
         }
       }
 
+      restoration_invoked = nlp->get_restoration_invoked();
+      restoration_failed = status == Ipopt::Restoration_Failed;
+
       if (status == Ipopt::Solve_Succeeded)
       {
          return nlp->get_cost();
       }
       else
       {
-         throw std::runtime_error("Ipopt failed");
+         // throw std::runtime_error("Ipopt failed");
          return std::numeric_limits<double>::infinity();
       }
       

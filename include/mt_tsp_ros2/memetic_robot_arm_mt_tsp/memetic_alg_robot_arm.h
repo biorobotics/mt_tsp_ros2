@@ -38,10 +38,10 @@ std::vector<size_t> sort_indexes(const std::vector<T> &v) {
 }
 
 // Return true if repair failed
-bool repair_chromosome(Ref<MatrixXd> X, double &cost, std::shared_ptr<RobotArmNLPInfo> nlp_info, Ref<RowMatrixXd> trajectory, Ref<VectorXd> warm_start, int ipopt_print_level) {
+bool repair_chromosome(Ref<MatrixXd> X, double &cost, std::shared_ptr<RobotArmNLPInfo> nlp_info, Ref<RowMatrixXd> trajectory, Ref<VectorXd> warm_start, int ipopt_print_level, Ref<VectorXb> restoration_info) {
   VectorXl target_seq = X.col(0).cast<long>();
   int num_targets = target_seq.size();
-  RobotArmNLPSolver nlp_solver(nlp_info, target_seq, 200, ipopt_print_level); // TODO: tune max number of iterations
+  RobotArmNLPSolver nlp_solver(nlp_info, target_seq, 500, ipopt_print_level); // TODO: tune max number of iterations
 
   double t = 0.;
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
@@ -57,7 +57,18 @@ bool repair_chromosome(Ref<MatrixXd> X, double &cost, std::shared_ptr<RobotArmNL
     warm_start.segment(seq_idx*(1 + dim_q) + 1, dim_q) = X.block(seq_idx, 2, 1, dim_q).transpose();
   }
   nlp_solver.set_warm_start(warm_start);
-  double new_cost = nlp_solver.solve(trajectory, true);
+  bool restoration_invoked;
+  bool restoration_failed;
+  double new_cost = nlp_solver.solve(trajectory, true, restoration_invoked, restoration_failed);
+  if (restoration_info.size() == 2) {
+    restoration_info(0) = restoration_invoked;
+    restoration_info(1) = restoration_failed;
+  } else {
+    throw std::runtime_error("Restoration info not the correct size");
+  }
+  if (std::isinf(new_cost)) {
+    return true;
+  }
   if (new_cost < cost) {
     cost = new_cost;
     X.block(0, 2, num_targets, dim_q) = trajectory.rightCols(dim_q);
@@ -67,15 +78,14 @@ bool repair_chromosome(Ref<MatrixXd> X, double &cost, std::shared_ptr<RobotArmNL
       X(seq_idx, 1) = delta_t;
       t = trajectory(seq_idx, 0);
     }
-    return false;
   }
-  return true;
+  return false;
 }
 
-bool repair_chromosome(Ref<MatrixXd> X, Ref<Vector1d> cost, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<SE3Spline> &q_trj_per_target, const Ref<const VectorXd> &q0, const Ref<const VectorXd> &joint_limits, const Ref<const VectorXd> &vmax, const Ref<const Vector4d> &l, const Ref<const RowMatrixXd> &dh, Ref<RowMatrixXd> trajectory, Ref<VectorXd> warm_start, int ipopt_print_level) {
+bool repair_chromosome(Ref<MatrixXd> X, Ref<Vector1d> cost, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<SE3Spline> &q_trj_per_target, const Ref<const VectorXd> &q0, const Ref<const VectorXd> &joint_limits, const Ref<const VectorXd> &vmax, const Ref<const Vector4d> &l, const Ref<const RowMatrixXd> &dh, Ref<RowMatrixXd> trajectory, Ref<VectorXd> warm_start, int ipopt_print_level, Ref<VectorXb> restoration_info) {
   std::shared_ptr<RobotArmNLPInfo> nlp_info = std::make_shared<RobotArmNLPInfo>(tw_per_target, q_trj_per_target, q0, joint_limits, vmax, l, dh);
   double dummy_cost;
-  bool repair_failed = repair_chromosome(X, dummy_cost, nlp_info, trajectory, warm_start, ipopt_print_level);
+  bool repair_failed = repair_chromosome(X, dummy_cost, nlp_info, trajectory, warm_start, ipopt_print_level, restoration_info);
   cost(0) = dummy_cost;
   return repair_failed;
 }
@@ -245,7 +255,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
       // Repair to restore feasibility
       double cost = (*population_costs)[chromosome_idx];
-      bool repair_failed = repair_chromosome(Xnew, cost, nlp_info, trajectory_per_thread[omp_get_thread_num()], warm_start_per_thread[omp_get_thread_num()], 0);
+      VectorXb restoration_info(2);
+      bool repair_failed = repair_chromosome(Xnew, cost, nlp_info, trajectory_per_thread[omp_get_thread_num()], warm_start_per_thread[omp_get_thread_num()], 0, restoration_info);
       if (repair_failed) {
         (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];

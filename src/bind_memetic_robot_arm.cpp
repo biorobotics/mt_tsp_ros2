@@ -27,10 +27,9 @@ PYBIND11_MODULE(memetic_robot_arm, m) {
     .def("get_gradient", &RobotArmNLPSolver::get_gradient)
     ;
 
-  py::bind_vector<std::vector<SE3Spline>>(m, "VectorOfSE3Splines");
   py::bind_vector<std::vector<int>>(m, "VectorOfInts");
   py::bind_vector<std::vector<double>>(m, "VectorOfDoubles");
 
   m.def("memetic_alg", &memetic_alg);
-  m.def("repair_chromosome", py::overload_cast<Ref<MatrixXd>, Ref<Vector1d>, const Ref<const RowMatrixXd> &, const std::vector<SE3Spline> &, const Ref<const VectorXd> &, const Ref<const VectorXd> &, const Ref<const VectorXd> &, const Ref<const Vector4d> &, const Ref<const RowMatrixXd> &, Ref<RowMatrixXd>, Ref<VectorXd>, int>(&repair_chromosome));
+  m.def("repair_chromosome", py::overload_cast<Ref<MatrixXd>, Ref<Vector1d>, const Ref<const RowMatrixXd> &, const std::vector<SE3Spline> &, const Ref<const VectorXd> &, const Ref<const VectorXd> &, const Ref<const VectorXd> &, const Ref<const Vector4d> &, const Ref<const RowMatrixXd> &, Ref<RowMatrixXd>, Ref<VectorXd>, int, Ref<VectorXb>>(&repair_chromosome));
 }

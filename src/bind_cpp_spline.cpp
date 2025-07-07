@@ -37,7 +37,10 @@ PYBIND11_MODULE(cpp_spline, m) {
   py::class_<SE3Spline>(m, "SE3Spline")
     .def(py::init<const CppSpline3D &, const RotationSpline &>())
     .def("__call__", &SE3Spline::operator())
+    .def("set_constant_orientation", &SE3Spline::set_constant_orientation)
     ;
+
+  py::bind_vector<std::vector<SE3Spline>>(m, "VectorOfSE3Splines");
 
   py::bind_vector<std::vector<py::array_t<double>>>(m, "VectorOfDoubleArrays");
 
