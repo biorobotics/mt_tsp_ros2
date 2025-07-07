@@ -158,8 +158,8 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
       break;
     }
 
-    if (gen_idx == 0) { // || nonimproving_iterations_since_resample == nonimproving_iterations_between_resample) {
-      std::cout << "resampling" << std::endl;
+    if (gen_idx == 0 || nonimproving_iterations_since_resample == nonimproving_iterations_between_resample) {
+      // std::cout << "resampling" << std::endl;
       num_nodes = sample_point_graph_generator.attr("__call__")(std::ref(*population), 
                                                                 gtsp_cost_mat_flat, 
                                                                 gtsp_cost_mat_rounded_and_scaled_flat,
@@ -277,16 +277,13 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
       double repair_time_limit = time_limit - ((double)nanos)/1e9 ;
 
       bool repair_failed = repair_chromosome(Xnew, gtsp_cost_mat_rounded_and_scaled_flat, gtsp_cost_mat_flat, target_to_pt_ptr, all_pts, cost, inf_val, num_nodes);
-      if (!repair_failed) {
-        std::cout << "repair succeeded" << std::endl;
-      }
       if (repair_failed || cost >= (*population_costs)[chromosome_idx]) {
         (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
         continue;
       }
 
-      std::cout << "repair improved cost" << std::endl;
+      // std::cout << "repair improved cost" << std::endl;
 
       (*updated_population)[chromosome_idx] = Xnew;
       (*updated_population_costs)[chromosome_idx] = cost;
