@@ -17,11 +17,13 @@ PYBIND11_MODULE(cpp_spline, m) {
   py::class_<CppSpline>(m, "CppSpline")
     .def(py::init<const Ref<const VectorXd>&, const Ref<const RowMatrixXd>&>())
     .def("__call__", &CppSpline::operator())
+    .def("derivatives", &CppSpline::derivatives)
     ;
 
   py::class_<CppSpline3D>(m, "CppSpline3D")
     .def(py::init<const Ref<const VectorXd>&, const Ref<const RowMatrixXd>&>())
     .def("__call__", &CppSpline3D::operator())
+    .def("derivatives", &CppSpline3D::derivatives)
     ;
     
   py::class_<CppPPoly>(m, "CppPPoly")
@@ -37,7 +39,10 @@ PYBIND11_MODULE(cpp_spline, m) {
   py::class_<SE3Spline>(m, "SE3Spline")
     .def(py::init<const CppSpline3D &, const RotationSpline &>())
     .def("__call__", &SE3Spline::operator())
-    .def("set_constant_orientation", &SE3Spline::set_constant_orientation)
+    .def("set_const_vel_rot_trj", py::overload_cast<bool, double>(&SE3Spline::set_const_vel_rot_trj))
+    .def("set_const_vel_rot_trj", py::overload_cast<bool, const Ref<const Matrix3d> &, const Ref<const Vector3d> &, double>(&SE3Spline::set_const_vel_rot_trj))
+    .def("set_const_vel_pos_trj", py::overload_cast<bool, double>(&SE3Spline::set_const_vel_pos_trj))
+    .def("set_const_vel_pos_trj", py::overload_cast<bool , const Ref<const Vector3d> &, const Ref<const Vector3d> &>(&SE3Spline::set_const_vel_pos_trj))
     ;
 
   py::bind_vector<std::vector<SE3Spline>>(m, "VectorOfSE3Splines");

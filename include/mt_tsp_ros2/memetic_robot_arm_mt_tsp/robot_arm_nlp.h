@@ -13,7 +13,6 @@
 
 #include "mt_tsp_ros2/SE3_spline.h"
 #include "mt_tsp_ros2/memetic_robot_arm_mt_tsp/kuka_ik.h"
-#include "mt_tsp_ros2/constant_velocity_SE3_trajectory.h"
 
 #include <chrono>
 
@@ -33,10 +32,6 @@ const bool gauss_newton_hessian = false;
 
 const bool quadratic_cost = false;
 
-const bool linearize_target_trj = false;
-
-const bool constant_orientation = false;
-
 struct RobotArmNLPInfo {
   RobotArmNLPInfo(const Ref<const RowMatrixXd> &tw_per_target,
                   const std::vector<SE3Spline> &q_trj_per_target,
@@ -54,7 +49,6 @@ struct RobotArmNLPInfo {
   }
   RowMatrixXd tw_per_target;
   std::vector<SE3Spline> q_trj_per_target;
-  std::vector<ConstantVelocitySE3Trajectory> q_trj_per_target_linearized;
   VectorXd q0;
   VectorXd joint_limits;
   VectorXd vmax;
@@ -455,12 +449,7 @@ class RobotArmNLP : public Ipopt::TNLP {
         double t = x[vars_per_step*seq_idx];
         Map<const VectorXd> q(x + seq_idx*vars_per_step + 1, dim_q);
         Matrix4d ee_pose = kuka_fk(q, info->l, info->dh);
-        Matrix4d target_pose;
-        if (linearize_target_trj) {
-          target_pose = info->q_trj_per_target_linearized[target_idx](t);
-        } else {
-          target_pose = info->q_trj_per_target[target_idx](t);
-        }
+        Matrix4d target_pose = info->q_trj_per_target[target_idx](t);
 
         // EE position error = 0
         Vector3d position_error = ee_pose.topRightCorner<3, 1>() - target_pose.topRightCorner<3, 1>();
@@ -644,7 +633,6 @@ class RobotArmNLP : public Ipopt::TNLP {
        Ipopt::IpoptCalculatedQuantities* ip_cq
     ) {
       if (mode == Ipopt::AlgorithmMode::RestorationPhaseMode) {
-        std::cout << "In restoration mode" << std::endl;
         // throw std::runtime_error("In restoration mode");
         restoration_invoked = true;
       }
@@ -691,29 +679,6 @@ class RobotArmNLP : public Ipopt::TNLP {
       this->warm_start = warm_start;
       // this->x_l = warm_start;
       // this->x_u = warm_start;
-
-      if (linearize_target_trj) {
-        VectorXi seq_idx_per_target(num_targets);
-        for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
-          int target_idx = target_seq(seq_idx);
-          seq_idx_per_target(target_idx) = seq_idx;
-        }
-        info->q_trj_per_target_linearized.clear();
-        for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
-          int seq_idx = seq_idx_per_target(target_idx);
-          info->q_trj_per_target_linearized.push_back(ConstantVelocitySE3Trajectory(info->q_trj_per_target[target_idx], warm_start(vars_per_step*seq_idx)));
-        }
-      } else if (constant_orientation) {
-        VectorXi seq_idx_per_target(num_targets);
-        for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
-          int target_idx = target_seq(seq_idx);
-          seq_idx_per_target(target_idx) = seq_idx;
-        }
-        for (int target_idx = 0; target_idx < num_targets; ++target_idx) {
-          int seq_idx = seq_idx_per_target(target_idx);
-          info->q_trj_per_target[target_idx].set_constant_orientation(true, info->q_trj_per_target[target_idx].get_rot_spline()(warm_start(vars_per_step*seq_idx)));
-        }
-      }
     }
 
     void set_finite_diff_gradient(bool finite_diff_gradient) {

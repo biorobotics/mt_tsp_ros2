@@ -4,6 +4,9 @@
 
 class ConstantVelocityRotationTrajectory {
   public:
+    ConstantVelocityRotationTrajectory() : R0(Matrix3d::Identity()), axis(0, 0, 1), w(0.) {
+    }
+
     ConstantVelocityRotationTrajectory(const Ref<const Matrix3d> &R0, const Ref<const Vector3d> &axis, double w) : R0(R0), axis(axis), w(w) {
     }
 

@@ -6,6 +6,9 @@ class LinearTrajectory {
     LinearTrajectory(const Ref<const VectorXd> &p0, const Ref<const VectorXd> &v) : p0(p0), v(v) {
     }
 
+    LinearTrajectory() : p0(Vector3d::Zero()), v(Vector3d::Zero()) {
+    }
+
     // Linearize the spline at time t
     LinearTrajectory(const CppSpline3D &spline, double t) {
       VectorXd p = spline(t);
