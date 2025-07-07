@@ -131,3 +131,60 @@ double reopt_gtsp_tour_with_list_of_cost_matrices(Ref<VectorXl> tour, const std:
 
   return best_g_val;
 }
+
+bool reopt_gtsp_tour(Ref<VectorXl> tour, const py::array_t<long> &gtsp_cost_mat_flat, const std::vector<py::array_t<long>> &target_to_pt_ptr, const Ref<const VectorXl> &target_seq, long inf_val, int num_nodes) {
+  int num_targets = target_seq.size();
+  if (tour.size() != num_targets + 2) {
+    throw std::runtime_error("Tour not correct size");
+  }
+  tour(0) = 0;
+  tour(num_targets + 1) = 0;
+  VectorXl g_vals = inf_val*VectorXl::Ones(num_nodes);
+  g_vals(0) = 0;
+  VectorXi backpointers = VectorXi::Zero(num_nodes);
+  int target_idx = num_targets;
+
+  auto gtsp_cost_mat_flat_unchecked = gtsp_cost_mat_flat.unchecked<1>();
+
+  for (int tour_idx = 1; tour_idx < num_targets + 1; ++tour_idx) {
+    int next_target_idx = target_seq(tour_idx - 1);
+    auto ptr = target_to_pt_ptr[target_idx].unchecked<1>();
+    auto next_ptr = target_to_pt_ptr[next_target_idx].unchecked<1>();
+    for (int ptr_idx = 0; ptr_idx < ptr.size(); ++ptr_idx) {
+      int node_idx = ptr(ptr_idx);
+      for (int next_ptr_idx = 0; next_ptr_idx < next_ptr.size(); ++next_ptr_idx) {
+        int next_node_idx = next_ptr(next_ptr_idx);
+        long g_cand = g_vals(node_idx) + gtsp_cost_mat_flat_unchecked(node_idx*num_nodes + next_node_idx);
+        if (g_cand < g_vals(next_node_idx)) {
+          g_vals(next_node_idx) = g_cand;
+          backpointers(next_node_idx) = node_idx;
+        }
+      }
+    }
+    target_idx = next_target_idx;
+  }
+
+  target_idx = target_seq(num_targets - 1);
+  auto ptr = target_to_pt_ptr[target_idx].unchecked<1>();
+  int best_final_node_idx = 0;
+  long best_g_val = inf_val;
+  for (int ptr_idx = 0; ptr_idx < ptr.size(); ++ptr_idx) {
+    int node_idx = ptr(ptr_idx);
+    if (g_vals(node_idx) < best_g_val) {
+      best_final_node_idx = node_idx;
+      best_g_val = g_vals(node_idx);
+    }
+  }
+
+  if (best_g_val >= inf_val) {
+    return false;
+  }
+
+  int node_idx = best_final_node_idx;
+  for (int tour_idx = num_targets; tour_idx > 0; --tour_idx) {
+    tour(tour_idx) = node_idx;
+    node_idx = backpointers(node_idx);
+  }
+
+  return true;
+}

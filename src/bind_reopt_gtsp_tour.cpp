@@ -6,7 +6,7 @@
 namespace py = pybind11;
 
 PYBIND11_MODULE(reopt_gtsp_tour, m) {
-  m.def("reopt_gtsp_tour", &reopt_gtsp_tour);
+  m.def("reopt_gtsp_tour", py::overload_cast<Ref<VectorXl>, RowMatrixXdRef_const, VectorXlRef_const, const std::vector<py::array_t<long>> &, const Ref<const VectorXl> &>(&reopt_gtsp_tour));
   m.def("reopt_gtsp_tour_with_list_of_cost_matrices", &reopt_gtsp_tour_with_list_of_cost_matrices);
 
   py::bind_vector<std::vector<py::array_t<double>>>(m, "VectorOfDoubleArrays");
