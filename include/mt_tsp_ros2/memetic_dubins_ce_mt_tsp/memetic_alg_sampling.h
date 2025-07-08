@@ -37,9 +37,8 @@ std::vector<size_t> sort_indexes(const std::vector<T> &v) {
   return idx;
 }
 
-bool repair_chromosome(Ref<MatrixXd> X, const py::array_t<long> &gtsp_cost_mat_rounded_and_scaled_flat, const py::array_t<double> &gtsp_cost_mat_flat, const std::vector<py::array_t<long>> &target_to_pt_ptr, const py::array_t<double> &all_pts, double &cost, long inf_val, int num_nodes) {
+bool repair_chromosome(Ref<MatrixXd> X, const py::array_t<long> &gtsp_cost_mat_rounded_and_scaled_flat, const py::array_t<double> &gtsp_cost_mat_flat, const std::vector<py::array_t<long>> &target_to_pt_ptr, const py::array_t<double> &all_pts, double &cost, long inf_val, int num_nodes, Ref<VectorXl> tour) {
   VectorXl target_seq = X.col(0).cast<long>();
-  VectorXl tour(target_seq.size() + 2);
   bool repair_succeeded = reopt_gtsp_tour(tour, gtsp_cost_mat_rounded_and_scaled_flat, target_to_pt_ptr, target_seq, inf_val, num_nodes);
   if (!repair_succeeded) {
     cost = std::numeric_limits<double>::infinity();
@@ -157,11 +156,27 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
     throw std::runtime_error("timing_info should be size 2");
   }
 
+  std::vector<py::array_t<long>> tour_per_chromosome(pop_size);
+
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
     auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
     if (((double)nanos)/1e9 > time_limit) {
       break;
+    }
+
+    if (gen_idx%2) {
+      population = &population2;
+      population_costs = &population_costs2;
+
+      updated_population = &population1;
+      updated_population_costs = &population_costs1;
+    } else {
+      population = &population1;
+      population_costs = &population_costs1;
+
+      updated_population = &population2;
+      updated_population_costs = &population_costs2;
     }
 
     if (gen_idx == 0 || nonimproving_iterations_since_resample == nonimproving_iterations_between_resample) {
@@ -172,7 +187,8 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
                                                                 gtsp_cost_mat_rounded_and_scaled_flat,
                                                                 all_pts,
                                                                 std::ref(target_to_pt_ptr), 
-                                                                num_random_points_per_target).cast<int>();
+                                                                num_random_points_per_target,
+                                                                std::ref(tour_per_chromosome)).cast<int>();
 
       auto timer_stop = std::chrono::high_resolution_clock::now();
       auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
@@ -220,21 +236,7 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
     }
 
     // std::cout << "Beginning generation " << gen_idx << std::endl;
-
-    if (gen_idx%2) {
-      population = &population2;
-      population_costs = &population_costs2;
-
-      updated_population = &population1;
-      updated_population_costs = &population_costs1;
-    } else {
-      population = &population1;
-      population_costs = &population_costs1;
-
-      updated_population = &population2;
-      updated_population_costs = &population_costs2;
-    }
-    
+  
     auto crossover_mutation_repair_timer_start = std::chrono::high_resolution_clock::now();
 
     #pragma omp parallel for
@@ -289,11 +291,17 @@ RowMatrixXd memetic_alg_sampling(Ref<RowMatrixXd> selected_pts_per_target, const
       auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
       double repair_time_limit = time_limit - ((double)nanos)/1e9 ;
 
-      bool repair_failed = repair_chromosome(Xnew, gtsp_cost_mat_rounded_and_scaled_flat, gtsp_cost_mat_flat, target_to_pt_ptr, all_pts, cost, inf_val, num_nodes);
+      VectorXl tour(num_targets + 2);
+      bool repair_failed = repair_chromosome(Xnew, gtsp_cost_mat_rounded_and_scaled_flat, gtsp_cost_mat_flat, target_to_pt_ptr, all_pts, cost, inf_val, num_nodes, tour);
       if (repair_failed || cost >= (*population_costs)[chromosome_idx]) {
         (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
         continue;
+      }
+
+      auto chromosome_tour_unchecked = tour_per_chromosome[chromosome_idx].mutable_unchecked<1>();
+      for (int tour_idx = 1; tour_idx < tour.size() - 1; ++tour_idx) {
+        chromosome_tour_unchecked(tour_idx - 1) = tour(tour_idx);
       }
 
       // std::cout << "repair improved cost" << std::endl;
