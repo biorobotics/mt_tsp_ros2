@@ -194,7 +194,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   std::vector<RepairTreeNodePtr> stack;
   stack.push_back(std::make_shared<RepairTreeNode>(t0, p0, heading0, -1, nullptr, 0., 0.));
 
-  int expansion_limit = num_targets*100;
+  int expansion_limit = num_targets*10;
   int num_expansions = 0;
 
   RepairTreeNodePtr goal = nullptr;
@@ -270,6 +270,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     cost = std::numeric_limits<double>::infinity();
     return true;
   }
+  // std::cout << num_expansions << std::endl;
 
   RepairTreeNodePtr node = goal;
   cost = goal->g;
