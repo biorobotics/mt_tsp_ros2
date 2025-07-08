@@ -186,19 +186,31 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
   int num_targets = tw_per_target.rows();
 
+  /*
   std::priority_queue<RepairTreeNodePtr, std::vector<RepairTreeNodePtr>, compare_repair_tree_nodes> open_list;
   open_list.push(std::make_shared<RepairTreeNode>(t0, p0, heading0, -1, nullptr, 0., 0.));
+  */
+
+  std::vector<RepairTreeNodePtr> stack;
+  stack.push_back(std::make_shared<RepairTreeNode>(t0, p0, heading0, -1, nullptr, 0., 0.));
 
   RepairTreeNodePtr goal = nullptr;
-  while (open_list.size()) {
+  // while (open_list.size()) {
+  while (stack.size()) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
     auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
     if (((double)nanos)/1e9 > time_limit) {
       break;
     }
 
+    /*
     RepairTreeNodePtr pop = open_list.top();
     open_list.pop();
+    */
+
+    RepairTreeNodePtr pop = stack.back();
+    stack.pop_back();
+
     if (pop->seq_idx == num_targets - 1) {
       goal = pop;
       break;
@@ -210,6 +222,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     double next_heading;
     double transition_cost;
 
+    /*
     for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
       double v = speed_options(speed_idx);
       find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, pop->t, pop->pos, pop->heading, next_t, next_pos, next_heading, params, transition_cost);
@@ -220,6 +233,30 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
       RepairTreeNodePtr successor = std::make_shared<RepairTreeNode>(next_t, next_pos, next_heading, pop->seq_idx + 1, pop, pop->g + transition_cost, 0.);
       open_list.push(successor);
+    }
+    */
+
+    std::vector<double> transition_costs_per_successor;
+    std::vector<RepairTreeNodePtr> successors;
+
+    for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
+      double v = speed_options(speed_idx);
+      find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, pop->t, pop->pos, pop->heading, next_t, next_pos, next_heading, params, transition_cost);
+
+      if (std::isinf(transition_cost)) {
+        continue;
+      }
+
+      RepairTreeNodePtr successor = std::make_shared<RepairTreeNode>(next_t, next_pos, next_heading, pop->seq_idx + 1, pop, pop->g + transition_cost, 0.);
+      successors.push_back(successor);
+      transition_costs_per_successor.push_back(transition_cost);
+    }
+
+    std::vector<size_t> sort_idx = sort_indexes(transition_costs_per_successor);
+    std::reverse(sort_idx.begin(), sort_idx.end());
+
+    for (int neighbor_idx : sort_idx) {
+      stack.push_back(successors[neighbor_idx]);
     }
   }
 
@@ -476,11 +513,12 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       RowMatrixXd turns;
       for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
         double v = speed_options(speed_idx);
-        turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), v*delta_t, v/wmax, 1e-2);
+        turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), v*delta_t, v/wmax, root_finding_tol);
         if (std::isinf(turns(0, 0))) {
           continue;
         }
         found = true;
+        break;
       }
 
       pos = next_pos;
