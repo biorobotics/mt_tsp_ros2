@@ -194,12 +194,15 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   std::vector<RepairTreeNodePtr> stack;
   stack.push_back(std::make_shared<RepairTreeNode>(t0, p0, heading0, -1, nullptr, 0., 0.));
 
+  int expansion_limit = num_targets*100;
+  int num_expansions = 0;
+
   RepairTreeNodePtr goal = nullptr;
   // while (open_list.size()) {
   while (stack.size()) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
     auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
-    if (((double)nanos)/1e9 > time_limit) {
+    if (((double)nanos)/1e9 > time_limit || num_expansions >= expansion_limit) {
       break;
     }
 
@@ -215,6 +218,8 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       goal = pop;
       break;
     }
+
+    ++num_expansions;
 
     int next_target_idx = X(pop->seq_idx + 1, 0);
     double next_t;
@@ -236,7 +241,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     }
     */
 
-    std::vector<double> transition_costs_per_successor;
+    std::vector<double> sort_vals_per_successor;
     std::vector<RepairTreeNodePtr> successors;
 
     for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
@@ -249,10 +254,11 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
       RepairTreeNodePtr successor = std::make_shared<RepairTreeNode>(next_t, next_pos, next_heading, pop->seq_idx + 1, pop, pop->g + transition_cost, 0.);
       successors.push_back(successor);
-      transition_costs_per_successor.push_back(transition_cost);
+      sort_vals_per_successor.push_back(transition_cost);
+      // sort_vals_per_successor.push_back(next_t);
     }
 
-    std::vector<size_t> sort_idx = sort_indexes(transition_costs_per_successor);
+    std::vector<size_t> sort_idx = sort_indexes(sort_vals_per_successor);
     std::reverse(sort_idx.begin(), sort_idx.end());
 
     for (int neighbor_idx : sort_idx) {
