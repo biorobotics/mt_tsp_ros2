@@ -345,6 +345,16 @@ install(TARGETS dubins_trj_through_seq_of_targets
 )
 message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
+pybind11_add_module(vs_dubins_trj_through_seq_of_targets
+  src/bind_vs_dubins_trj_through_seq_of_targets.cpp
+  src/dubins.cpp
+)
+target_link_libraries(vs_dubins_trj_through_seq_of_targets PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS vs_dubins_trj_through_seq_of_targets
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
+
 pybind11_add_module(reopt_gtsp_tour
   src/bind_reopt_gtsp_tour.cpp
 )
