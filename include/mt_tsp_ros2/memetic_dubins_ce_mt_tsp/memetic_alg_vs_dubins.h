@@ -50,8 +50,9 @@ struct RepairTreeNode {
   double g;
   double h;
   double f;
+  double v;
 
-  RepairTreeNode(double t, const Ref<const Vector2d> &pos, double heading, int seq_idx, std::shared_ptr<RepairTreeNode> parent, double g, double h) : t(t), pos(pos), heading(heading), seq_idx(seq_idx), parent(parent), g(g), h(h), f(g + h) {
+  RepairTreeNode(double t, const Ref<const Vector2d> &pos, double heading, int seq_idx, std::shared_ptr<RepairTreeNode> parent, double g, double h, double v) : t(t), pos(pos), heading(heading), seq_idx(seq_idx), parent(parent), g(g), h(h), f(g + h), v(v) {
   }
 };
 
@@ -188,11 +189,11 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
   /*
   std::priority_queue<RepairTreeNodePtr, std::vector<RepairTreeNodePtr>, compare_repair_tree_nodes> open_list;
-  open_list.push(std::make_shared<RepairTreeNode>(t0, p0, heading0, -1, nullptr, 0., 0.));
+  open_list.push(std::make_shared<RepairTreeNode>(t0, p0, heading0, -1, nullptr, 0., 0., 0.));
   */
 
   std::vector<RepairTreeNodePtr> stack;
-  stack.push_back(std::make_shared<RepairTreeNode>(t0, p0, heading0, -1, nullptr, 0., 0.));
+  stack.push_back(std::make_shared<RepairTreeNode>(t0, p0, heading0, -1, nullptr, 0., 0., 0.));
 
   int expansion_limit = num_targets*10;
   int num_expansions = 0;
@@ -236,7 +237,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         continue;
       }
 
-      RepairTreeNodePtr successor = std::make_shared<RepairTreeNode>(next_t, next_pos, next_heading, pop->seq_idx + 1, pop, pop->g + transition_cost, 0.);
+      RepairTreeNodePtr successor = std::make_shared<RepairTreeNode>(next_t, next_pos, next_heading, pop->seq_idx + 1, pop, pop->g + transition_cost, 0., v);
       open_list.push(successor);
     }
     */
@@ -252,7 +253,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         continue;
       }
 
-      RepairTreeNodePtr successor = std::make_shared<RepairTreeNode>(next_t, next_pos, next_heading, pop->seq_idx + 1, pop, pop->g + transition_cost, 0.);
+      RepairTreeNodePtr successor = std::make_shared<RepairTreeNode>(next_t, next_pos, next_heading, pop->seq_idx + 1, pop, pop->g + transition_cost, 0., v);
       successors.push_back(successor);
       sort_vals_per_successor.push_back(transition_cost);
       // sort_vals_per_successor.push_back(next_t);
@@ -273,7 +274,13 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   // std::cout << num_expansions << std::endl;
 
   RepairTreeNodePtr node = goal;
-  cost = goal->g;
+  // cost = goal->g;
+  cost = 0.;
+  double next_t;
+  Vector2d next_pos;
+  double next_heading;
+  int next_target_idx;
+  double next_v;
   for (int seq_idx = num_targets - 1; seq_idx >= 0; --seq_idx) {
     if (node->parent == nullptr) {
       throw std::runtime_error("Parent is null where it should not be null during backpointer traversal");
@@ -282,6 +289,34 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       throw std::runtime_error("Node seq_idx doesnt match seq_idx during backpointer traversal");
     }
     X(seq_idx, 1) = node->t - node->parent->t;
+
+    // Optimize speed, keeping interception points fixed
+    if (seq_idx != num_targets - 1) {
+      bool found = false;
+      for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
+        double v = speed_options(speed_idx);
+        if (v == next_v || check_elongation_possible(node->pos(0), node->pos(1), node->heading, next_pos(0), next_pos(1), next_heading, v*(next_t - node->t), v/wmax)) {
+          if (params.min_latency) {
+            cost += next_t - tw_per_target(next_target_idx, 0);
+          } else if (params.min_time) {
+            cost += next_t - node->t;
+          } else {
+            cost += v*(next_t - node->t);
+          }
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        throw std::runtime_error("Did not find feasible v during speed optimization with fixed interception points");
+      }
+    }
+    next_t = node->t;
+    next_pos = node->pos;
+    next_heading = node->heading;
+    next_target_idx = X(seq_idx, 0);
+    next_v = node->v;
 
     if (populate_selected_pts) {
       int target_idx = X(seq_idx, 0);
@@ -295,6 +330,27 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   }
   if (node->parent != nullptr) {
     throw std::runtime_error("Parent is not null where it should be null during backpointer traversal");
+  }
+
+  // Optimize speed from depot to first intercepted target, keeping interception point fixed
+  bool found = false;
+  for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
+    double v = speed_options(speed_idx);
+    if (v == next_v || check_elongation_possible(p0(0), p0(1), heading0, next_pos(0), next_pos(1), next_heading, v*next_t, v/wmax)) {
+      if (params.min_latency) {
+        cost += next_t - tw_per_target(next_target_idx, 0);
+      } else if (params.min_time) {
+        cost += next_t;
+      } else {
+        cost += v*next_t;
+      }
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    throw std::runtime_error("Did not find feasible v during speed optimization with fixed interception points");
   }
 
   return false;
