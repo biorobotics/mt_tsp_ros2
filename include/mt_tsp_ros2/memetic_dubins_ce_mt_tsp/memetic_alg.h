@@ -289,6 +289,10 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         t = next_t;
         pos = next_pos;
         X(seq_idx, 2) = delta_t;
+
+        if (tw_per_target(target_idx, 0) > next_t + 1e-4 || tw_per_target(target_idx, 1) < next_t - 1e-4) {
+          throw std::runtime_error("t ouf of window in feas case");
+        }
         continue;
       }
 
@@ -342,9 +346,18 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         double deriv = 1/dist*(next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t)) - vmax;
         delta_t -= resid/deriv;
         next_t = t + delta_t;
+        if (next_t > tw_per_target(target_idx, 1)) {
+          // In case we're just iterating until feasibility and the Newton step takes us past the end of the time window
+          next_t = tw_per_target(target_idx, 1);
+          delta_t = next_t - t;
+        }
         next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
         dist = (next_pos - pos).norm();
         if (dist <= vmax*delta_t) {
+          if (next_t < tw_per_target(target_idx, 0)) {
+            throw std::runtime_error("Should not reach this case where we feasibly reach the target before its time window starts. If we are trying to minimize arrival time, we should have checked the start of the time window already. If we are not, it is not even feasible to reach the target at some known point within the time window, so we should not be able to reach it before the time window begins");
+          }
+
           if (!got_feas) {
             got_feas = true;
             feas_next_t = next_t;
@@ -372,6 +385,10 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       next_pos = feas_next_pos;
       double next_dist = feas_dist;
       delta_t = next_t - t;
+
+      if (tw_per_target(target_idx, 0) > next_t + 1e-4 || tw_per_target(target_idx, 1) < next_t - 1e-4) {
+        throw std::runtime_error("t ouf of window in post-newton case");
+      }
 
       // Bisection version
       /*
@@ -753,7 +770,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
 
     double next_t = t + delta_t;
 
-    if (tw_per_target(target_idx, 0) > next_t || tw_per_target(target_idx, 1) < next_t) {
+    if (tw_per_target(target_idx, 0) > next_t + 1e-4 || tw_per_target(target_idx, 1) < next_t - 1e-4) {
       throw std::runtime_error("t ouf of window before transformation step");
     }
     if (params.min_latency || params.min_time) {
@@ -843,7 +860,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     delta_t = next_t - t;
     X(seq_idx, 2) = delta_t;
 
-    if (tw_per_target(target_idx, 0) > next_t || tw_per_target(target_idx, 1) < next_t) {
+    if (tw_per_target(target_idx, 0) > next_t + 1e-4 || tw_per_target(target_idx, 1) < next_t - 1e-4) {
       throw std::runtime_error("t ouf of window after transformation step");
     }
 

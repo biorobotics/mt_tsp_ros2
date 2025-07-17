@@ -314,6 +314,11 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         double deriv = 1/dist*(next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t)) - vmax;
         delta_t -= resid/deriv;
         next_t = t + delta_t;
+        if (next_t > tw_per_target(target_idx, 1)) {
+          // In case we're just iterating until feasibility and the Newton step takes us past the end of the time window
+          next_t = tw_per_target(target_idx, 1);
+          delta_t = next_t - t;
+        }
         next_pos = q_trj_per_target[target_idx](next_t);
         dist = (next_pos - pos).norm();
         if (dist <= vmax*delta_t) {
