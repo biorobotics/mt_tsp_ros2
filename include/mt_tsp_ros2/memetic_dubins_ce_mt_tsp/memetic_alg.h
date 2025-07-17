@@ -903,7 +903,7 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<Extend
   */
 }
 
-void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii, bool no_tw, double t0, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, const Ref<const VectorXd> &speed_upper_bounds, int &max_bisection_iter_for_success_transformation, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost_per_thread, Ref<VectorXl> num_feas_chromosomes_generated_per_thread) {
+void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii, bool no_tw, double t0, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, const Ref<const VectorXd> &speed_upper_bounds, int &max_bisection_iter_for_success_transformation, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost_per_thread, Ref<VectorXl> num_feas_chromosomes_generated_per_thread, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible_per_thread) {
   double theta = X(gene_idx, 1);
   bool dubins = rho != 0.;
 
@@ -979,6 +979,9 @@ void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, co
             transformation_succeeded = false;
           }
         }
+        if (transformation_succeeded) {
+          num_feas_chromosomes_where_transformation_was_feasible_per_thread(omp_get_thread_num()) += 1;
+        }
         if (transformation_succeeded && tmp_cost < new_cost) {
           num_feas_chromosomes_where_transformation_improved_cost_per_thread(omp_get_thread_num()) += 1;
         }
@@ -1004,7 +1007,7 @@ void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, co
   }
 }
 
-void sample_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii, bool no_tw, double t0, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, const Ref<const VectorXd> &speed_upper_bounds, int &max_bisection_iter_for_success_transformation, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost_per_thread, Ref<VectorXl> num_feas_chromosomes_generated_per_thread) {
+void sample_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii, bool no_tw, double t0, int &max_newton_iter_for_success_repair, const MemeticAlgParams &params, const Ref<const VectorXd> &speed_upper_bounds, int &max_bisection_iter_for_success_transformation, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost_per_thread, Ref<VectorXl> num_feas_chromosomes_generated_per_thread, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible_per_thread) {
   double theta = X(gene_idx, 1);
   bool dubins = rho != 0.;
 
@@ -1042,6 +1045,10 @@ void sample_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, cons
         }
       }
 
+      if (transformation_succeeded) {
+        num_feas_chromosomes_where_transformation_was_feasible_per_thread(omp_get_thread_num()) += 1;
+      }
+
       if (transformation_succeeded && tmp_cost < new_cost) {
         num_feas_chromosomes_where_transformation_improved_cost_per_thread(omp_get_thread_num()) += 1;
       }
@@ -1072,7 +1079,7 @@ void sample_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, cons
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, bool no_tw, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, bool no_tw, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated, Ref<Vector1l> num_feas_chromosomes_where_transformation_was_feasible) {
   std::vector<std::pair<double, double>> cost_vs_time;
   
   auto timer_start = std::chrono::high_resolution_clock::now();
@@ -1177,6 +1184,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   VectorXl num_feas_chromosomes_where_transformation_improved_cost_per_thread = VectorXl::Zero(num_openmp_threads);
   VectorXl num_feas_chromosomes_generated_per_thread = VectorXl::Zero(num_openmp_threads);
+  VectorXl num_feas_chromosomes_where_transformation_was_feasible_per_thread = VectorXl::Zero(num_openmp_threads);
 
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
@@ -1308,6 +1316,9 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
           success = false;
         }
       }
+      if (success) {
+        num_feas_chromosomes_where_transformation_was_feasible_per_thread(omp_get_thread_num()) += 1;
+      }
       if (success && cost < repaired_cost) {
         // This is different from the case below. In this case, we might've improved the repaired chromosome, but if the resulting chromosome isn't better than the
         // chromosome prior to crossover, mutation, and repair, we won't enter the below case
@@ -1336,9 +1347,9 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         double theta = (*updated_population)[chromosome_idx](gene_idx, 1);
         // Only run gradient-based local search on feasible solutions (only relevant if I do Dubins close-enough)
         if (std::isfinite((*updated_population_costs)[chromosome_idx]) && local_search_grad_vs_sampling_distribution(rngs_per_thread[omp_get_thread_num()]) == 0) {
-          gradient_based_local_search((*updated_population)[chromosome_idx], (*updated_population_costs)[chromosome_idx], gene_idx, tw_per_target, p0, heading0, vmax, rho, q_trj_per_target, target_radii, no_tw, 0., max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, speed_upper_bounds, max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], num_feas_chromosomes_where_transformation_improved_cost_per_thread, num_feas_chromosomes_generated_per_thread);
+          gradient_based_local_search((*updated_population)[chromosome_idx], (*updated_population_costs)[chromosome_idx], gene_idx, tw_per_target, p0, heading0, vmax, rho, q_trj_per_target, target_radii, no_tw, 0., max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, speed_upper_bounds, max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], num_feas_chromosomes_where_transformation_improved_cost_per_thread, num_feas_chromosomes_generated_per_thread, num_feas_chromosomes_where_transformation_was_feasible_per_thread);
         } else {
-          sample_based_local_search((*updated_population)[chromosome_idx], (*updated_population_costs)[chromosome_idx], gene_idx, tw_per_target, p0, heading0, vmax, rho, q_trj_per_target, target_radii, no_tw, 0., max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, speed_upper_bounds, max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], num_feas_chromosomes_where_transformation_improved_cost_per_thread, num_feas_chromosomes_generated_per_thread);
+          sample_based_local_search((*updated_population)[chromosome_idx], (*updated_population_costs)[chromosome_idx], gene_idx, tw_per_target, p0, heading0, vmax, rho, q_trj_per_target, target_radii, no_tw, 0., max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, speed_upper_bounds, max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], num_feas_chromosomes_where_transformation_improved_cost_per_thread, num_feas_chromosomes_generated_per_thread, num_feas_chromosomes_where_transformation_was_feasible_per_thread);
         } // Sampling-based local search instead of gradient
       } // Pick a chromosome for local search
     } // Check if local search condition has been met
@@ -1372,6 +1383,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   num_feas_chromosomes_where_transformation_improved_cost(0) = num_feas_chromosomes_where_transformation_improved_cost_per_thread.sum();
   num_feas_chromosomes_generated(0) = num_feas_chromosomes_generated_per_thread.sum();
+  num_feas_chromosomes_where_transformation_was_feasible(0) = num_feas_chromosomes_where_transformation_was_feasible_per_thread.sum();
 
   num_feas_final(0) = 0;
   for (auto cost : (*updated_population_costs)) {

@@ -930,7 +930,7 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<Extend
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, bool no_tw, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, bool no_tw, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated, Ref<Vector1l> num_feas_chromosomes_where_transformation_was_feasible) {
   std::vector<std::pair<double, double>> cost_vs_time;
   
   auto timer_start = std::chrono::high_resolution_clock::now();
@@ -1023,6 +1023,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   VectorXl num_feas_chromosomes_where_transformation_improved_cost_per_thread = VectorXl::Zero(num_openmp_threads);
   VectorXl num_feas_chromosomes_generated_per_thread = VectorXl::Zero(num_openmp_threads);
+  VectorXl num_feas_chromosomes_where_transformation_was_feasible_per_thread = VectorXl::Zero(num_openmp_threads);
 
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
@@ -1149,6 +1150,9 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         }
       }
 
+      if (success) {
+        num_feas_chromosomes_where_transformation_was_feasible_per_thread(omp_get_thread_num()) += 1;
+      }
       if (success && cost < repaired_cost) {
         // This is different from the case below. In this case, we might've improved the repaired chromosome, but if the resulting chromosome isn't better than the
         // chromosome prior to crossover, mutation, and repair, we won't enter the below case
