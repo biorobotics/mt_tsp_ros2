@@ -19,7 +19,7 @@ typedef Matrix<bool, Dynamic, 1> VectorXb;
 
 typedef Matrix<double, 1, 1> Vector1d;
 
-typedef Matrix<double, 1, 1> Vector1l;
+typedef Matrix<long, 1, 1> Vector1l;
 
 typedef Matrix<double, Dynamic, 1> VectorXl;
 
