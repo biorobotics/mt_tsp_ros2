@@ -260,6 +260,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         cost += dist;
         t = next_t;
         pos = next_pos;
+        X(seq_idx, 1) = delta_t;
         continue;
       }
 

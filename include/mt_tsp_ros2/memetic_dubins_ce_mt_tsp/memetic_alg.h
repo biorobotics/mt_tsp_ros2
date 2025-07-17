@@ -28,6 +28,8 @@ const bool optimization_during_repair = true;
 
 const double root_finding_tol = 1e-2;
 
+bool do_transformation_for_nondubins_distance_objective = false;
+
 template <typename T>
 std::vector<size_t> sort_indexes(const std::vector<T> &v) {
 
@@ -286,6 +288,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         cost += dist;
         t = next_t;
         pos = next_pos;
+        X(seq_idx, 2) = delta_t;
         continue;
       }
 
@@ -749,6 +752,10 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     Vector2d next_rel_pos = target_radii[target_idx]*Vector2d(cos(theta), sin(theta));
 
     double next_t = t + delta_t;
+
+    if (tw_per_target(target_idx, 0) > next_t || tw_per_target(target_idx, 1) < next_t) {
+      throw std::runtime_error("t ouf of window before transformation step");
+    }
     if (params.min_latency || params.min_time) {
       double t_high = next_t;
       next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
@@ -836,6 +843,10 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     delta_t = next_t - t;
     X(seq_idx, 2) = delta_t;
 
+    if (tw_per_target(target_idx, 0) > next_t || tw_per_target(target_idx, 1) < next_t) {
+      throw std::runtime_error("t ouf of window after transformation step");
+    }
+
     // Update cost, time, and position
     // Assume dubins
     if (params.min_latency) {
@@ -903,7 +914,7 @@ void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, co
             transformation_succeeded = false;
           }
         } else {
-          if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
+          if (do_transformation_for_nondubins_distance_objective || no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
             transformation_succeeded = transform_chromosome_no_dubins(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
           } else {
             transformation_succeeded = false;
@@ -945,7 +956,7 @@ void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, co
             transformation_succeeded = false;
           }
         } else {
-          if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
+          if (do_transformation_for_nondubins_distance_objective || no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
             transformation_succeeded = transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
           } else {
             transformation_succeeded = false;
@@ -1007,7 +1018,7 @@ void sample_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, cons
           transformation_succeeded = false;
         }
       } else {
-        if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
+        if (do_transformation_for_nondubins_distance_objective || no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
           transformation_succeeded = transform_chromosome_no_dubins(tmp_local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw);
         } else {
           transformation_succeeded = false;
@@ -1026,8 +1037,7 @@ void sample_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, cons
         */
         local_modifications[sample_idx] = tmp_local_modification;
         local_modification_costs[sample_idx] = tmp_cost;
-      } else if (new_cost < cost) {
-        local_modifications[sample_idx] = local_modifications[sample_idx];
+      } else {
         local_modification_costs[sample_idx] = new_cost;
       }
 
@@ -1275,7 +1285,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
           success = false;
         }
       } else {
-        if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
+        if (do_transformation_for_nondubins_distance_objective || no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
           success = transform_chromosome_no_dubins(Xnew, tw_per_target, target_radii, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
         } else {
           success = false;
