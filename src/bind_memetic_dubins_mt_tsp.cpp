@@ -14,6 +14,8 @@ PYBIND11_MODULE(memetic_dubins_mt_tsp, m) {
   m.def("repair_chromosome_no_ce", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const std::vector<ExtendedCppSpline>&, const Ref<const Vector2d>&, double, double, Ref<Vector1d>, bool, double, int&, const MemeticAlgParams&, bool>(&repair_chromosome));
   // m.def("repair_chromosome_no_ce", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const std::vector<ExtendedCppSpline>&, const Ref<const Vector2d>&, double, double, Ref<Vector1d>, bool, double, int&, const MemeticAlgParams&, bool, double, std::vector<double>&>(&repair_chromosome));
 
+  // m.def("transform_chromosome_no_dubins", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const std::vector<ExtendedCppSpline>&, const Ref<const Vector2d>&, double, Ref<Vector1d>, int&, int&, const MemeticAlgParams&, bool, double, std::vector<double> &>(&transform_chromosome_no_dubins));
+
   py::bind_vector<std::vector<double>>(m, "VectorOfDoubles");
   py::bind_vector<std::vector<int>>(m, "VectorOfInts");
 }

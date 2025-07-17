@@ -609,15 +609,15 @@ double find_earliest_arrival_time_dubins(Ref<Vector2d> next_pos, Ref<Vector1d> n
   return std::numeric_limits<double>::infinity();
 }
 
-bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, double &cost, const Ref<const VectorXd> &speed_upper_bounds, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw) {
+bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, double vmax, double rho, Ref<Vector1d> cost, const Ref<const VectorXd> &speed_upper_bounds, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw, double t0) {
   int num_targets = tw_per_target.rows();
 
-  double t = 0;
+  double t = t0;
   Vector2d pos = p0;
   double heading = heading0;
   Vector2d next_pos;
   Vector1d next_heading;
-  cost = 0;
+  cost(0) = 0;
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
     int target_idx = X(seq_idx, 0);
 
@@ -630,7 +630,7 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
     double tmp_next_heading;
     bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), tmp_q_trj, pos, heading, vmax, tmp_cost, true, rho, max_newton_iter_for_success_repair, params, no_tw, tmp_next_heading, t);
     if (repair_failed) {
-      cost = std::numeric_limits<double>::infinity();
+      cost(0) = std::numeric_limits<double>::infinity();
       return false;
     }
     next_heading(0) = tmp_next_heading;
@@ -663,12 +663,12 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
         // Meeting pattern
         if (no_tw) {
           if (params.min_latency) {
-            cost += next_t;
+            cost(0) += next_t;
           }
           // We know seq_idx != num_targets - 1, so if not min_latency, add 0 to cost
         } else {
           if (params.min_latency) {
-            cost += next_t - tw_per_target(target_idx, 0);
+            cost(0) += next_t - tw_per_target(target_idx, 0);
           }
         }
 
@@ -686,7 +686,7 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
       next_t = next_t_tmp;
       delta_t = next_t - t;
     } else {
-      cost = std::numeric_limits<double>::infinity();
+      cost(0) = std::numeric_limits<double>::infinity();
       return false;
       // Comment the above two lines if we want to continue the transformation on subsequent targets even if bisection failed.
       // However, I tried this on a 50 target instance and it brought the final cost from 522.868936 to 789.149723
@@ -699,22 +699,22 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
     // Assume dubins
     if (no_tw) {
       if (params.min_latency) {
-        cost += next_t;
+        cost(0) += next_t;
       } else if (seq_idx == num_targets - 1) {
         if (params.min_time) {
-          cost += next_t;
+          cost(0) += next_t;
         } else {
-          cost += vmax*next_t;
+          cost(0) += vmax*next_t;
         }
       }
     } else {
       if (params.min_latency) {
-        cost += next_t - tw_per_target(target_idx, 0);
+        cost(0) += next_t - tw_per_target(target_idx, 0);
       } else if (seq_idx == num_targets - 1) {
         if (params.min_time) {
-          cost += next_t;
+          cost(0) += next_t;
         } else {
-          cost += vmax*next_t;
+          cost(0) += vmax*next_t;
         }
       }
     }
@@ -726,14 +726,15 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
   return true;
 }
 
-bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw) {
+// bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, Ref<Vector1d> cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw, double t0, std::vector<double> &cost_vs_iterations) {
+bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, Ref<Vector1d> cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw, double t0) {
   int num_targets = tw_per_target.rows();
 
-  double t = 0;
+  double t = t0;
   Vector2d pos = p0;
   Vector2d next_rel_pos;
   Vector2d next_pos;
-  cost = 0;
+  cost(0) = 0;
   bool made_change = false;
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
     int target_idx = X(seq_idx, 0);
@@ -748,7 +749,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
       double dummy_next_heading;
       bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), tmp_q_trj, pos, 0., vmax, tmp_cost, false, 0., max_newton_iter_for_success_repair, params, no_tw, dummy_next_heading, t);
       if (repair_failed) {
-        cost = std::numeric_limits<double>::infinity();
+        cost(0) = std::numeric_limits<double>::infinity();
         return false;
       }
       X.block(seq_idx, 0, 1, gene_size) = tmp_chromosome;
@@ -773,7 +774,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
           // If min-latency, don't add anything, because latency = 0.
           // We wouldn't reach here if min-dist
           if (params.min_time && seq_idx == num_targets - 1) {
-            cost += next_t;
+            cost(0) += next_t;
           }
           t = next_t;
           pos = next_pos;
@@ -807,6 +808,11 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
       for (int gd_iter = 0; gd_iter < max_gd_iter; ++gd_iter) {
         next_pos = q_trj_per_target[target_idx](next_t);
         double dist = (next_pos - pos).norm();
+        /*
+        if (gd_iter == 0) {
+          cost_vs_iterations.push_back(dist);
+        }
+        */
         double deriv = (next_pos - pos).dot(q_trj_per_target[target_idx].derivatives(next_t));
         // Limit step size to avoid going outside time window
         double step;
@@ -825,6 +831,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
           double next_t_cand = next_t + step;
           Vector2d next_pos_cand = q_trj_per_target[target_idx](next_t_cand);
           double dist_cand = (next_pos_cand - pos).norm();
+          // std::cout << (dist_cand < vmax*(next_t_cand - t)) << " " << dist_cand - dist << " " << b*deriv*step << std::endl;
           // Armijo rule.
           // Mutliply change in next_t by derivative to get expected change in cost.
           // We're checking if the actual cost reduction is at least b times the expected
@@ -832,6 +839,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
             next_t = next_t_cand;
             next_pos = next_pos_cand;
             reduction = true;
+            // cost_vs_iterations.push_back(dist_cand);
             break;
           }
           step_size *= c;
@@ -849,22 +857,29 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     // Assume dubins
     if (params.min_latency) {
       if (no_tw) {
-        cost += next_t;
+        cost(0) += next_t;
       } else {
-        cost += next_t - tw_per_target(target_idx, 0);
+        cost(0) += next_t - tw_per_target(target_idx, 0);
       }
     } else if (params.min_time) {
       if (seq_idx == num_targets - 1) {
-        cost += next_t;
+        cost(0) += next_t;
       }
     } else {
-      cost += (next_pos - pos).norm();
+      cost(0) += (next_pos - pos).norm();
     }
     t = next_t;
     pos = next_pos;
   }
   return true;
 }
+
+/*
+bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, Ref<Vector1d> cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw, double t0) {
+  std::vector<double> cost_vs_iterations;
+  return transform_chromosome_no_dubins(X, tw_per_target, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw, t0, cost_vs_iterations);
+}
+*/
 
 void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target, double vmax, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, int chromosome_idx) {
   int num_targets = tw_per_target.rows();
@@ -1110,16 +1125,19 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
       // Transformation to reduce cost
       bool success;
+      Vector1d tmp_cost;
       if (dubins) {
         if (!optimization_during_repair) {
-          success = transform_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, vmax, rho, cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
+          success = transform_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, vmax, rho, tmp_cost, speed_upper_bounds, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw, 0.);
+          cost = tmp_cost(0);
         } else {
           success = false;
         }
       } else {
         // if (true) {
         if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
-          success = transform_chromosome_no_dubins(Xnew, tw_per_target, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
+          success = transform_chromosome_no_dubins(Xnew, tw_per_target, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw, 0.);
+          cost = tmp_cost(0);
         } else {
           success = false;
         }
