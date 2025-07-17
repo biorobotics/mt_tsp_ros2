@@ -19,6 +19,10 @@ typedef Matrix<bool, Dynamic, 1> VectorXb;
 
 typedef Matrix<double, 1, 1> Vector1d;
 
+typedef Matrix<double, 1, 1> Vector1l;
+
+typedef Matrix<double, Dynamic, 1> VectorXl;
+
 const int gene_size = 2; // target index, and delta t
 
 const bool optimization_during_repair = true;
@@ -895,7 +899,7 @@ void get_speed_upper_bounds(Ref<VectorXd> upper_bounds, const std::vector<Extend
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, bool no_tw, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double rho, double vmax, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, std::vector<RowMatrixXd> &turns_chain, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, bool no_tw, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated) {
   std::vector<std::pair<double, double>> cost_vs_time;
   
   auto timer_start = std::chrono::high_resolution_clock::now();
@@ -986,6 +990,9 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   std::vector<MatrixXd> *updated_population = &population1;
   std::vector<double> *updated_population_costs = &population_costs1;
 
+  VectorXl num_feas_chromosomes_where_transformation_improved_cost_per_thread = VectorXl::Zero(num_openmp_threads);
+  VectorXl num_feas_chromosomes_generated_per_thread = VectorXl::Zero(num_openmp_threads);
+
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
     auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
@@ -1073,19 +1080,23 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       double cost = 0.;
       double final_heading;
       bool repair_failed = repair_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, vmax, cost, dubins, rho, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], params, no_tw, final_heading, 0.);
-      if (repair_failed || cost >= (*population_costs)[chromosome_idx]) {
+      if (repair_failed) {
         (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
         continue;
       }
-      /*
-      if (std::isinf((*population_costs)[chromosome_idx])) {
-        std::cout << "Made infeasible solution feasible" << std::endl;
-      }
-      */
 
-      (*updated_population)[chromosome_idx] = Xnew;
-      (*updated_population_costs)[chromosome_idx] = cost;
+      num_feas_chromosomes_generated_per_thread(omp_get_thread_num()) += 1;
+
+      if (cost < (*population_costs)[chromosome_idx]) {
+        (*updated_population)[chromosome_idx] = Xnew;
+        (*updated_population_costs)[chromosome_idx] = cost;
+      } else {
+        (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
+        (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
+      }
+
+      double repaired_cost = cost;
 
       // Transformation to reduce cost
       bool success;
@@ -1102,6 +1113,13 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
           success = false;
         }
       }
+
+      if (success && cost < repaired_cost) {
+        // This is different from the case below. In this case, we might've improved the repaired chromosome, but if the resulting chromosome isn't better than the
+        // chromosome prior to crossover, mutation, and repair, we won't enter the below case
+        num_feas_chromosomes_where_transformation_improved_cost_per_thread(omp_get_thread_num()) += 1;
+      }
+
       if (success && cost < (*updated_population_costs)[chromosome_idx]) {
         // std::cout << "transformation reduced cost" << std::endl;
         (*updated_population)[chromosome_idx] = Xnew;
@@ -1143,6 +1161,9 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       break;
     }
   } // Overall loop
+
+  num_feas_chromosomes_where_transformation_improved_cost(0) = num_feas_chromosomes_where_transformation_improved_cost_per_thread.sum();
+  num_feas_chromosomes_generated(0) = num_feas_chromosomes_generated_per_thread.sum();
 
   num_feas_final(0) = 0;
   for (auto cost : (*updated_population_costs)) {
