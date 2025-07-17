@@ -803,7 +803,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     } else {
       int max_gd_iter = 10;
       int max_backtrack_iter = 10;
-      double next_t = t + delta_t;
+      next_t = t + delta_t;
       for (int gd_iter = 0; gd_iter < max_gd_iter; ++gd_iter) {
         next_pos = q_trj_per_target[target_idx](next_t);
         double dist = (next_pos - pos).norm();
@@ -866,17 +866,27 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
   return true;
 }
 
-void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target) {
+void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target, double vmax, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, int chromosome_idx) {
   int num_targets = tw_per_target.rows();
   double t = 0.;
+  Vector2d pos = p0;
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
     int target_idx = chromosome(seq_idx, 0);
     double delta_t = chromosome(seq_idx, 1);
     t += delta_t;
 
+    Vector2d next_pos = q_trj_per_target[target_idx](t);
+
     if (t < tw_per_target(target_idx, 0) || t > tw_per_target(target_idx, 1)) {
-      throw std::runtime_error("chromosome infeasible");
+      throw std::runtime_error("time out of bounds for chromosome " + std::to_string(chromosome_idx));
     }
+
+    if ((next_pos - pos).norm() > vmax*delta_t) {
+      std::cout << (next_pos - pos).norm() - vmax*delta_t << std::endl;
+      throw std::runtime_error("distance larger than vmax*delta_t for chromosome " + std::to_string(chromosome_idx));
+    }
+
+    pos = next_pos;
   }
 }
 
@@ -1107,6 +1117,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
           success = false;
         }
       } else {
+        // if (true) {
         if (no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
           success = transform_chromosome_no_dubins(Xnew, tw_per_target, q_trj_per_target, p0, vmax, cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw);
         } else {
@@ -1128,8 +1139,9 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
     }
 
     /*
+    #pragma omp parallel for
     for (int chromosome_idx = 0; chromosome_idx < pop_size; ++chromosome_idx) {
-      check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target);
+      check_chromosome_feasible((*updated_population)[chromosome_idx], tw_per_target, vmax, q_trj_per_target, p0, chromosome_idx);
     }
     */
     
@@ -1221,7 +1233,8 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       t += delta_t;
       selected_pts_per_target(target_idx, 0) = t;
       Vector2d next_pos = q_trj_per_target[target_idx](t);
-      if ((next_pos - pos).norm() > vmax*delta_t) {
+      if ((next_pos - pos).norm() > vmax*delta_t + 1e-4) {
+        std::cout << (next_pos - pos).norm() - vmax*delta_t << std::endl;
         throw std::runtime_error("Speed constraint violated when getting trajectory associated with best chromosome");
       }
       pos = next_pos;

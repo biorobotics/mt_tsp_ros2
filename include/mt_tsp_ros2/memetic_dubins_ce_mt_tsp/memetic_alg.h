@@ -794,7 +794,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
     } else {
       int max_gd_iter = 10;
       int max_backtrack_iter = 10;
-      double next_t = t + delta_t;
+      next_t = t + delta_t;
       for (int gd_iter = 0; gd_iter < max_gd_iter; ++gd_iter) {
         next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
         double dist = (next_pos - pos).norm();
