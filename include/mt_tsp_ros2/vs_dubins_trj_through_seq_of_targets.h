@@ -23,7 +23,7 @@ typedef const Ref<const RowMatrixXd> &RowMatrixXdRef_const;
 
 class VSDubinsTrjThroughSeqOfTargets {
   public:
-    VSDubinsTrjThroughSeqOfTargets(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, double wmax, double t0, bool min_latency, bool min_time) : tw_per_target(tw_per_target), q_trj_per_target(q_trj_per_target), p0(p0), heading0(heading0), speed_options(speed_options), wmax(wmax), t0(t0), params(0., 0., 0, -1, 1., min_latency, min_time) {
+    VSDubinsTrjThroughSeqOfTargets(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, double wmax, double t0, bool min_latency, bool min_time, bool tree_search) : tw_per_target(tw_per_target), q_trj_per_target(q_trj_per_target), p0(p0), heading0(heading0), speed_options(speed_options), wmax(wmax), t0(t0), params(0., 0., 0, -1, 1., min_latency, min_time), tree_search(tree_search) {
     }
 
     bool optimize_trj(Ref<Vector1d> cost, Ref<RowMatrixXd> selected_pts_per_target, VectorXlRef_const target_seq, double time_limit) {
@@ -31,7 +31,7 @@ class VSDubinsTrjThroughSeqOfTargets {
       MatrixXd chromosome = MatrixXd::Zero(num_targets, gene_size);
       chromosome.col(0) = target_seq.cast<double>();
       double tmp_cost;
-      repair_chromosome(chromosome, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, t0, time_limit, selected_pts_per_target, true);
+      repair_chromosome(chromosome, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, t0, time_limit, selected_pts_per_target, true, tree_search);
       cost(0) = tmp_cost;
       return std::isfinite(tmp_cost);
     }
@@ -45,4 +45,5 @@ class VSDubinsTrjThroughSeqOfTargets {
     double wmax;
     double t0;
     MemeticAlgParams params;
+    bool tree_search;
 };

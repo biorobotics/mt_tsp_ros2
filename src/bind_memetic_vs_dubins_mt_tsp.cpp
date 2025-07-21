@@ -10,8 +10,8 @@ PYBIND11_MAKE_OPAQUE(std::vector<int>)
 
 PYBIND11_MODULE(memetic_vs_dubins_mt_tsp, m) {
   m.def("memetic_alg_vs_dubins_mt_tsp", &memetic_alg);
-  m.def("repair_chromosome_vs_dubins_mt_tsp", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const std::vector<ExtendedCppSpline>&, const Ref<const Vector2d>&, double, const Ref<const VectorXd> &, Ref<Vector1d>, double, const MemeticAlgParams&, double>(&repair_chromosome));
-  m.def("repair_chromosome_vs_dubins_mt_tsp", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const std::vector<ExtendedCppSpline>&, const Ref<const Vector2d>&, double, const Ref<const VectorXd> &, Ref<Vector1d>, double, const MemeticAlgParams&, double, Ref<RowMatrixXd>>(&repair_chromosome));
+  m.def("repair_chromosome_vs_dubins_mt_tsp", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const std::vector<ExtendedCppSpline>&, const Ref<const Vector2d>&, double, const Ref<const VectorXd> &, Ref<Vector1d>, double, const MemeticAlgParams&, double, bool>(&repair_chromosome));
+  m.def("repair_chromosome_vs_dubins_mt_tsp", py::overload_cast<Ref<MatrixXd>, const Ref<const RowMatrixXd>&, const std::vector<ExtendedCppSpline>&, const Ref<const Vector2d>&, double, const Ref<const VectorXd> &, Ref<Vector1d>, double, const MemeticAlgParams&, double, Ref<RowMatrixXd>, bool>(&repair_chromosome));
 
   py::bind_vector<std::vector<double>>(m, "VectorOfDoubles");
   py::bind_vector<std::vector<int>>(m, "VectorOfInts");
