@@ -243,6 +243,10 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 
     num_feas_chromosomes_generated_per_thread(thread_idx) += 1;
 
+    if (speed_options(0) == speed_options(speed_options.size() - 1)) {
+      return false;
+    }
+
     MatrixXd prev_X = X;
     double prev_cost = cost;
     
