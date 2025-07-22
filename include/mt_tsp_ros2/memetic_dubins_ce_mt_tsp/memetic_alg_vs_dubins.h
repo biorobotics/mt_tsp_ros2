@@ -229,6 +229,12 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       pos = next_pos_for_min_arrival_time;
       heading = next_heading_for_min_arrival_time;
       cost += transition_cost_for_min_arrival_time;
+      if (populate_selected_pts) {
+        selected_pts_per_target(next_target_idx, 0) = t;
+        selected_pts_per_target(next_target_idx, 1) = pos(0);
+        selected_pts_per_target(next_target_idx, 2) = pos(1);
+        selected_pts_per_target(next_target_idx, 3) = heading;
+      }
     }
 
     num_feas_chromosomes_generated_per_thread(thread_idx) += 1;
@@ -242,6 +248,10 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     pos = p0;
     heading = heading0;
     cost = 0.;
+    RowMatrixXd new_selected_pts(1, 1);
+    if (populate_selected_pts) {
+      new_selected_pts = RowMatrixXd(selected_pts_per_target.rows(), selected_pts_per_target.cols());
+    }
     for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {  
       int next_target_idx = X(seq_idx, 0);
       double next_t_for_min_transition_cost;
@@ -276,12 +286,22 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       pos = next_pos_for_min_transition_cost;
       heading = next_heading_for_min_transition_cost;
       cost += min_transition_cost;
+
+      if (populate_selected_pts) {
+        new_selected_pts(next_target_idx, 0) = t;
+        new_selected_pts(next_target_idx, 1) = pos(0);
+        new_selected_pts(next_target_idx, 2) = pos(1);
+        new_selected_pts(next_target_idx, 3) = heading;
+      }
     }
 
     num_feas_chromosomes_where_transformation_was_feasible_per_thread(thread_idx) += 1;
 
     if (cost < prev_cost) {
       num_feas_chromosomes_where_transformation_improved_cost_per_thread(thread_idx) += 1;
+      if (populate_selected_pts) {
+        selected_pts_per_target = new_selected_pts;
+      }
     } else {
       X = prev_X;
       cost = prev_cost;
