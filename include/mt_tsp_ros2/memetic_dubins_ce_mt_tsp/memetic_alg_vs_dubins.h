@@ -211,7 +211,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
         double v = speed_options(speed_idx);
         find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, t, pos, heading, next_t, next_pos, next_heading, params, transition_cost);
-        if (next_t < min_arrival_time) {
+        if (std::isfinite(transition_cost) && next_t < min_arrival_time) {
           min_arrival_time = next_t;
           next_pos_for_min_arrival_time = next_pos;
           next_heading_for_min_arrival_time = next_heading;
@@ -234,6 +234,10 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         selected_pts_per_target(next_target_idx, 1) = pos(0);
         selected_pts_per_target(next_target_idx, 2) = pos(1);
         selected_pts_per_target(next_target_idx, 3) = heading;
+      }
+
+      if (std::isinf(cost)) {
+        throw std::runtime_error("Infinite cost but found interception point");
       }
     }
 
