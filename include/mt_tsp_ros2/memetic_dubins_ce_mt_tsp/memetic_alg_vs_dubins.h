@@ -19,6 +19,9 @@ typedef Matrix<double, Dynamic, Dynamic, RowMajor> RowMatrixXd;
 typedef Matrix<bool, Dynamic, 1> VectorXb;
 
 typedef Matrix<double, 1, 1> Vector1d;
+typedef Matrix<long, 1, 1> Vector1l;
+
+typedef Matrix<long, Dynamic, 1> VectorXl;
 
 const int gene_size = 2; // target index, and delta t
 
@@ -181,8 +184,8 @@ void find_next_interception_point(int target_idx, const Ref<const RowMatrixXd> &
   }
 }
 
-// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, double &cost, double wmax, const MemeticAlgParams &params, double t0, std::vector<double> &delta_vs_iterations, Ref<RowMatrixXd> selected_pts_per_target, bool populate_selected_pts, bool tree_search) {
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, double &cost, double wmax, const MemeticAlgParams &params, double t0, double time_limit, Ref<RowMatrixXd> selected_pts_per_target, bool populate_selected_pts, bool tree_search) {
+// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, double &cost, double wmax, const MemeticAlgParams &params, double t0, std::vector<double> &delta_vs_iterations, Ref<RowMatrixXd> selected_pts_per_target, bool populate_selected_pts, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost_per_thread, Ref<VectorXl> num_feas_chromosomes_generated_per_thread, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible_per_thread, int thread_idx) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, double &cost, double wmax, const MemeticAlgParams &params, double t0, double time_limit, Ref<RowMatrixXd> selected_pts_per_target, bool populate_selected_pts, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost_per_thread, Ref<VectorXl> num_feas_chromosomes_generated_per_thread, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible_per_thread, int thread_idx) {
   auto timer_start = std::chrono::high_resolution_clock::now();
 
   int num_targets = tw_per_target.rows();
@@ -228,6 +231,8 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       cost += transition_cost_for_min_arrival_time;
     }
 
+    num_feas_chromosomes_generated_per_thread(thread_idx) += 1;
+
     MatrixXd prev_X = X;
     double prev_cost = cost;
     
@@ -271,6 +276,15 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       pos = next_pos_for_min_transition_cost;
       heading = next_heading_for_min_transition_cost;
       cost += min_transition_cost;
+    }
+
+    num_feas_chromosomes_where_transformation_was_feasible_per_thread(thread_idx) += 1;
+
+    if (cost < prev_cost) {
+      num_feas_chromosomes_where_transformation_improved_cost_per_thread(thread_idx) += 1;
+    } else {
+      X = prev_X;
+      cost = prev_cost;
     }
     return false;
   }
@@ -444,25 +458,25 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   return false;
 }
 
-// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, std::vector<double> &delta_vs_iterations, double time_limit, bool tree_search) {
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, double time_limit, bool tree_search) {
+// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, std::vector<double> &delta_vs_iterations, double time_limit, bool tree_search, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated, Ref<Vector1l> num_feas_chromosomes_where_transformation_was_feasible) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, double time_limit, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost, Ref<VectorXl> num_feas_chromosomes_generated, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible) {
   double tmp_cost = 0.;
   RowMatrixXd selected_pts_per_target(0, 0);
-  // bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, t0, delta_vs_iterations, selected_pts_per_target, false, tree_search);
-  bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, 0., time_limit, selected_pts_per_target, false, tree_search);
+  // bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, t0, delta_vs_iterations, selected_pts_per_target, false, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0);
+  bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, 0., time_limit, selected_pts_per_target, false, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0);
   cost(0) = tmp_cost;
   return repair_failed;
 }
 
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, double time_limit, Ref<RowMatrixXd> selected_pts_per_target, bool tree_search) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, double time_limit, Ref<RowMatrixXd> selected_pts_per_target, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost, Ref<VectorXl> num_feas_chromosomes_generated, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible) {
   double tmp_cost = 0.;
-  bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, 0., time_limit, selected_pts_per_target, true, tree_search);
+  bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, 0., time_limit, selected_pts_per_target, true, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0);
   cost(0) = tmp_cost;
   return repair_failed;
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double wmax, const Ref<const VectorXd> &speed_options, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, bool tree_search) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double wmax, const Ref<const VectorXd> &speed_options, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, bool tree_search, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated, Ref<Vector1l> num_feas_chromosomes_where_transformation_was_feasible) {
   std::vector<std::pair<double, double>> cost_vs_time;
   
   auto timer_start = std::chrono::high_resolution_clock::now();
@@ -535,6 +549,10 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   std::vector<MatrixXd> *updated_population = &population1;
   std::vector<double> *updated_population_costs = &population_costs1;
+
+  VectorXl num_feas_chromosomes_where_transformation_improved_cost_per_thread = VectorXl::Zero(num_openmp_threads);
+  VectorXl num_feas_chromosomes_generated_per_thread = VectorXl::Zero(num_openmp_threads);
+  VectorXl num_feas_chromosomes_where_transformation_was_feasible_per_thread = VectorXl::Zero(num_openmp_threads);
 
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
@@ -610,7 +628,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
       double repair_time_limit = time_limit - ((double)nanos)/1e9 ;
 
-      bool repair_failed = repair_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, speed_options, cost, wmax, params, 0., repair_time_limit, selected_pts_per_target, false, tree_search);
+      bool repair_failed = repair_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, speed_options, cost, wmax, params, 0., repair_time_limit, selected_pts_per_target, false, tree_search, num_feas_chromosomes_where_transformation_improved_cost_per_thread, num_feas_chromosomes_generated_per_thread, num_feas_chromosomes_where_transformation_was_feasible_per_thread, omp_get_thread_num());
       if (repair_failed || cost >= (*population_costs)[chromosome_idx]) {
         (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
@@ -650,6 +668,10 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
     }
   } // Overall loop
 
+  num_feas_chromosomes_where_transformation_improved_cost(0) = num_feas_chromosomes_where_transformation_improved_cost_per_thread.sum();
+  num_feas_chromosomes_generated(0) = num_feas_chromosomes_generated_per_thread.sum();
+  num_feas_chromosomes_where_transformation_was_feasible(0) = num_feas_chromosomes_where_transformation_was_feasible_per_thread.sum();
+
   num_feas_final(0) = 0;
   for (auto cost : (*updated_population_costs)) {
     if (std::isfinite(cost)){ 
@@ -665,7 +687,10 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   if (std::isinf(*it)) {
   } else {
     double cost;
-    bool repair_failed = repair_chromosome(Xbest, tw_per_target, q_trj_per_target, p0, heading0, speed_options, cost, wmax, params, 0., 60., selected_pts_per_target, true, tree_search);
+    VectorXl dummy1(1);
+    VectorXl dummy2(1);
+    VectorXl dummy3(1);
+    bool repair_failed = repair_chromosome(Xbest, tw_per_target, q_trj_per_target, p0, heading0, speed_options, cost, wmax, params, 0., 60., selected_pts_per_target, true, tree_search, dummy1, dummy2, dummy3, 0);
     if (repair_failed) {
       throw std::runtime_error("Ran repair on best chromosome to get interception points, and repair failed, even though best chromosome has finite cost");
     }

@@ -1204,6 +1204,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   num_feas_chromosomes_where_transformation_improved_cost(0) = num_feas_chromosomes_where_transformation_improved_cost_per_thread.sum();
   num_feas_chromosomes_generated(0) = num_feas_chromosomes_generated_per_thread.sum();
+  num_feas_chromosomes_where_transformation_was_feasible(0) = num_feas_chromosomes_where_transformation_was_feasible_per_thread.sum();
 
   num_feas_final(0) = 0;
   for (auto cost : (*updated_population_costs)) {
