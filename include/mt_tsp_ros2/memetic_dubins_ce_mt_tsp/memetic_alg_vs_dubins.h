@@ -128,8 +128,11 @@ void find_next_interception_point(int target_idx, const Ref<const RowMatrixXd> &
           feas_next_heading += turns(row, 1)/turns(row, 0);
         }
       }
-      // If initial guess is feasible and we only want something feasible, do not run Newton
-      max_newton_iter = 0;
+
+      if (!minimize_arrival_time) {
+        // If initial guess is feasible and we only want something feasible, do not run Newton
+        max_newton_iter = 0;
+      }
     }
   }
 
