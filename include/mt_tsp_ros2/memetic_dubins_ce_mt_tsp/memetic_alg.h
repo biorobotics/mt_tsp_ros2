@@ -28,7 +28,8 @@ const bool optimization_during_repair = true;
 
 const double root_finding_tol = 1e-2;
 
-bool do_transformation_for_nondubins_distance_objective = false;
+bool do_transformation_for_nondubins_distance_objective = true;
+bool min_time_for_nondubins_distance_objective_repair = true;
 
 template <typename T>
 std::vector<size_t> sort_indexes(const std::vector<T> &v) {
@@ -282,18 +283,20 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
       double dist = (next_pos - pos).norm();
       bool feas = dist <= vmax*delta_t;
-      if (feas && ((!params.min_latency && !params.min_time) || !optimization_during_repair)) {
-        // Travel is feasible, no need to repair. Additionally, we are not using a time-based cost function,
-        // so there is not reason to further optimize the arrival time
-        cost += dist;
-        t = next_t;
-        pos = next_pos;
-        X(seq_idx, 2) = delta_t;
+      if (!min_time_for_nondubins_distance_objective_repair) {
+        if (feas && ((!params.min_latency && !params.min_time) || !optimization_during_repair)) {
+          // Travel is feasible, no need to repair. Additionally, we are not using a time-based cost function,
+          // so there is not reason to further optimize the arrival time
+          cost += dist;
+          t = next_t;
+          pos = next_pos;
+          X(seq_idx, 2) = delta_t;
 
-        if (tw_per_target(target_idx, 0) > next_t + 1e-4 || tw_per_target(target_idx, 1) < next_t - 1e-4) {
-          throw std::runtime_error("t ouf of window in feas case");
+          if (tw_per_target(target_idx, 0) > next_t + 1e-4 || tw_per_target(target_idx, 1) < next_t - 1e-4) {
+            throw std::runtime_error("t ouf of window in feas case");
+          }
+          continue;
         }
-        continue;
       }
 
       // Newton version
@@ -312,6 +315,9 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             // We wouldn't reach here if min-dist
             if (params.min_time && seq_idx == num_targets - 1) {
               cost += next_t;
+            }
+            if (!params.min_time && !params.min_latency) {
+              cost += dist;
             }
             t = next_t;
             pos = next_pos;
@@ -363,7 +369,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
             feas_next_t = next_t;
             feas_next_pos = next_pos;
             feas_dist = dist;
-            if (!params.min_latency && !params.min_time) {
+            if (!min_time_for_nondubins_distance_objective_repair && !params.min_latency && !params.min_time) {
               break;
             }
           } else if (next_t < feas_next_t) {
