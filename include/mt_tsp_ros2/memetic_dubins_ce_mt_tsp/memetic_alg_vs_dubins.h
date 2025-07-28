@@ -73,7 +73,7 @@ struct compare_repair_tree_nodes {
 };
 
 void find_next_interception_point(int target_idx, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, double v, double rho, double t, const Ref<const Vector2d> &pos, double heading, double &next_t, Ref<Vector2d> next_pos, double &next_heading, const MemeticAlgParams& params, double &transition_cost, int &num_newton_successes_when_tw_end_check_failed, double initial_guess, bool minimize_arrival_time, int &num_newton_iter_for_success, bool verbose = false) {
-  int max_newton_iter = 1000;
+  int max_newton_iter = 300; // Based on tests I ran with 50 targets where we needed up to 276 iterations to get a feasible solution, in the worst case
   num_newton_iter_for_success = 0;
 
   int num_targets = tw_per_target.rows();
