@@ -34,7 +34,8 @@ class VSDubinsTrjThroughSeqOfTargets {
       VectorXl num_newton_successes_when_tw_end_check_failed(1);
       VectorXl num_newton_solves(1);
       VectorXl num_newton_successes(1);
-      repair_chromosome(chromosome, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, t0, time_limit, selected_pts_per_target, true, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0, num_newton_successes_when_tw_end_check_failed, num_newton_solves, num_newton_successes);
+      VectorXl max_newton_iter_for_successful_repair(1);
+      repair_chromosome(chromosome, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, t0, time_limit, selected_pts_per_target, true, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0, num_newton_successes_when_tw_end_check_failed, num_newton_solves, num_newton_successes, max_newton_iter_for_successful_repair);
       cost(0) = tmp_cost;
       return std::isfinite(tmp_cost);
     }

@@ -23,11 +23,13 @@ typedef Matrix<long, 1, 1> Vector1l;
 
 typedef Matrix<long, Dynamic, 1> VectorXl;
 
-const int gene_size = 2; // target index, and delta t
+const int gene_size = 3; // target index, delta t, speed (speed is just for reconstruction)
 
 const double root_finding_tol = 1e-2;
 
 bool run_newton_even_if_tw_end_check_fails = true;
+
+bool minimize_arrival_time_during_repair = true;
 
 template <typename T>
 std::vector<size_t> sort_indexes(const std::vector<T> &v) {
@@ -70,8 +72,9 @@ struct compare_repair_tree_nodes {
   }
 };
 
-void find_next_interception_point(int target_idx, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, double v, double rho, double t, const Ref<const Vector2d> &pos, double heading, double &next_t, Ref<Vector2d> next_pos, double &next_heading, const MemeticAlgParams& params, double &transition_cost, int &num_newton_successes_when_tw_end_check_failed) {
+void find_next_interception_point(int target_idx, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, double v, double rho, double t, const Ref<const Vector2d> &pos, double heading, double &next_t, Ref<Vector2d> next_pos, double &next_heading, const MemeticAlgParams& params, double &transition_cost, int &num_newton_successes_when_tw_end_check_failed, double initial_guess, bool minimize_arrival_time, int &num_newton_iter_for_success, bool verbose = false) {
   int max_newton_iter = 1000;
+  num_newton_iter_for_success = 0;
 
   int num_targets = tw_per_target.rows();
 
@@ -84,35 +87,21 @@ void find_next_interception_point(int target_idx, const Ref<const RowMatrixXd> &
     return;
   }
 
-  // Check start of time window
-  next_t = tw_per_target(target_idx, 0);
-  next_pos = q_trj_per_target[target_idx](next_t);
-  double delta_t = next_t - t;
-  RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), v*delta_t, rho, root_finding_tol);
-  bool tw_end_check_failed = false;
-  if (std::isfinite(turns(0, 0))) {
-    feas_next_t = next_t;
-    feas_next_pos = next_pos;
-    feas_next_heading = heading;
-    for (int row = 0; row < turns.rows(); ++row) {
-      if (turns(row, 0) != 0) {
-        feas_next_heading += turns(row, 1)/turns(row, 0);
-      }
-    }
-    max_newton_iter = 0; // No need to run Newton because we can get to the start of the time window
-  } else {
-    // Check end of time window. If infeasible, return, and if feasible, use as starting point for Newton
-    next_t = tw_per_target(target_idx, 1);
+  if (initial_guess < tw_per_target(target_idx, 0)) {
+    initial_guess = tw_per_target(target_idx, 0);
+  } else if (initial_guess > tw_per_target(target_idx, 1)) {
+    initial_guess = tw_per_target(target_idx, 1);
+  }
+
+  double delta_t = std::numeric_limits<double>::infinity();
+  RowMatrixXd turns(1, 1);
+  if (minimize_arrival_time) {
+    // Check start of time window
+    next_t = tw_per_target(target_idx, 0);
     next_pos = q_trj_per_target[target_idx](next_t);
     delta_t = next_t - t;
     turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), v*delta_t, rho, root_finding_tol);
-    if (std::isinf(turns(0, 0))) {
-      tw_end_check_failed = true;
-      if (!run_newton_even_if_tw_end_check_fails) {
-        transition_cost = std::numeric_limits<double>::infinity();
-        return;
-      }
-    } else {
+    if (std::isfinite(turns(0, 0))) {
       feas_next_t = next_t;
       feas_next_pos = next_pos;
       feas_next_heading = heading;
@@ -121,17 +110,47 @@ void find_next_interception_point(int target_idx, const Ref<const RowMatrixXd> &
           feas_next_heading += turns(row, 1)/turns(row, 0);
         }
       }
+      max_newton_iter = 0; // No need to run Newton because we can get to the start of the time window
     }
+  }
+
+  if (std::isinf(feas_next_t)) {
+    next_t = initial_guess;
+    next_pos = q_trj_per_target[target_idx](next_t);
+    delta_t = next_t - t;
+    turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), v*delta_t, rho, root_finding_tol);
+    if (std::isfinite(turns(0, 0))) {
+      feas_next_t = next_t;
+      feas_next_pos = next_pos;
+      feas_next_heading = heading;
+      for (int row = 0; row < turns.rows(); ++row) {
+        if (turns(row, 0) != 0) {
+          feas_next_heading += turns(row, 1)/turns(row, 0);
+        }
+      }
+      // If initial guess is feasible and we only want something feasible, do not run Newton
+      max_newton_iter = 0;
+    }
+  }
+
+  if (std::isinf(delta_t)) {
+    throw std::runtime_error("Delta t is infinite before starting Newton");
   }
 
   // Run Newton to restore feasibility if needed
   double delta_delta_t_finite_diff = 1e-4;
   // std::cout << "starting newton" << std::endl;
+  double prev_delta_t = delta_t;
+  Vector2d prev_next_pos;
   for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
     RowMatrixXd shortest_path_turns = turns_for_one_sided_dubins_path(pos(0), pos(1), heading, next_pos(0), next_pos(1), rho);
     double shortest_path_dist = shortest_path_turns.col(1).sum();
     double c = shortest_path_dist - v*delta_t;
     // delta_vs_iterations.push_back(c);
+
+    if (verbose) {
+      std::cout << "resid " << std::fixed << std::setprecision(std::numeric_limits<double>::max_digits10) << c << std::endl;
+    }
 
     if (std::abs(c) < root_finding_tol) {
       break;
@@ -165,10 +184,24 @@ void find_next_interception_point(int target_idx, const Ref<const RowMatrixXd> &
       delta_t = next_t - t;
     }
 
+    if (prev_delta_t == delta_t) {
+      break;
+    }
+
+    prev_delta_t = delta_t;
+
     next_pos = q_trj_per_target[target_idx](next_t);
 
     RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), v*delta_t, rho, root_finding_tol);
+
     if (std::isfinite(turns(0, 0)) && next_t < feas_next_t) {
+      if (std::isinf(feas_next_t)) { 
+        if (num_newton_iter_for_success != 0) {
+          throw std::runtime_error("num_newton_iter_for_success should be zero on this line");
+        }
+        num_newton_iter_for_success = newton_iter + 1;
+      }
+
       feas_next_t = next_t;
       feas_next_pos = next_pos;
       feas_next_heading = heading;
@@ -177,19 +210,16 @@ void find_next_interception_point(int target_idx, const Ref<const RowMatrixXd> &
           feas_next_heading += turns(row, 1)/turns(row, 0);
         }
       }
+
+      if (!minimize_arrival_time) {
+        break;
+      }
     }
   }
 
   if (std::isinf(feas_next_t)) {
-    if (!tw_end_check_failed) {
-      throw std::runtime_error("feas_next_t should be finite if tw end check succeeded");
-    }
     transition_cost = std::numeric_limits<double>::infinity();
     return;
-  }
-
-  if (tw_end_check_failed) {
-    ++num_newton_successes_when_tw_end_check_failed;
   }
 
   next_t = feas_next_t;
@@ -208,8 +238,8 @@ void find_next_interception_point(int target_idx, const Ref<const RowMatrixXd> &
   }
 }
 
-// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, double &cost, double wmax, const MemeticAlgParams &params, double t0, std::vector<double> &delta_vs_iterations, Ref<RowMatrixXd> selected_pts_per_target, bool populate_selected_pts, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost_per_thread, Ref<VectorXl> num_feas_chromosomes_generated_per_thread, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible_per_thread, int thread_idx, Ref<VectorXl> num_newton_successes_when_tw_end_check_failed_per_thread, Ref<VectorXl> num_newton_solves_per_thread, Ref<VectorXl> num_newton_successes_per_thread) {
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, double &cost, double wmax, const MemeticAlgParams &params, double t0, double time_limit, Ref<RowMatrixXd> selected_pts_per_target, bool populate_selected_pts, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost_per_thread, Ref<VectorXl> num_feas_chromosomes_generated_per_thread, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible_per_thread, int thread_idx, Ref<VectorXl> num_newton_successes_when_tw_end_check_failed_per_thread, Ref<VectorXl> num_newton_solves_per_thread, Ref<VectorXl> num_newton_successes_per_thread) {
+// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, double &cost, double wmax, const MemeticAlgParams &params, double t0, std::vector<double> &delta_vs_iterations, Ref<RowMatrixXd> selected_pts_per_target, bool populate_selected_pts, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost_per_thread, Ref<VectorXl> num_feas_chromosomes_generated_per_thread, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible_per_thread, int thread_idx, Ref<VectorXl> num_newton_successes_when_tw_end_check_failed_per_thread, Ref<VectorXl> num_newton_solves_per_thread, Ref<VectorXl> num_newton_successes_per_thread, Ref<VectorXl> max_newton_iter_for_successful_repair_per_thread, bool verbose = false) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, double &cost, double wmax, const MemeticAlgParams &params, double t0, double time_limit, Ref<RowMatrixXd> selected_pts_per_target, bool populate_selected_pts, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost_per_thread, Ref<VectorXl> num_feas_chromosomes_generated_per_thread, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible_per_thread, int thread_idx, Ref<VectorXl> num_newton_successes_when_tw_end_check_failed_per_thread, Ref<VectorXl> num_newton_solves_per_thread, Ref<VectorXl> num_newton_successes_per_thread, Ref<VectorXl> max_newton_iter_for_successful_repair_per_thread, bool verbose = false) {
   auto timer_start = std::chrono::high_resolution_clock::now();
 
   int num_targets = tw_per_target.rows();
@@ -226,6 +256,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       Vector2d next_pos_for_min_arrival_time;
       double next_heading_for_min_arrival_time;
       double transition_cost_for_min_arrival_time;
+      double speed_for_min_arrival_time;
 
       double next_t;
       Vector2d next_pos;
@@ -233,19 +264,26 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       double transition_cost;
 
       for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
+      // for (int speed_idx = speed_options.size() - 1; speed_idx >= 0; --speed_idx) {
         double v = speed_options(speed_idx);
         int num_newton_successes_when_tw_end_check_failed = 0;
-        find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, t, pos, heading, next_t, next_pos, next_heading, params, transition_cost, num_newton_successes_when_tw_end_check_failed);
+        int num_newton_iter_for_success;
+        find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, t, pos, heading, next_t, next_pos, next_heading, params, transition_cost, num_newton_successes_when_tw_end_check_failed, t + X(seq_idx, 1), minimize_arrival_time_during_repair, num_newton_iter_for_success, verbose);
         num_newton_successes_when_tw_end_check_failed_per_thread(thread_idx) += num_newton_successes_when_tw_end_check_failed;
         ++num_newton_solves_per_thread(thread_idx);
         if (std::isfinite(transition_cost)) {
           ++num_newton_successes_per_thread(thread_idx);
+          max_newton_iter_for_successful_repair_per_thread(thread_idx) = std::max(max_newton_iter_for_successful_repair_per_thread(thread_idx), (long)num_newton_iter_for_success);
         }
         if (std::isfinite(transition_cost) && next_t < min_arrival_time) {
           min_arrival_time = next_t;
           next_pos_for_min_arrival_time = next_pos;
           next_heading_for_min_arrival_time = next_heading;
           transition_cost_for_min_arrival_time = transition_cost;
+          speed_for_min_arrival_time = v;
+          if (!minimize_arrival_time_during_repair) {
+            break;
+          }
         }
       }
 
@@ -255,6 +293,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       }
 
       X(seq_idx, 1) = min_arrival_time - t;
+      X(seq_idx, 2) = speed_for_min_arrival_time;
       t = min_arrival_time;
       pos = next_pos_for_min_arrival_time;
       heading = next_heading_for_min_arrival_time;
@@ -296,6 +335,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       Vector2d next_pos_for_min_transition_cost;
       double next_heading_for_min_transition_cost;
       double min_transition_cost = std::numeric_limits<double>::infinity();
+      double speed_for_min_transition_cost;
 
       double next_t;
       Vector2d next_pos;
@@ -305,17 +345,20 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
         double v = speed_options(speed_idx);
         int num_newton_successes_when_tw_end_check_failed = 0;
-        find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, t, pos, heading, next_t, next_pos, next_heading, params, transition_cost, num_newton_successes_when_tw_end_check_failed);
+        int num_newton_iter_for_success;
+        find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, t, pos, heading, next_t, next_pos, next_heading, params, transition_cost, num_newton_successes_when_tw_end_check_failed, t + X(seq_idx, 1), true, num_newton_iter_for_success);
         num_newton_successes_when_tw_end_check_failed_per_thread(thread_idx) += num_newton_successes_when_tw_end_check_failed;
         ++num_newton_solves_per_thread(thread_idx);
         if (std::isfinite(transition_cost)) {
           ++num_newton_successes_per_thread(thread_idx);
+          max_newton_iter_for_successful_repair_per_thread(thread_idx) = std::max(max_newton_iter_for_successful_repair_per_thread(thread_idx), (long)num_newton_iter_for_success);
         }
         if (transition_cost < min_transition_cost) {
           next_t_for_min_transition_cost = next_t;
           next_pos_for_min_transition_cost = next_pos;
           next_heading_for_min_transition_cost = next_heading;
           min_transition_cost = transition_cost;
+          speed_for_min_transition_cost = v;
         }
       }
 
@@ -326,6 +369,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
       }
 
       X(seq_idx, 1) = next_t_for_min_transition_cost - t;
+      X(seq_idx, 2) = speed_for_min_transition_cost;
       t = next_t_for_min_transition_cost;
       pos = next_pos_for_min_transition_cost;
       heading = next_heading_for_min_transition_cost;
@@ -401,11 +445,13 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
       double v = speed_options(speed_idx);
       int num_newton_successes_when_tw_end_check_failed = 0;
-      find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, pop->t, pop->pos, pop->heading, next_t, next_pos, next_heading, params, transition_cost, num_newton_successes_when_tw_end_check_failed);
+      int num_newton_iter_for_success;
+      find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, pop->t, pop->pos, pop->heading, next_t, next_pos, next_heading, params, transition_cost, num_newton_successes_when_tw_end_check_failed, tw_per_target(next_target_idx, 1), true, num_newton_iter_for_success);
       num_newton_successes_when_tw_end_check_failed_per_thread(thread_idx) += num_newton_successes_when_tw_end_check_failed;
       ++num_newton_solves_per_thread(thread_idx);
       if (std::isfinite(transition_cost)) {
         ++num_newton_successes_per_thread(thread_idx);
+        max_newton_iter_for_successful_repair_per_thread(thread_idx) = std::max(max_newton_iter_for_successful_repair_per_thread(thread_idx), (long)num_newton_iter_for_success);
       }
 
       if (std::isinf(transition_cost)) {
@@ -423,11 +469,13 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
       double v = speed_options(speed_idx);
       int num_newton_successes_when_tw_end_check_failed = 0;
-      find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, pop->t, pop->pos, pop->heading, next_t, next_pos, next_heading, params, transition_cost, num_newton_successes_when_tw_end_check_failed);
+      int num_newton_iter_for_success;
+      find_next_interception_point(next_target_idx, tw_per_target, q_trj_per_target, v, v/wmax, pop->t, pop->pos, pop->heading, next_t, next_pos, next_heading, params, transition_cost, num_newton_successes_when_tw_end_check_failed, tw_per_target(next_target_idx, 1), true, num_newton_iter_for_success);
       num_newton_successes_when_tw_end_check_failed_per_thread(thread_idx) += num_newton_successes_when_tw_end_check_failed;
       ++num_newton_solves_per_thread(thread_idx);
       if (std::isfinite(transition_cost)) {
         ++num_newton_successes_per_thread(thread_idx);
+        max_newton_iter_for_successful_repair_per_thread(thread_idx) = std::max(max_newton_iter_for_successful_repair_per_thread(thread_idx), (long)num_newton_iter_for_success);
       }
 
       if (std::isinf(transition_cost)) {
@@ -498,6 +546,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     next_heading = node->heading;
     next_target_idx = X(seq_idx, 0);
     next_v = node->v;
+    X(seq_idx, 2) = next_v;
 
     if (populate_selected_pts) {
       int target_idx = X(seq_idx, 0);
@@ -537,25 +586,25 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   return false;
 }
 
-// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, std::vector<double> &delta_vs_iterations, double time_limit, bool tree_search, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated, Ref<Vector1l> num_feas_chromosomes_where_transformation_was_feasible, Ref<VectorXl> num_newton_successes_when_tw_end_check_failed, Ref<VectorXl> num_newton_solves, Ref<VectorXl> num_newton_successes) {
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, double time_limit, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost, Ref<VectorXl> num_feas_chromosomes_generated, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible, Ref<VectorXl> num_newton_successes_when_tw_end_check_failed, Ref<VectorXl> num_newton_solves, Ref<VectorXl> num_newton_successes) {
+// bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, std::vector<double> &delta_vs_iterations, double time_limit, bool tree_search, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated, Ref<Vector1l> num_feas_chromosomes_where_transformation_was_feasible, Ref<VectorXl> num_newton_successes_when_tw_end_check_failed, Ref<VectorXl> num_newton_solves, Ref<VectorXl> num_newton_successes, Ref<VectorXl> max_newton_iter_for_successful_repair) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, double time_limit, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost, Ref<VectorXl> num_feas_chromosomes_generated, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible, Ref<VectorXl> num_newton_successes_when_tw_end_check_failed, Ref<VectorXl> num_newton_solves, Ref<VectorXl> num_newton_successes, Ref<VectorXl> max_newton_iter_for_successful_repair) {
   double tmp_cost = 0.;
   RowMatrixXd selected_pts_per_target(0, 0);
-  // bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, t0, delta_vs_iterations, selected_pts_per_target, false, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0, num_newton_successes_when_tw_end_check_failed, num_newton_solves, num_newton_successes);
-  bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, 0., time_limit, selected_pts_per_target, false, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0, num_newton_successes_when_tw_end_check_failed, num_newton_solves, num_newton_successes);
+  // bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, t0, delta_vs_iterations, selected_pts_per_target, false, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0, num_newton_successes_when_tw_end_check_failed, num_newton_solves, num_newton_successes, max_newton_iter_for_successful_repair);
+  bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, 0., time_limit, selected_pts_per_target, false, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0, num_newton_successes_when_tw_end_check_failed, num_newton_solves, num_newton_successes, max_newton_iter_for_successful_repair);
   cost(0) = tmp_cost;
   return repair_failed;
 }
 
-bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, double time_limit, Ref<RowMatrixXd> selected_pts_per_target, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost, Ref<VectorXl> num_feas_chromosomes_generated, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible, Ref<VectorXl> num_newton_successes_when_tw_end_check_failed, Ref<VectorXl> num_newton_solves, Ref<VectorXl> num_newton_successes) {
+bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double heading0, const Ref<const VectorXd> &speed_options, Ref<Vector1d> cost, double wmax, const MemeticAlgParams &params, double time_limit, Ref<RowMatrixXd> selected_pts_per_target, bool tree_search, Ref<VectorXl> num_feas_chromosomes_where_transformation_improved_cost, Ref<VectorXl> num_feas_chromosomes_generated, Ref<VectorXl> num_feas_chromosomes_where_transformation_was_feasible, Ref<VectorXl> num_newton_successes_when_tw_end_check_failed, Ref<VectorXl> num_newton_solves, Ref<VectorXl> num_newton_successes, Ref<VectorXl> max_newton_iter_for_successful_repair) {
   double tmp_cost = 0.;
-  bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, 0., time_limit, selected_pts_per_target, true, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0, num_newton_successes_when_tw_end_check_failed, num_newton_solves, num_newton_successes);
+  bool repair_failed = repair_chromosome(X, tw_per_target, q_trj_per_target, p0, heading0, speed_options, tmp_cost, wmax, params, 0., time_limit, selected_pts_per_target, true, tree_search, num_feas_chromosomes_where_transformation_improved_cost, num_feas_chromosomes_generated, num_feas_chromosomes_where_transformation_was_feasible, 0, num_newton_successes_when_tw_end_check_failed, num_newton_solves, num_newton_successes, max_newton_iter_for_successful_repair);
   cost(0) = tmp_cost;
   return repair_failed;
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double wmax, const Ref<const VectorXd> &speed_options, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, bool tree_search, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated, Ref<Vector1l> num_feas_chromosomes_where_transformation_was_feasible, Ref<Vector1l> num_newton_successes_when_tw_end_check_failed, Ref<Vector1l> num_newton_solves, Ref<Vector1l> num_newton_successes) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double wmax, const Ref<const VectorXd> &speed_options, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, bool tree_search, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated, Ref<Vector1l> num_feas_chromosomes_where_transformation_was_feasible, Ref<Vector1l> num_newton_successes_when_tw_end_check_failed, Ref<Vector1l> num_newton_solves, Ref<Vector1l> num_newton_successes, Ref<Vector1l> max_newton_iter_for_successful_repair) {
   std::vector<std::pair<double, double>> cost_vs_time;
   
   auto timer_start = std::chrono::high_resolution_clock::now();
@@ -635,6 +684,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   VectorXl num_newton_successes_when_tw_end_check_failed_per_thread = VectorXl::Zero(num_openmp_threads);
   VectorXl num_newton_solves_per_thread = VectorXl::Zero(num_openmp_threads);
   VectorXl num_newton_successes_per_thread = VectorXl::Zero(num_openmp_threads);
+  VectorXl max_newton_iter_for_successful_repair_per_thread = VectorXl::Zero(num_openmp_threads);
 
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
@@ -696,11 +746,23 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       double mutation_sample = mutation_distribution(rngs_per_thread[omp_get_thread_num()]);
       if (mutation_sample < params.mutation_prob) {
         // Mutation
-        int seq_idx1 = mutation_operator1_distribution(rngs_per_thread[omp_get_thread_num()]);
-        int seq_idx2 = mutation_operator1_distribution(rngs_per_thread[omp_get_thread_num()]);
-        RowVectorXd tmp = Xnew.row(seq_idx1);
-        Xnew.row(seq_idx1) = Xnew.row(seq_idx2);
-        Xnew.row(seq_idx2) = tmp;
+        if (mutation_sample < params.mutation_prob/2) {
+          // Swap two genes
+          int seq_idx1 = mutation_operator1_distribution(rngs_per_thread[omp_get_thread_num()]);
+          int seq_idx2 = mutation_operator1_distribution(rngs_per_thread[omp_get_thread_num()]);
+          RowVectorXd tmp = Xnew.row(seq_idx1);
+          Xnew.row(seq_idx1) = Xnew.row(seq_idx2);
+          Xnew.row(seq_idx2) = tmp;
+        } else {
+          // Perturb delta t
+          int seq_idx = mutation_operator3_seq_idx_distribution(rngs_per_thread[omp_get_thread_num()]);
+          double raw_sample = mutation_operator3_delta_t_distribution(rngs_per_thread[omp_get_thread_num()]);
+          int target_idx = Xnew(seq_idx, 0);
+          double min_t = tw_per_target(target_idx, 0);
+          double max_t = tw_per_target(target_idx, 1);
+          double delta_t = (max_t - min_t)*raw_sample;
+          Xnew(seq_idx, 1) = delta_t;
+        }
       }
 
       // Repair to restore feasibility
@@ -710,7 +772,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
       double repair_time_limit = time_limit - ((double)nanos)/1e9 ;
 
-      bool repair_failed = repair_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, speed_options, cost, wmax, params, 0., repair_time_limit, selected_pts_per_target, false, tree_search, num_feas_chromosomes_where_transformation_improved_cost_per_thread, num_feas_chromosomes_generated_per_thread, num_feas_chromosomes_where_transformation_was_feasible_per_thread, omp_get_thread_num(), num_newton_successes_when_tw_end_check_failed_per_thread, num_newton_solves_per_thread, num_newton_successes_per_thread);
+      bool repair_failed = repair_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, speed_options, cost, wmax, params, 0., repair_time_limit, selected_pts_per_target, false, tree_search, num_feas_chromosomes_where_transformation_improved_cost_per_thread, num_feas_chromosomes_generated_per_thread, num_feas_chromosomes_where_transformation_was_feasible_per_thread, omp_get_thread_num(), num_newton_successes_when_tw_end_check_failed_per_thread, num_newton_solves_per_thread, num_newton_successes_per_thread, max_newton_iter_for_successful_repair_per_thread);
       if (repair_failed || cost >= (*population_costs)[chromosome_idx]) {
         (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
@@ -750,12 +812,13 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
     }
   } // Overall loop
 
-  num_feas_chromosomes_where_transformation_improved_cost(0) = num_feas_chromosomes_where_transformation_improved_cost_per_thread.sum();
-  num_feas_chromosomes_generated(0) = num_feas_chromosomes_generated_per_thread.sum();
-  num_feas_chromosomes_where_transformation_was_feasible(0) = num_feas_chromosomes_where_transformation_was_feasible_per_thread.sum();
-  num_newton_successes_when_tw_end_check_failed(0) = num_newton_successes_when_tw_end_check_failed_per_thread.sum();
-  num_newton_solves(0) = num_newton_solves_per_thread.sum();
-  num_newton_successes(0) = num_newton_successes_per_thread.sum();
+  num_feas_chromosomes_where_transformation_improved_cost(0) += num_feas_chromosomes_where_transformation_improved_cost_per_thread.sum();
+  num_feas_chromosomes_generated(0) += num_feas_chromosomes_generated_per_thread.sum();
+  num_feas_chromosomes_where_transformation_was_feasible(0) += num_feas_chromosomes_where_transformation_was_feasible_per_thread.sum();
+  num_newton_successes_when_tw_end_check_failed(0) += num_newton_successes_when_tw_end_check_failed_per_thread.sum();
+  num_newton_solves(0) += num_newton_solves_per_thread.sum();
+  num_newton_successes(0) += num_newton_successes_per_thread.sum();
+  max_newton_iter_for_successful_repair(0) = std::max(max_newton_iter_for_successful_repair(0), max_newton_iter_for_successful_repair_per_thread.maxCoeff());
 
   num_feas_final(0) = 0;
   for (auto cost : (*updated_population_costs)) {
@@ -771,16 +834,37 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
 
   if (std::isinf(*it)) {
   } else {
-    double cost;
-    VectorXl dummy1(1);
-    VectorXl dummy2(1);
-    VectorXl dummy3(1);
-    VectorXl dummy4(1);
-    VectorXl dummy5(1);
-    VectorXl dummy6(1);
-    bool repair_failed = repair_chromosome(Xbest, tw_per_target, q_trj_per_target, p0, heading0, speed_options, cost, wmax, params, 0., 60., selected_pts_per_target, true, tree_search, dummy1, dummy2, dummy3, 0, dummy4, dummy5, dummy6);
-    if (repair_failed) {
-      throw std::runtime_error("Ran repair on best chromosome to get interception points, and repair failed, even though best chromosome has finite cost");
+    double t = 0.;
+    Vector2d pos = p0;
+    double heading = heading0;
+    for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {  
+      int next_target_idx = Xbest(seq_idx, 0);
+      double delta_t = Xbest(seq_idx, 1);
+
+      double next_t = t + delta_t;
+      Vector2d next_pos = q_trj_per_target[next_target_idx](next_t);
+
+      double v = Xbest(seq_idx, 2);
+
+      double rho = v/wmax;
+      RowMatrixXd turns = elongated_dubins_path_one_sided(pos(0), pos(1), heading, next_pos(0), next_pos(1), v*delta_t, rho, root_finding_tol);
+
+      if (std::isinf(turns(0, 0))) {
+        throw std::runtime_error("Unable to reconstruct trajectory");
+      }
+
+      for (int row = 0; row < turns.rows(); ++row) {
+        if (turns(row, 0) != 0) {
+          heading += turns(row, 1)/turns(row, 0);
+        }
+      }
+
+      t = next_t;
+      pos = next_pos;
+      selected_pts_per_target(next_target_idx, 0) = t;
+      selected_pts_per_target(next_target_idx, 1) = pos(0);
+      selected_pts_per_target(next_target_idx, 2) = pos(1);
+      selected_pts_per_target(next_target_idx, 3) = heading;
     }
   }
 
