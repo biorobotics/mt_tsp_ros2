@@ -358,6 +358,9 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
     double next_heading;
     double transition_cost;
 
+    // For when I want to make those videos showing greedy optimization failing
+    // std::cout << "seq_idx = " << pop->seq_idx << ": t = " << pop->t << " pos = " << pop->pos.transpose() << " heading = " << pop->heading << " target_idx = " << X(pop->seq_idx, 0) << " next_target_idx = " << next_target_idx << std::endl;
+
     /*
     for (int speed_idx = 0; speed_idx < speed_options.size(); ++speed_idx) {
       double v = speed_options(speed_idx);
