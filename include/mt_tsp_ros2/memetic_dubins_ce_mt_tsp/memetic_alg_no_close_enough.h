@@ -30,7 +30,7 @@ const bool optimization_during_repair = true;
 const double root_finding_tol = 1e-2;
 
 bool do_transformation_for_nondubins_distance_objective = true;
-bool min_time_for_nondubins_distance_objective_repair = true;
+bool min_time_for_nondubins_distance_objective_repair = false;
 
 template <typename T>
 std::vector<size_t> sort_indexes(const std::vector<T> &v) {
