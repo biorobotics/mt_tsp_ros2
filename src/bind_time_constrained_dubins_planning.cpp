@@ -34,7 +34,6 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
     .def("plan", &NoTimeDubinsPlanner::plan)
     .def("is_state_valid", &NoTimeDubinsPlanner::is_state_valid)
     .def("checkMotion", &NoTimeDubinsPlanner::checkMotion)
-    .def("checkMotion", &NoTimeDubinsPlanner::checkMotion)
     ;
 
   py::bind_vector<std::vector<RowMatrixXd>>(m, "VectorOfMatrices");
