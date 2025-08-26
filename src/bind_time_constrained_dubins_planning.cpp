@@ -4,6 +4,7 @@
 #include "mt_tsp_ros2/time_constrained_dubins_planning/time_constrained_dubins_planner.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_planner.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/time_constrained_dubins_planner_forward_prop.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/yao2020/ic_sliding.h"
 
 namespace py = pybind11;
 
@@ -45,4 +46,6 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
     .def("get_path_elongation_check_time", &TimeConstrainedDubinsPlannerForwardProp::get_path_elongation_check_time)
     .def("get_collision_check_time", &TimeConstrainedDubinsPlannerForwardProp::get_collision_check_time)
     ;
+
+  m.def("ic_sliding", &ic_sliding);
 }
