@@ -3,6 +3,7 @@
 #include <pybind11/stl_bind.h>
 #include "mt_tsp_ros2/gmdm.h"
 #include "mt_tsp_ros2/elongate_dubins_path.h"
+#include "mt_tsp_ros2/yao2020/ic_sliding.h"
 
 namespace py = pybind11;
 
@@ -20,4 +21,6 @@ PYBIND11_MODULE(gmdm_wrapper, m) {
   m.def("batch_elongation_check_with_profiling", &batch_elongation_check_with_profiling);
   m.def("get_ccc_path", &get_ccc_path);
   m.def("turns_for_dubins_path", &turns_for_dubins_path);
+  m.def("batch_dubins_path_lengths", &batch_dubins_path_lengths);
+  m.def("ic_sliding", &ic_sliding);
 }

@@ -1730,6 +1730,33 @@ VectorXb batch_elongation_check(RowMatrixXdRef_const q0s, RowMatrixXdRef_const q
   return results;
 }
 
+VectorXd batch_dubins_path_lengths(RowMatrixXdRef_const q0s, RowMatrixXdRef_const qfs, double rho, int num_openmp_threads) {
+  omp_set_num_threads(num_openmp_threads);
+  int num_pairs = q0s.rows();
+  assert(num_pairs == qfs.rows());
+  VectorXd results(num_pairs);
+  #pragma omp parallel for
+  for (int pair_idx = 0; pair_idx < num_pairs; ++pair_idx) {
+    double x_0 = q0s(pair_idx, 0);
+    double y_0 = q0s(pair_idx, 1);
+    double theta_0 = q0s(pair_idx, 2);
+    double x_f = qfs(pair_idx, 0);
+    double y_f = qfs(pair_idx, 1);
+    double theta_f = qfs(pair_idx, 2);
+
+    DubinsPath path;
+    double q_0[3] = {x_0, y_0, theta_0};
+    double q_f[3] = {x_f, y_f, theta_f};
+    int status = dubins_shortest_path(&path, q_0, q_f, rho);
+    if (status) {
+      throw std::runtime_error("Dubins path computation failed");
+    }
+
+    results(pair_idx) = dubins_path_length(&path);
+  }
+  return results;
+}
+
 RowMatrixXd get_ccc_path(double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double rho, bool short_path, bool lrl) {
   double c_0 = cos(theta_0);
   double s_0 = sin(theta_0);
