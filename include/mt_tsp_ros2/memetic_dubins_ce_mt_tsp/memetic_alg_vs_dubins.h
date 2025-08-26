@@ -607,7 +607,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
 }
 
 // initial_population should have number of rows equal to num_targets*pop_size, and gene_size columns
-RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double wmax, const Ref<const VectorXd> &speed_options, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, bool tree_search, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated, Ref<Vector1l> num_feas_chromosomes_where_transformation_was_feasible, Ref<Vector1l> num_newton_successes_when_tw_end_check_failed, Ref<Vector1l> num_newton_solves, Ref<Vector1l> num_newton_successes, Ref<Vector1l> max_newton_iter_for_successful_repair) {
+RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<const RowMatrixXd> &initial_population, const Ref<const VectorXd> &initial_costs, const std::vector<ExtendedCppSpline> &q_trj_per_target_python, const Ref<const RowMatrixXd> &tw_per_target, double time_limit, double wmax, const Ref<const VectorXd> &speed_options, const Ref<const Vector2d> &p0, double heading0, int num_openmp_threads, const MemeticAlgParams &params, Ref<Matrix<long, 1, 1>> num_feas_final, std::vector<double> &cost_vs_iterations, int max_generations, std::vector<int> &best_target_seq_change_per_iteration, bool tree_search, Ref<Vector1l> num_feas_chromosomes_where_transformation_improved_cost, Ref<Vector1l> num_feas_chromosomes_generated, Ref<Vector1l> num_feas_chromosomes_where_transformation_was_feasible, Ref<Vector1l> num_newton_successes_when_tw_end_check_failed, Ref<Vector1l> num_newton_solves, Ref<Vector1l> num_newton_successes, Ref<Vector1l> max_newton_iter_for_successful_repair, Ref<Vector1l> num_repair_successes) {
   std::vector<std::pair<double, double>> cost_vs_time;
   
   auto timer_start = std::chrono::high_resolution_clock::now();
@@ -688,6 +688,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   VectorXl num_newton_solves_per_thread = VectorXl::Zero(num_openmp_threads);
   VectorXl num_newton_successes_per_thread = VectorXl::Zero(num_openmp_threads);
   VectorXl max_newton_iter_for_successful_repair_per_thread = VectorXl::Zero(num_openmp_threads);
+  VectorXl num_repair_successes_per_thread = VectorXl::Zero(num_openmp_threads);
 
   while (true) {
     auto timer_stop = std::chrono::high_resolution_clock::now();
@@ -776,6 +777,9 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       double repair_time_limit = time_limit - ((double)nanos)/1e9 ;
 
       bool repair_failed = repair_chromosome(Xnew, tw_per_target, q_trj_per_target, p0, heading0, speed_options, cost, wmax, params, 0., repair_time_limit, selected_pts_per_target, false, tree_search, num_feas_chromosomes_where_transformation_improved_cost_per_thread, num_feas_chromosomes_generated_per_thread, num_feas_chromosomes_where_transformation_was_feasible_per_thread, omp_get_thread_num(), num_newton_successes_when_tw_end_check_failed_per_thread, num_newton_solves_per_thread, num_newton_successes_per_thread, max_newton_iter_for_successful_repair_per_thread);
+      if (!repair_failed) {
+        ++num_repair_successes_per_thread(omp_get_thread_num());
+      }
       if (repair_failed || cost >= (*population_costs)[chromosome_idx]) {
         (*updated_population)[chromosome_idx] = (*population)[chromosome_idx];
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
@@ -822,6 +826,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
   num_newton_solves(0) += num_newton_solves_per_thread.sum();
   num_newton_successes(0) += num_newton_successes_per_thread.sum();
   max_newton_iter_for_successful_repair(0) = std::max(max_newton_iter_for_successful_repair(0), max_newton_iter_for_successful_repair_per_thread.maxCoeff());
+  num_repair_successes(0) += num_repair_successes_per_thread.sum();
 
   num_feas_final(0) = 0;
   for (auto cost : (*updated_population_costs)) {
