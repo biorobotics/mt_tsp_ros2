@@ -100,6 +100,6 @@ class NoTimeDubinsMotionValidator : public ob::MotionValidator {
       return checkMotion(s1, s2, lastValid);
     }
 
-  private:
+  protected:
     double rho;
 };

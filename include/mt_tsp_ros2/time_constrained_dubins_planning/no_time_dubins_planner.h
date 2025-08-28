@@ -1,5 +1,6 @@
 #pragma once
 #include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_motion_validator.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_motion_validator_rects.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_state_validity_checker.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/dubins_state_space_deterministic_sampling.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/custom_rrt_star.h"
@@ -39,6 +40,34 @@ class NoTimeDubinsPlanner {
       si->setMotionValidator(motion_validator);
 
       ss = std::make_shared<og::SimpleSetup>(si);
+      // planner = std::make_shared<og::ABITstar>(si);
+      // planner = std::make_shared<og::RRTstar>(si);
+      planner = std::make_shared<CustomRRTstar>(si);
+      // planner->setNearestNeighbors<ompl::NearestNeighborsSqrtApprox>();
+      // planner = std::make_shared<og::RRTConnect>(si);
+      ss->setPlanner(planner);
+    }
+
+    // My occupancy grid to rectangle code is in python, otherwise I wouldn't have a separate constructor here
+    NoTimeDubinsPlanner(double rho, RowMatrixXbRef_const occupancy, RowMatrixXdRef_const rects, Vector2dRef_const map_lb, Vector2dRef_const map_ub) {
+      space = std::make_shared<DubinsStateSpaceDeterministicSampling>(rho);
+      ob::RealVectorBounds bounds(2);
+      bounds.setLow(0, map_lb(0));
+      bounds.setLow(1, map_lb(1));
+      bounds.setHigh(0, map_ub(0));
+      bounds.setHigh(1, map_ub(1));
+      space->setBounds(bounds);
+
+      si = std::make_shared<ob::SpaceInformation>(space);
+
+      state_checker = std::make_shared<NoTimeDubinsStateValidityChecker>(si, occupancy, map_lb, map_ub);
+      si->setStateValidityChecker(state_checker);
+
+      motion_validator = std::make_shared<NoTimeDubinsMotionValidatorRects>(si, rho, rects, map_lb, map_ub);
+      si->setMotionValidator(motion_validator);
+
+      ss = std::make_shared<og::SimpleSetup>(si);
+
       // planner = std::make_shared<og::ABITstar>(si);
       // planner = std::make_shared<og::RRTstar>(si);
       planner = std::make_shared<CustomRRTstar>(si);
@@ -107,6 +136,10 @@ class NoTimeDubinsPlanner {
         s_valid_vec[state_idx] = s_valid[state_idx];
       }
       return lastValid.second;
+    }
+
+    bool collision_free_get_intersection_point(double x, double y, double theta, double turn_dir, double turn_dist, double next_x, double next_y, double &x_collision, double &y_collision, double &theta_collision, double &collision_dist) {
+      return std::static_pointer_cast<NoTimeDubinsMotionValidatorRects>(motion_validator)->collision_free_get_intersection_point(x, y, theta, turn_dir, turn_dist, next_x, next_y, x_collision, y_collision, theta_collision, collision_dist);
     }
 
   private:

@@ -5,6 +5,7 @@
 #include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_planner.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/time_constrained_dubins_planner_forward_prop.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/yao2020/ic_sliding.h"
+#include "mt_tsp_ros2/time_constrained_dubins_planning/yao2020/yao2020planner.h"
 
 namespace py = pybind11;
 
@@ -32,6 +33,7 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
 
   py::class_<NoTimeDubinsPlanner>(m, "NoTimeDubinsPlanner")
     .def(py::init<double, RowMatrixXbRef_const, Vector2dRef_const, Vector2dRef_const>())
+    .def(py::init<double, RowMatrixXbRef_const, RowMatrixXdRef_const, Vector2dRef_const, Vector2dRef_const>())
     .def("plan", &NoTimeDubinsPlanner::plan)
     .def("is_state_valid", &NoTimeDubinsPlanner::is_state_valid)
     .def("checkMotion", &NoTimeDubinsPlanner::checkMotion)
@@ -47,5 +49,12 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
     .def("get_collision_check_time", &TimeConstrainedDubinsPlannerForwardProp::get_collision_check_time)
     ;
 
+  // Yao 2020 implementation
   m.def("ic_sliding", &ic_sliding);
+
+  py::class_<Yao2020Planner>(m, "Yao2020Planner")
+    .def(py::init<double, double, RowMatrixXbRef_const, RowMatrixXdRef_const, Vector2dRef_const, Vector2dRef_const>())
+    .def("plan", &Yao2020Planner::plan)
+    .def("is_state_valid", &Yao2020Planner::is_state_valid)
+    ;
 }
