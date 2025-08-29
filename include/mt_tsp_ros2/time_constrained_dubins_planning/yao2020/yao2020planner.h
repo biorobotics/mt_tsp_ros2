@@ -308,8 +308,6 @@ class Yao2020Planner {
                                             x_f_subpath, y_f_subpath, theta_f_subpath,
                                             turns_after_slide);
 
-            // TODO: take out
-
             // local_collision_turn_idx indexes into turns_after_prev_slide
             if (collision) {
               if (local_collision_turn_idx == 0) {
