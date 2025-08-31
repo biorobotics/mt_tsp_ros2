@@ -1,5 +1,6 @@
 #pragma once
 #include "mt_tsp_ros2/elongate_dubins_path.h"
+#include <unordered_set>
 
 // Returns a sequence of (turn direction, dist) pairs.
 // turns should have two or more rows.
@@ -10,6 +11,16 @@ RowMatrixXd ic_sliding(RowMatrixXdRef_const turns, double x_0, double y_0, doubl
   int slide_idx = direction ? turns.rows() - 2 : 1;
   if (turns(slide_idx, 0) == 0) {
     throw std::runtime_error("Cannot slide an S segment");
+  }
+
+  /*
+  if (turns.rows() < 2) {
+    throw std::runtime_error("Cannot slide if we do not have at least two segments");
+  }
+  */
+
+  if (turns.rows() != 4) {
+    throw std::runtime_error("Cannot slide if we do not have at exactly four segments");
   }
 
   int turn_to_shorten = direction ? slide_idx + 1 : slide_idx - 1;
@@ -61,16 +72,206 @@ RowMatrixXd ic_sliding(RowMatrixXdRef_const turns, double x_0, double y_0, doubl
 
   // Compute Dubins path
   RowMatrixXd ret(4, 2);
+  ret.col(0) = turns.col(0);
+  ret(turn_to_shorten, 1) = dist;
+  double q_0_for_dubins[3];
+  double q_f_for_dubins[3];
+  std::unordered_set<DubinsPathType> path_type_options;
+  path_type_options.insert(DubinsPathType::LSL);
+  path_type_options.insert(DubinsPathType::LSR);
+  path_type_options.insert(DubinsPathType::RSR);
+  path_type_options.insert(DubinsPathType::RSL);
+  path_type_options.insert(DubinsPathType::LRL);
+  path_type_options.insert(DubinsPathType::RLR);
+  DubinsPath shortest_path_among_options;
+  double shortest_path_length_among_options = std::numeric_limits<double>::infinity();
+
   if (direction) {
     // Sliding forward
-    ret(3, 0) = turns(2, 0);
-    ret(3, 1) = dist;
-    ret.topRows<3>() = turns_for_dubins_path(x_0, y_0, theta_0, x_mid, y_mid, theta_mid, rho);
+    q_0_for_dubins[0] = x_0;
+    q_0_for_dubins[1] = y_0;
+    q_0_for_dubins[2] = theta_0;
+
+    q_f_for_dubins[0] = x_mid;
+    q_f_for_dubins[1] = y_mid;
+    q_f_for_dubins[2] = theta_mid;
+
+    if (std::abs(turns(0, 1)) > 1e-10) {
+      if (turns(0, 0) != -1) {
+        path_type_options.erase(DubinsPathType::RSR);
+        path_type_options.erase(DubinsPathType::RSL);
+        path_type_options.erase(DubinsPathType::RLR);
+      }
+
+      if (turns(0, 0) != 1) {
+        path_type_options.erase(DubinsPathType::LSR);
+        path_type_options.erase(DubinsPathType::LSL);
+        path_type_options.erase(DubinsPathType::LRL);
+      }
+    }
+
+    if (std::abs(turns(1, 1)) > 1e-10) {
+      if (turns(1, 0) != -1) {
+        path_type_options.erase(DubinsPathType::LRL);
+      }
+
+      if (turns(1, 0) != 0) {
+        path_type_options.erase(DubinsPathType::LSL);
+        path_type_options.erase(DubinsPathType::LSR);
+        path_type_options.erase(DubinsPathType::RSR);
+        path_type_options.erase(DubinsPathType::RSL);
+      }
+
+      if (turns(1, 0) != 1) {
+        path_type_options.erase(DubinsPathType::RLR);
+      }
+    }
+
+    if (std::abs(turns(2, 1)) > 1e-10) {
+      if (turns(2, 0) != -1) {
+        path_type_options.erase(DubinsPathType::RSR);
+        path_type_options.erase(DubinsPathType::LSR);
+        path_type_options.erase(DubinsPathType::RLR);
+      }
+
+      if (turns(2, 0) != 1) {
+        path_type_options.erase(DubinsPathType::LSL);
+        path_type_options.erase(DubinsPathType::RSL);
+        path_type_options.erase(DubinsPathType::LRL);
+      }
+    }
+
+    for (auto path_type : path_type_options) {
+      DubinsPath path;
+      int dubins_error = dubins_path(&path, q_0_for_dubins, q_f_for_dubins, rho, path_type);
+      double l = dubins_path_length(&path);
+      if (l < shortest_path_length_among_options) {
+        shortest_path_length_among_options = l;
+        shortest_path_among_options = path;
+      }
+    }
+
+    if (shortest_path_among_options.type == DubinsPathType::LSL) {
+      ret(0, 0) = 1.;
+      ret(1, 0) = 0.;
+      ret(2, 0) = 1.;
+    } else if (shortest_path_among_options.type == DubinsPathType::LSR) {
+      ret(0, 0) = 1.;
+      ret(1, 0) = 0.;
+      ret(2, 0) = -1.;
+    } else if (shortest_path_among_options.type == DubinsPathType::RSR) {
+      ret(0, 0) = -1.;
+      ret(1, 0) = 0.;
+      ret(2, 0) = -1.;
+    } else if (shortest_path_among_options.type == DubinsPathType::RSL) {
+      ret(0, 0) = -1.;
+      ret(1, 0) = 0.;
+      ret(2, 0) = 1.;
+    } else if (shortest_path_among_options.type == DubinsPathType::RLR) {
+      ret(0, 0) = -1.;
+      ret(1, 0) = 1.;
+      ret(2, 0) = -1.;
+    } else if (shortest_path_among_options.type == DubinsPathType::LRL) {
+      ret(0, 0) = 1.;
+      ret(1, 0) = -1.;
+      ret(2, 0) = 1.;
+    }
+    ret(0, 1) = shortest_path_among_options.param[0]*rho;
+    ret(1, 1) = shortest_path_among_options.param[1]*rho;
+    ret(2, 1) = shortest_path_among_options.param[2]*rho;
   } else {
     // Sliding backward
-    ret(0, 0) = turns(0, 0);
-    ret(0, 1) = dist;
-    ret.bottomRows<3>() = turns_for_dubins_path(x_mid, y_mid, theta_mid, x_f, y_f, theta_f, rho);
+    q_0_for_dubins[0] = x_mid;
+    q_0_for_dubins[1] = y_mid;
+    q_0_for_dubins[2] = theta_mid;
+
+    q_f_for_dubins[0] = x_f;
+    q_f_for_dubins[1] = y_f;
+    q_f_for_dubins[2] = theta_f;
+
+    if (std::abs(turns(1, 1)) > 1e-10) {
+      if (turns(1, 0) != -1) {
+        path_type_options.erase(DubinsPathType::RSR);
+        path_type_options.erase(DubinsPathType::RSL);
+        path_type_options.erase(DubinsPathType::RLR);
+      }
+
+      if (turns(1, 0) != 1) {
+        path_type_options.erase(DubinsPathType::LSR);
+        path_type_options.erase(DubinsPathType::LSL);
+        path_type_options.erase(DubinsPathType::LRL);
+      }
+    }
+
+    if (std::abs(turns(2, 1)) > 1e-10) {
+      if (turns(2, 0) != -1) {
+        path_type_options.erase(DubinsPathType::LRL);
+      }
+
+      if (turns(2, 0) != 0) {
+        path_type_options.erase(DubinsPathType::LSL);
+        path_type_options.erase(DubinsPathType::LSR);
+        path_type_options.erase(DubinsPathType::RSR);
+        path_type_options.erase(DubinsPathType::RSL);
+      }
+
+      if (turns(2, 0) != 1) {
+        path_type_options.erase(DubinsPathType::RLR);
+      }
+    }
+
+    if (std::abs(turns(3, 1)) > 1e-10) {
+      if (turns(3, 0) != -1) {
+        path_type_options.erase(DubinsPathType::RSR);
+        path_type_options.erase(DubinsPathType::LSR);
+        path_type_options.erase(DubinsPathType::RLR);
+      }
+
+      if (turns(3, 0) != 1) {
+        path_type_options.erase(DubinsPathType::LSL);
+        path_type_options.erase(DubinsPathType::RSL);
+        path_type_options.erase(DubinsPathType::LRL);
+      }
+    }
+
+    for (auto path_type : path_type_options) {
+      DubinsPath path;
+      int dubins_error = dubins_path(&path, q_0_for_dubins, q_f_for_dubins, rho, path_type);
+      double l = dubins_path_length(&path);
+      if (l < shortest_path_length_among_options) {
+        shortest_path_length_among_options = l;
+        shortest_path_among_options = path;
+      }
+    }
+
+    if (shortest_path_among_options.type == DubinsPathType::LSL) {
+      ret(1, 0) = 1.;
+      ret(2, 0) = 0.;
+      ret(3, 0) = 1.;
+    } else if (shortest_path_among_options.type == DubinsPathType::LSR) {
+      ret(1, 0) = 1.;
+      ret(2, 0) = 0.;
+      ret(3, 0) = -1.;
+    } else if (shortest_path_among_options.type == DubinsPathType::RSR) {
+      ret(1, 0) = -1.;
+      ret(2, 0) = 0.;
+      ret(3, 0) = -1.;
+    } else if (shortest_path_among_options.type == DubinsPathType::RSL) {
+      ret(1, 0) = -1.;
+      ret(2, 0) = 0.;
+      ret(3, 0) = 1.;
+    } else if (shortest_path_among_options.type == DubinsPathType::RLR) {
+      ret(1, 0) = -1.;
+      ret(2, 0) = 1.;
+      ret(3, 0) = -1.;
+    } else if (shortest_path_among_options.type == DubinsPathType::LRL) {
+      ret(1, 0) = 1.;
+      ret(2, 0) = -1.;
+      ret(3, 0) = 1.;
+    }
+    ret(1, 1) = shortest_path_among_options.param[0]*rho;
+    ret(2, 1) = shortest_path_among_options.param[1]*rho;
+    ret(3, 1) = shortest_path_among_options.param[2]*rho;
   }
   return ret;
 }
