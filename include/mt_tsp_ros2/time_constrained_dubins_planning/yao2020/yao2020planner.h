@@ -1,6 +1,7 @@
 #pragma once
 #include "mt_tsp_ros2/time_constrained_dubins_planning/no_time_dubins_planner.h"
 #include "mt_tsp_ros2/time_constrained_dubins_planning/yao2020/ic_sliding.h"
+#include <fstream>
 
 const int num_turns_after_slide = 4;
 
@@ -62,7 +63,8 @@ class Yao2020Planner {
       return false;
     }
 
-    RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter) {
+    // path_seq is the sequence of paths (turn sequences) we got via sliding
+    RowMatrixXd plan(VectorXdRef_const start, VectorXdRef_const goal, double time_limit, int max_iter, std::vector<RowMatrixXd> &path_seq, bool just_return_rrt_trj, bool ignore_obstacles_in_normalization) {
       double twopirho = 2*M_PI*rho;
 
       RowMatrixXd pose_seq = spatial_planner.plan(start.head<3>(), goal.head<3>(), time_limit, max_iter);
@@ -108,6 +110,9 @@ class Yao2020Planner {
         }
       }
       
+      // The below code is fine, but it doesn't take advantage of the fact that the spatial planner
+      // returns a sequence of Dubins paths, so we don't need to append dummy segments
+      /*
       // We start by sliding the final C segment in the path.
       // When we do so, we will replace the final C segment and the subsequent
       // two segments by the shortest Dubins path, then delete the segment
@@ -123,8 +128,25 @@ class Yao2020Planner {
         subpath.push_back(RowVector2d::Zero());
         subpath.push_back(RowVector2d::Zero());
       }
+      */
 
       subpaths.push_back(subpath);
+
+      if (debug) {
+        int num_total_turns = 0;
+        for (auto subpath : subpaths) {
+          num_total_turns += subpath.size();
+        }
+        RowMatrixXd overall_turns(num_total_turns, 2);
+        int overall_turn_idx = 0;
+        for (auto subpath : subpaths) {
+          for (int turn_idx = 0; turn_idx < subpath.size(); ++turn_idx) {
+            overall_turns.row(overall_turn_idx) = subpath[turn_idx];
+            ++overall_turn_idx;
+          }
+        }
+        path_seq.push_back(overall_turns);
+      }
 
       double x_0 = start(0);
       double y_0 = start(1);
@@ -146,10 +168,15 @@ class Yao2020Planner {
       double y_f_subpath = y_f;
       double theta_f_subpath = theta_f;
 
+      int num_collisions = 0;
+
       // Normalize
       for (int subpath_idx = subpaths.size() - 1; subpath_idx >= 0; --subpath_idx) {
-        if (debug) {
-          std::cout << "subpath " << subpath_idx << std::endl;
+        if (just_return_rrt_trj) {
+          break;
+        }
+        if (subpath_idx != 0) {
+          throw std::runtime_error("We should never have subpath_idx != 0");
         }
         int final_C_idx = subpaths[subpath_idx].size() - 3; // We appended dummies such that this is true
         // turn_idx is the turn we're sliding
@@ -182,6 +209,7 @@ class Yao2020Planner {
         for (int turn_idx = final_C_idx; turn_idx > 2; --turn_idx) {
           if (debug) {
             std::cout << "turn " << turn_idx << std::endl;
+            std::cout << "We currently have " << subpaths.size() << " subpaths" << std::endl;
             std::cout << "printing current subpath" << std::endl;
             for (int turn_idx2 = 0; turn_idx2 < subpaths[subpath_idx].size(); ++turn_idx2) {
               std::cout << "turn " << turn_idx2 << ": " << subpaths[subpath_idx][turn_idx2](0) << " " << subpaths[subpath_idx][turn_idx2](1) << std::endl;
@@ -296,13 +324,46 @@ class Yao2020Planner {
 
           bool collision = false;
 
+          ICSlidingClass sliding_obj(turns_before_slide, x_0_tmp, y_0_tmp, theta_0_tmp, x_f_subpath, y_f_subpath, theta_f_subpath, rho, false);
+
           while (slide_amount < prev_turn(1)) {
             slide_amount += step_size;
             if (slide_amount > prev_turn(1)) {
               slide_amount = prev_turn(1);
             }
+            /*
+            if (debug) {
+              std::cout << "sliding by " << slide_amount << std::endl;
+            }
+            */
 
-            RowMatrixXd turns_after_slide = ic_sliding(turns_before_slide, x_0_tmp, y_0_tmp, theta_0_tmp, x_f_subpath, y_f_subpath, theta_f_subpath, rho, slide_amount, false);
+            RowMatrixXd turns_after_slide = sliding_obj.slide(slide_amount);
+
+            /*
+            std::ofstream turns_before_slide_file("/home/noopygbhat/catkin_ws/src/mapf/scripts/turns_before_slide.txt");
+            turns_before_slide_file << turns_before_slide.format(IOFormat(FullPrecision)) << std::endl;
+            turns_before_slide_file.close();
+
+            std::ofstream turns_after_prev_slide_file("/home/noopygbhat/catkin_ws/src/mapf/scripts/turns_after_prev_slide.txt");
+            turns_after_prev_slide_file << turns_after_prev_slide.format(IOFormat(FullPrecision)) << std::endl;
+            turns_after_prev_slide_file.close();
+
+            std::ofstream turns_after_slide_file("/home/noopygbhat/catkin_ws/src/mapf/scripts/turns_after_slide.txt");
+            turns_after_slide_file << turns_after_slide.format(IOFormat(FullPrecision)) << std::endl;
+            turns_after_slide_file.close();
+
+            std::ofstream boundary_conditions_file("/home/noopygbhat/catkin_ws/src/mapf/scripts/boundary_conditions.txt");
+            boundary_conditions_file << std::fixed << std::setprecision(std::numeric_limits<double>::max_digits10) << x_0_tmp << " " << y_0_tmp << " " << theta_0_tmp << std::endl;
+            boundary_conditions_file << std::fixed << std::setprecision(std::numeric_limits<double>::max_digits10) << x_f_subpath << " " << y_f_subpath << " " << theta_f_subpath << std::endl;
+            boundary_conditions_file.close();
+            */
+
+            /*
+            if (debug) {
+              std::cout << "turns_after_slide" << std::endl;
+              std::cout << turns_after_slide << std::endl;
+            }
+            */
 
             double x_collision;
             double y_collision;
@@ -315,9 +376,32 @@ class Yao2020Planner {
                                             x_f_subpath, y_f_subpath, theta_f_subpath,
                                             turns_after_slide);
 
-            collision = false;
+            /*
+            if (debug) {
+              std::cout << "did collision check" << std::endl;
+            }
+            */
+
+            if (ignore_obstacles_in_normalization) {
+              collision = false;
+            }
             // local_collision_turn_idx indexes into turns_after_prev_slide
             if (collision) {
+              ++num_collisions;
+              /*
+              std::cout << "turns_after_slide for collision" << std::endl;
+              std::cout << turns_after_slide << std::endl;
+              std::cout << local_collision_turn_idx << std::endl;
+              */
+              /*
+              if (debug) {
+                std::cout << "collision" << std::endl;
+
+                std::cout << "local_collision_turn_idx" << std::endl;
+                std::cout << local_collision_turn_idx << std::endl;
+              }
+              */
+
               if (local_collision_turn_idx == 0) {
                 throw std::runtime_error("local_collision_turn_idx should not equal 0, since we are simply truncating local turn 0 (i.e. turn_idx - 1)");
               }
@@ -325,6 +409,12 @@ class Yao2020Planner {
               // Convert collision_dist along specific turn in turns_after_slide to collision_dist along turns_after_slide overall
               collision_dist += turns_after_slide.col(1).head(local_collision_turn_idx).sum();
               //std::cout << local_collision_turn_idx << std::endl;
+
+              /*
+              if (debug) {
+                std::cout << "updated collision dist" << std::endl;
+              }
+              */
               
               // It is possible that turns_after_prev_slide and turns_after_slide have a different sequence of segment types.
               // Compute the local_collision_turn_idx for turns_after_prev_slide using collision_dist
@@ -346,11 +436,30 @@ class Yao2020Planner {
                 throw std::runtime_error("Could not compute local_collision_turn_idx for turns_after_prev_slide");
               }
               // Convert collision_dist along turns_after_prev_slide overall to collision_dist along specific turn in turns_after_prev_slide
+
+              /*
+              if (debug) {
+                std::cout << "updated local_collision_turn_idx" << std::endl;
+              }
+              */
+
               collision_dist -= turns_after_prev_slide.col(1).head(local_collision_turn_idx).sum();
+
+              /*
+              if (debug) {
+                std::cout << "updated collision_dist again" << std::endl;
+              }
+              */
 
               if (local_collision_turn_idx == 0) {
                 throw std::runtime_error("local_collision_turn_idx should not equal 0, since we are simply truncating local turn 0 (i.e. turn_idx - 1)");
               }
+
+              /*
+              if (debug) {
+                std::cout << "local_collision_turn_idx: " << local_collision_turn_idx << std::endl;
+              }
+              */
 
               // Split subpath into two subpaths
 
@@ -368,24 +477,36 @@ class Yao2020Planner {
               subpaths[subpath_idx][turn_idx - 1 + local_collision_turn_idx](0) = turns_after_prev_slide(local_collision_turn_idx, 0);
               subpaths[subpath_idx][turn_idx - 1 + local_collision_turn_idx](1) = collision_dist;
 
-              if (subpaths[subpath_idx][turn_idx - 1 + local_collision_turn_idx](0) == 0) {
-                // If final segment of new subpath is type S, add 1 dummy segment
-                subpaths[subpath_idx].push_back(RowVector2d::Zero());
-              } else {
-                // If final segment is type C, we don't want to slide if it's a portion of the arc we were just sliding
-                if (local_collision_turn_idx == 1) {
-                  // Check the second-to-last segment
-                  if (subpaths[subpath_idx][turn_idx - 1 + local_collision_turn_idx - 1](0) == 0) {
-                    // Type S. So there must be a C before (if anything). Append nothing
-                  } else {
-                    // Type C. Append 1 dummy, so now we have 2 segments in front
-                    subpaths[subpath_idx].push_back(RowVector2d::Zero());
-                  }
-                } else {
-                  // Final segment is type C and it's not a portion of the segment we were just sliding
-                  subpaths[subpath_idx].push_back(RowVector2d::Zero());
-                  subpaths[subpath_idx].push_back(RowVector2d::Zero());
+              // If local_collision_turn_idx == 3, then the last three segments of subpaths[subpath_idx] comprise a shortest Dubins path.
+              // The third-to-last segment must therefore by type C, and we'll be sliding it next.
+
+              /*
+              std::cout << "num turns in next subpath " << turn_idx - 1 + local_collision_turn_idx << std::endl;
+              for (auto turn : subpaths[subpath_idx]) {
+                std::cout << turn << std::endl;
+              }
+              std::cout << "turns_after_prev_slide" << std::endl;
+              std::cout << turns_after_prev_slide << std::endl;
+              std::cout << "turns_after_slide" << std::endl;
+              std::cout << turns_after_slide << std::endl;
+              */
+
+              if (local_collision_turn_idx == 2) {
+                // If local_collision_turn_idx == 2, then the last two segments of subpaths[subpath_idx] comprise a shortest Dubins path. 
+                // The second-to-last segment must therefore be type C, and we'll be sliding it next. We need two segments in front, but we only have
+                // one, so append one dummy segment
+                if (subpaths[subpath_idx][subpaths[subpath_idx].size() - 2](0) == 0) {
+                  throw std::runtime_error("Second-to-last segment is not type C");
                 }
+                subpaths[subpath_idx].push_back(RowVector2d::Zero());
+              } else if (local_collision_turn_idx == 1) {
+                // If local_collision_turn_idx == 1, then the last segment of subpaths[subpath_idx] is a shortest Dubins path, and it must be type C.
+                // We'll be sliding the last segment next. We need two dummy segments in front
+                if (subpaths[subpath_idx][subpaths[subpath_idx].size() - 1](0) == 0) {
+                  throw std::runtime_error("Last segment is not type C");
+                }
+                subpaths[subpath_idx].push_back(RowVector2d::Zero());
+                subpaths[subpath_idx].push_back(RowVector2d::Zero());
               }
 
               // New subpath after collision
@@ -397,20 +518,74 @@ class Yao2020Planner {
               }
               subpaths[subpath_idx + 1][0](1) -= collision_dist; // Colliding turn
 
-              // Since local_collision_turn_idx != 0, the second new subpath consists of the latter three or fewer segments of turns_after_prev_slide,
-              // so it's a shortest Dubins path and thereby a quintet path. Thus we move on to the first new subpath
-              ++subpath_idx;
-              turn_idx = 0; // So we exit the loop over turn_idx
+              // Don't set x_f_subpath = x_collision and so forth because we want to find the 
+              // point at the same distance along the path in the sliding iteration before collision
+              x_f_subpath = x_0_tmp;
+              y_f_subpath = y_0_tmp;
+              theta_f_subpath = theta_0_tmp;
+              double ctheta = cos(theta_f_subpath);
+              double stheta = sin(theta_f_subpath);
+              // Technically the subpath may have size larger than turn_idx + local_collision_turn_idx now
+              // but only because we pushed back dummy segments, so we don't need to integrate those
+              for (int turn_idx2 = turn_idx - 1; turn_idx2 < turn_idx + local_collision_turn_idx; ++turn_idx2) {
+                double turn_dir = subpaths[subpath_idx][turn_idx2](0);
+                double turn_dist = subpaths[subpath_idx][turn_idx2](1);
+                if (turn_dir == 0) {
+                  // S segment
+                  x_f_subpath += turn_dist*ctheta;
+                  y_f_subpath += turn_dist*stheta;
+                } else {
+                  // C segment
+                  double rho_times_turn_dir = rho*turn_dir;
+                  theta_f_subpath += turn_dist/rho_times_turn_dir;
+                  double next_ctheta = cos(theta_f_subpath);
+                  double next_stheta = sin(theta_f_subpath);
+                  x_f_subpath += rho_times_turn_dir*(-stheta + next_stheta);
+                  y_f_subpath += rho_times_turn_dir*(ctheta - next_ctheta);
+                  ctheta = next_ctheta;
+                  stheta = next_stheta;
+                }
+              }
 
-              x_f_subpath = x_collision;
-              y_f_subpath = y_collision;
-              theta_f_subpath = theta_collision;
+              /*
+              x_f_subpath = x_0;
+              y_f_subpath = y_0;
+              theta_f_subpath = theta_0;
+              ctheta = cos(theta_f_subpath);
+              stheta = sin(theta_f_subpath);
+              for (int subpath_idx2 = 0; subpath_idx2 < subpath_idx + 1; ++subpath_idx2) {
+                for (int turn_idx2 = 0; turn_idx2 < subpaths[subpath_idx2].size(); ++turn_idx2) {
+                  double turn_dir = subpaths[subpath_idx2][turn_idx2](0);
+                  double turn_dist = subpaths[subpath_idx2][turn_idx2](1);
+                  double rho_times_turn_dir = rho*turn_dir;
+                  if (turn_dir == 0) {
+                    // S segment
+                    x_f_subpath += turn_dist*ctheta;
+                    y_f_subpath += turn_dist*stheta;
+                  } else {
+                    // C segment
+                    theta_f_subpath += turn_dist/rho_times_turn_dir;
+                    double next_ctheta = cos(theta_f_subpath);
+                    double next_stheta = sin(theta_f_subpath);
+                    x_f_subpath += rho_times_turn_dir*(-stheta + next_stheta);
+                    y_f_subpath += rho_times_turn_dir*(ctheta - next_ctheta);
+                    ctheta = next_ctheta;
+                    stheta = next_stheta;
+                  }
+                }
+              }
+              */
 
               x_0_tmp = x_f_subpath;
               y_0_tmp = y_f_subpath;
               theta_0_tmp = theta_f_subpath;
-              c_0_tmp_prev = cos(theta_0_tmp);
-              s_0_tmp_prev = sin(theta_0_tmp);
+              c_0_tmp_prev = ctheta;
+              s_0_tmp_prev = stheta;
+
+              // Since local_collision_turn_idx != 0, the second new subpath consists of the latter three or fewer segments of turns_after_prev_slide,
+              // so it's a shortest Dubins path and thereby a quintet path. Thus we move on to the first new subpath
+              ++subpath_idx;
+              turn_idx = 0; // So we exit the loop over turn_idx
 
               if (debug) {
                 double x = x_0;
@@ -424,21 +599,11 @@ class Yao2020Planner {
                 double next_theta;
                 double next_ctheta;
                 double next_stheta;
-                std::cout << "turns_after_prev_slide" << std::endl;
-                std::cout << turns_after_prev_slide << std::endl;
-                std::cout << "turns_after_slide" << std::endl;
-                std::cout << turns_after_slide << std::endl;
-                std::cout << "local collision turn idx: " << local_collision_turn_idx << std::endl;
-                std::cout << "collision dist: " << collision_dist << std::endl;
-                std::cout << "integration check" << std::endl;
                 for (int subpath_idx2 = 0; subpath_idx2 < subpaths.size(); ++subpath_idx2) {
-                  std::cout << "subpath: " << subpath_idx2 << std::endl;
                   for (int turn_idx2 = 0; turn_idx2 < subpaths[subpath_idx2].size(); ++turn_idx2) {
                     double turn_dir = subpaths[subpath_idx2][turn_idx2](0);
                     double turn_dist = subpaths[subpath_idx2][turn_idx2](1);
                     double rho_times_turn_dir = rho*turn_dir;
-
-                    std::cout << "turn: " << turn_idx2 << " " << turn_dir << " " << turn_dist << std::endl;
 
                     if (turn_dir == 0) {
                       // S segment
@@ -476,12 +641,42 @@ class Yao2020Planner {
             }
 
             turns_after_prev_slide = turns_after_slide;
+
+            if (debug) {
+              /*
+              if (debug) {
+                std::cout << "getting subpath" << std::endl;
+              }
+              */
+              int num_total_turns = 0;
+              for (auto subpath : subpaths) {
+                num_total_turns += subpath.size();
+              }
+              RowMatrixXd overall_turns(num_total_turns, 2);
+              int overall_turn_idx = 0;
+              for (int subpath_idx2 = 0; subpath_idx2 < subpaths.size(); ++subpath_idx2) {
+                for (int turn_idx2 = 0; turn_idx2 < subpaths[subpath_idx2].size(); ++turn_idx2) {
+                  if (subpath_idx2 == subpath_idx && turn_idx - 1 <= turn_idx2 && turn_idx2 <= turn_idx + 2) {
+                    overall_turns.row(overall_turn_idx) = turns_after_prev_slide.row(turn_idx2 - (turn_idx - 1));
+                  } else {
+                    overall_turns.row(overall_turn_idx) = subpaths[subpath_idx2][turn_idx2];
+                  }
+                  ++overall_turn_idx;
+                }
+              }
+              path_seq.push_back(overall_turns);
+            }
           }
 
           if (!collision) {
             if (slide_amount != prev_turn(1) || turns_after_prev_slide(0, 1) != 0) {
               throw std::runtime_error("slide_amount != prev_turn(1) || turns_after_prev_slide(0, 1) != 0");
             }
+            /*
+            if (debug) {
+              std::cout << "updating subpath" << std::endl;
+            }
+            */
             // Replace cur_turn and next_turn with three turns of the shortest Dubins path, and delete prev_turn
             subpaths[subpath_idx].erase(subpaths[subpath_idx].begin() + turn_idx - 1); // We reduced this segment to zero length
             subpaths[subpath_idx][turn_idx - 1] = turns_after_prev_slide.row(1);
