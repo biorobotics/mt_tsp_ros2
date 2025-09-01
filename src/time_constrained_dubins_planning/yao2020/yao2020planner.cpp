@@ -113,7 +113,7 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
   /*
   // We start by sliding the final C segment in the path.
   // When we do so, we will replace the final C segment and the subsequent
-  // two segments by the shortest Dubins path, then delete the segment
+  // two segments by the Dubins path, then delete the segment
   // before the final C segment.
   // If the final segment is type S, we add an additional dummy segment in front,
   // so the S and the dummy will get replaced. If the final segment is type C,
@@ -336,7 +336,7 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
           slide_amount = prev_turn(1);
         }
         if (debug) {
-          std::cout << "sliding by " << slide_amount << std::endl;
+          // std::cout << "sliding by " << slide_amount << std::endl;
         }
 
         RowMatrixXd turns_after_slide = sliding_obj.slide(slide_amount);
@@ -480,7 +480,7 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
           subpaths[subpath_idx][turn_idx - 1 + local_collision_turn_idx](0) = turns_after_prev_slide(local_collision_turn_idx, 0);
           subpaths[subpath_idx][turn_idx - 1 + local_collision_turn_idx](1) = collision_dist;
 
-          // If local_collision_turn_idx == 3, then the last three segments of subpaths[subpath_idx] comprise a shortest Dubins path.
+          // If local_collision_turn_idx == 3, then the last three segments of subpaths[subpath_idx] comprise a Dubins path.
           // The third-to-last segment must therefore by type C, and we'll be sliding it next.
 
           /*
@@ -495,7 +495,7 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
           */
 
           if (local_collision_turn_idx == 2) {
-            // If local_collision_turn_idx == 2, then the last two segments of subpaths[subpath_idx] comprise a shortest Dubins path. 
+            // If local_collision_turn_idx == 2, then the last two segments of subpaths[subpath_idx] comprise a Dubins path. 
             // The second-to-last segment must therefore be type C, and we'll be sliding it next. We need two segments in front, but we only have
             // one, so append one dummy segment
             if (subpaths[subpath_idx][subpaths[subpath_idx].size() - 2](0) == 0) {
@@ -503,13 +503,17 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
             }
             subpaths[subpath_idx].push_back(RowVector2d::Zero());
           } else if (local_collision_turn_idx == 1) {
-            // If local_collision_turn_idx == 1, then the last segment of subpaths[subpath_idx] is a shortest Dubins path, and it must be type C.
-            // We'll be sliding the last segment next. We need two dummy segments in front
+            // If local_collision_turn_idx == 1, we don't want to slide segment 1 next, because that will result in a discontinuous change in the path between
+            // segment 2 and segment 1 unless we were sliding segment 1 exactly such that the corresponding endpoints of the two segments were staying pointed at
+            // one another. If segment 0 is type S, then we can slide the segment before segment 0 because it must be type C. If segment 0 is type C, then we slide segment 0.
+            // We need two segments in front, but currently we only have one, so add a dummy
             if (subpaths[subpath_idx][subpaths[subpath_idx].size() - 1](0) == 0) {
               throw std::runtime_error("Last segment is not type C");
             }
-            subpaths[subpath_idx].push_back(RowVector2d::Zero());
-            subpaths[subpath_idx].push_back(RowVector2d::Zero());
+            // Check if C segment
+            if (turns_after_prev_slide(0, 0) != 0) {
+              subpaths[subpath_idx].push_back(RowVector2d::Zero());
+            }
           }
 
           // New subpath after collision
@@ -586,7 +590,7 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
           s_0_tmp_prev = stheta;
 
           // Since local_collision_turn_idx != 0, the second new subpath consists of the latter three or fewer segments of turns_after_prev_slide,
-          // so it's a shortest Dubins path and thereby a quintet path. Thus we move on to the first new subpath
+          // so it's a Dubins path and thereby a quintet path. Thus we move on to the first new subpath
           ++subpath_idx;
           turn_idx = 0; // So we exit the loop over turn_idx
 
@@ -680,7 +684,7 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
           std::cout << "updating subpath" << std::endl;
         }
         */
-        // Replace cur_turn and next_turn with three turns of the shortest Dubins path, and delete prev_turn
+        // Replace cur_turn and next_turn with three turns of the Dubins path, and delete prev_turn
         subpaths[subpath_idx].erase(subpaths[subpath_idx].begin() + turn_idx - 1); // We reduced this segment to zero length
         subpaths[subpath_idx][turn_idx - 1] = turns_after_prev_slide.row(1);
         subpaths[subpath_idx][turn_idx] = turns_after_prev_slide.row(2);
