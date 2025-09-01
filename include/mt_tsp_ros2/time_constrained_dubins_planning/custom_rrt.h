@@ -5,7 +5,5 @@ namespace base = ompl::base;
 
 class CustomRRT : public RRT {
   public:
-    CustomRRT(const base::SpaceInformationPtr &si) : RRT(si) {
-      rng_ = ompl::RNG(1);
-    }
+    CustomRRT(const base::SpaceInformationPtr &si);
 };

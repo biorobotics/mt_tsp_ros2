@@ -7,10 +7,7 @@ namespace ob = ompl::base;
 
 class DubinsStateSpaceDeterministicSampling : public ob::DubinsStateSpace {
   public:
-    DubinsStateSpaceDeterministicSampling(double rho) : ob::DubinsStateSpace(rho) {
-    }
+    DubinsStateSpaceDeterministicSampling(double rho);
 
-    ob::StateSamplerPtr allocStateSampler() const override {
-      return std::make_shared<ob::SE2DeterministicStateSampler>(this);
-    }
+    ob::StateSamplerPtr allocStateSampler() const override;
 };

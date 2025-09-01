@@ -111,6 +111,7 @@ install(TARGETS gtsp_wrapper
 )
 
 pybind11_add_module(gmdm_wrapper
+  src/elongate_dubins_path.cpp
   src/bind_gmdm.cpp
   src/dubins.cpp
 )
@@ -147,7 +148,29 @@ install(TARGETS implicit_grid_astar
 )
 
 pybind11_add_module(time_constrained_dubins_planning
-  src/bind_time_constrained_dubins_planning.cpp
+  src/elongate_dubins_path.cpp
+  src/time_constrained_dubins_planning/angle_mod.cpp
+  src/time_constrained_dubins_planning/custom_control_rrt.cpp
+  src/time_constrained_dubins_planning/custom_rrt_connect.cpp
+  src/time_constrained_dubins_planning/custom_rrt.cpp
+  src/time_constrained_dubins_planning/custom_rrt_star.cpp
+  src/time_constrained_dubins_planning/dubins_control_sampler.cpp
+  src/time_constrained_dubins_planning/dubins_motion_validator.cpp
+  src/time_constrained_dubins_planning/dubins_motion_validator_rects.cpp
+  src/time_constrained_dubins_planning/dubins_state_sampler.cpp
+  src/time_constrained_dubins_planning/dubins_state_space_deterministic_sampling.cpp
+  src/time_constrained_dubins_planning/dubins_state_validity_checker.cpp
+  src/time_constrained_dubins_planning/dubins_time_state_space.cpp
+  src/time_constrained_dubins_planning/geometry_utils.cpp
+  src/time_constrained_dubins_planning/no_time_dubins_motion_validator.cpp
+  src/time_constrained_dubins_planning/no_time_dubins_motion_validator_rects.cpp
+  src/time_constrained_dubins_planning/no_time_dubins_planner.cpp
+  src/time_constrained_dubins_planning/no_time_dubins_state_validity_checker.cpp
+  src/time_constrained_dubins_planning/time_constrained_dubins_planner_forward_prop.cpp
+  src/time_constrained_dubins_planning/time_constrained_dubins_planner.cpp
+  src/time_constrained_dubins_planning/yao2020/ic_sliding.cpp
+  src/time_constrained_dubins_planning/yao2020/yao2020planner.cpp
+  src/time_constrained_dubins_planning/bind_time_constrained_dubins_planning.cpp
   src/dubins.cpp
 )
 
@@ -301,6 +324,8 @@ install(TARGETS memetic_pcg_utils
 )
 
 add_executable(compare_to_gdip 
+  src/time_constrained_dubins_planning/angle_mod.cpp
+  src/elongate_dubins_path.cpp
   src/compare_to_gdip.cpp
   src/dubins.cpp
   $ENV{HOME}/gdip/gdip/core/src/opendubins/angleinterval.cpp

@@ -5,7 +5,5 @@ namespace base = ompl::base;
 
 class CustomRRTstar : public RRTstar {
   public:
-    CustomRRTstar(const base::SpaceInformationPtr &si) : RRTstar(si) {
-      rng_ = ompl::RNG(1);
-    }
+    CustomRRTstar(const base::SpaceInformationPtr &si);
 };
