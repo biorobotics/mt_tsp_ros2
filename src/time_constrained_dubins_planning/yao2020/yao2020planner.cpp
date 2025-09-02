@@ -72,10 +72,6 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
   }
   std::vector<std::vector<RowVector2d>> subpaths;
   std::vector<RowVector2d> subpath;
-  subpath.push_back(RowVector2d::Zero()); // Initial sequence of L circles
-  subpath[0](0) = 1;
-  subpath.push_back(RowVector2d::Zero()); // Initial sequence of R circles
-  subpath[1](0) = -1;
   for (int pose_idx = 1; pose_idx < pose_seq.rows(); ++pose_idx) {
     double x_0 = pose_seq(pose_idx - 1, 0);
     double y_0 = pose_seq(pose_idx - 1, 1);
@@ -96,41 +92,14 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
 
       double turn_dir = subpath.back()(0);
       double turn_dist = subpath.back()(1);
+      // Get rid of full circles
       if (turn_dir != 0 && turn_dist >= twopirho) {
         double turn_dist_mod_twopirho = fmod(turn_dist, twopirho);
-        if (turn_dir == 1) {
-          // L
-          subpath[0](1) += turn_dist - turn_dist_mod_twopirho;
-        } else {
-          // turn_dir == -1
-          // R
-          subpath[1](1) += turn_dist - turn_dist_mod_twopirho;
-        }
         subpath.back()(1) = turn_dist_mod_twopirho;
       }
     }
   }
   
-  // The below code is fine, but it doesn't take advantage of the fact that the spatial planner
-  // returns a sequence of Dubins paths, so we don't need to append dummy segments
-  /*
-  // We start by sliding the final C segment in the path.
-  // When we do so, we will replace the final C segment and the subsequent
-  // two segments by the Dubins path, then delete the segment
-  // before the final C segment.
-  // If the final segment is type S, we add an additional dummy segment in front,
-  // so the S and the dummy will get replaced. If the final segment is type C,
-  // we will be sliding it, so we add two dummy segments in front to replace.
-  if (subpath.back()(0) == 0) {
-    // Final segment is type S
-    subpath.push_back(RowVector2d::Zero());
-  } else {
-    // Final segment is type C
-    subpath.push_back(RowVector2d::Zero());
-    subpath.push_back(RowVector2d::Zero());
-  }
-  */
-
   subpaths.push_back(subpath);
 
   if (debug) {
@@ -179,17 +148,9 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
     if (subpath_idx != 0) {
       throw std::runtime_error("We should never have subpath_idx != 0");
     }
-    // TODO: take out
-    /*
-    if (num_collisions == 1) {
-      break;
-    }
-    */
-    int final_C_idx = subpaths[subpath_idx].size() - 3; // We appended dummies such that this is true
-    // turn_idx is the turn we're sliding
-    // loop guard is turn_idx > 2 because turn_idx 0 and 1 are the initial L and R circles and we don't want to slide those,
-    // and we don't want to slide along those circles either so we don't want to slide turn_idx 2
-
+    // For the initial path from the RRT, we have a sequence of Dubins paths, so the third-to-last segment must be C and that's the final
+    // C eligible for sliding. For a path resulting from some IC-sliding we already did, we append dummies such that the below is true
+    int final_C_idx = subpaths[subpath_idx].size() - 3;
     for (int turn_idx = subpaths[subpath_idx].size() - 1; turn_idx >= final_C_idx; --turn_idx) {
       const RowVector2d &cur_turn = subpaths[subpath_idx][turn_idx];
 
@@ -213,7 +174,9 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
       }
     }
 
-    for (int turn_idx = final_C_idx; turn_idx > 2; --turn_idx) {
+    // turn_idx is the turn we're sliding
+    // loop guard is turn_idx > 0 because we don't want to slide turn_idx 0 itself
+    for (int turn_idx = final_C_idx; turn_idx > 0; --turn_idx) {
       const RowVector2d &prev_turn = subpaths[subpath_idx][turn_idx - 1];
       const RowVector2d &cur_turn = subpaths[subpath_idx][turn_idx];
       if (cur_turn(0) == 0) {
@@ -245,16 +208,9 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
         subpaths[subpath_idx][turn_idx - 1](1) = combined_dist;
         subpaths[subpath_idx].erase(subpaths[subpath_idx].begin() + turn_idx);
 
+        // Get rid of full circles
         if (subpaths[subpath_idx][turn_idx - 1](0) != 0 && subpaths[subpath_idx][turn_idx - 1](1) >= twopirho) {
           double combined_dist_mod_twopirho = fmod(combined_dist, twopirho);
-          if (cur_turn(0) == 1) {
-            // L
-            subpaths[subpath_idx][0](1) += combined_dist - combined_dist_mod_twopirho;
-          } else {
-            // cur_turn(0) == -1
-            // R
-            subpaths[subpath_idx][1](1) += combined_dist - combined_dist_mod_twopirho;
-          }
           subpaths[subpath_idx][turn_idx - 1](1) = combined_dist_mod_twopirho;
         }
         continue;
@@ -666,6 +622,8 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
       }
     }
   }
+
+  // Now we've normalized the path. Compute length intervals of each subpath
 
   int num_total_turns = 0;
   for (auto subpath : subpaths) {
