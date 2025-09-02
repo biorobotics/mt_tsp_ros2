@@ -60,8 +60,10 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
   double twopirho = 2*M_PI*rho;
 
   RowMatrixXd pose_seq = spatial_planner.plan(start.head<3>(), goal.head<3>(), time_limit, max_iter);
+  /*
   RowMatrixXd add_term = RowMatrixXd::Zero(rects.rows(), rects.cols());
   add_term(52, 3) += 1;
+  */
   spatial_planner = NoTimeDubinsPlanner(rho, occupancy, rects + add_term, map_lb, map_ub);
 
   if (std::isinf(pose_seq(0, 0))) {
@@ -339,7 +341,7 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
           // std::cout << "sliding by " << slide_amount << std::endl;
         }
 
-        RowMatrixXd turns_after_slide = sliding_obj.slide(slide_amount);
+        RowMatrixXd turns_after_slide = sliding_obj.slide(slide_amount, turns_after_prev_slide.col(1).sum());
 
         /*
         std::ofstream turns_before_slide_file("/home/noopygbhat/catkin_ws/src/mapf/scripts/turns_before_slide.txt");

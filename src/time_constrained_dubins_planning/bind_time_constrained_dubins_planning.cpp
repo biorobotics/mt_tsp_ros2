@@ -50,7 +50,12 @@ PYBIND11_MODULE(time_constrained_dubins_planning, m) {
     ;
 
   // Yao 2020 implementation
-  m.def("ic_sliding", &ic_sliding);
+
+  py::class_<ICSlidingClass>(m, "ICSlidingClass")
+    .def(py::init<RowMatrixXdRef_const, double, double, double, double, double, double, double, bool>())
+    .def("slide", &ICSlidingClass::slide)
+    .def("batch_slide", &ICSlidingClass::batch_slide)
+    ;
 
   py::class_<Yao2020Planner>(m, "Yao2020Planner")
     .def(py::init<double, double, RowMatrixXbRef_const, RowMatrixXdRef_const, Vector2dRef_const, Vector2dRef_const>())
