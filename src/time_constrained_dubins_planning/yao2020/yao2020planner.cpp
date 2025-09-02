@@ -63,8 +63,9 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
   /*
   RowMatrixXd add_term = RowMatrixXd::Zero(rects.rows(), rects.cols());
   add_term(52, 3) += 1;
-  */
   spatial_planner = NoTimeDubinsPlanner(rho, occupancy, rects + add_term, map_lb, map_ub);
+  */
+  spatial_planner = NoTimeDubinsPlanner(rho, occupancy, rects, map_lb, map_ub);
 
   if (std::isinf(pose_seq(0, 0))) {
     return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
@@ -213,16 +214,6 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
     }
 
     for (int turn_idx = final_C_idx; turn_idx > 2; --turn_idx) {
-      if (debug) {
-        std::cout << "turn " << turn_idx << std::endl;
-        std::cout << "We currently have " << subpaths.size() << " subpaths" << std::endl;
-        std::cout << "printing current subpath" << std::endl;
-        for (int turn_idx2 = 0; turn_idx2 < subpaths[subpath_idx].size(); ++turn_idx2) {
-          std::cout << "turn " << turn_idx2 << ": " << subpaths[subpath_idx][turn_idx2](0) << " " << subpaths[subpath_idx][turn_idx2](1) << std::endl;
-        }
-        std::cout << std::endl;
-      }
-
       const RowVector2d &prev_turn = subpaths[subpath_idx][turn_idx - 1];
       const RowVector2d &cur_turn = subpaths[subpath_idx][turn_idx];
       if (cur_turn(0) == 0) {
@@ -337,9 +328,6 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
         if (slide_amount > prev_turn(1)) {
           slide_amount = prev_turn(1);
         }
-        if (debug) {
-          // std::cout << "sliding by " << slide_amount << std::endl;
-        }
 
         RowMatrixXd turns_after_slide = sliding_obj.slide(slide_amount, turns_after_prev_slide.col(1).sum());
 
@@ -362,13 +350,6 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
         boundary_conditions_file.close();
         */
 
-        /*
-        if (debug) {
-          std::cout << "turns_after_slide" << std::endl;
-          std::cout << turns_after_slide << std::endl;
-        }
-        */
-
         double x_collision;
         double y_collision;
         double theta_collision;
@@ -380,32 +361,12 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
                                         x_f_subpath, y_f_subpath, theta_f_subpath,
                                         turns_after_slide);
 
-        /*
-        if (debug) {
-          std::cout << "did collision check" << std::endl;
-        }
-        */
-
         if (ignore_obstacles_in_normalization) {
           collision = false;
         }
         // local_collision_turn_idx indexes into turns_after_prev_slide
         if (collision) {
           ++num_collisions;
-          /*
-          std::cout << "turns_after_slide for collision" << std::endl;
-          std::cout << turns_after_slide << std::endl;
-          std::cout << local_collision_turn_idx << std::endl;
-          */
-          /*
-          if (debug) {
-            std::cout << "collision" << std::endl;
-
-            std::cout << "local_collision_turn_idx" << std::endl;
-            std::cout << local_collision_turn_idx << std::endl;
-          }
-          */
-
           if (local_collision_turn_idx == 0) {
             throw std::runtime_error("local_collision_turn_idx should not equal 0, since we are simply truncating local turn 0 (i.e. turn_idx - 1)");
           }
@@ -414,12 +375,6 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
           collision_dist += turns_after_slide.col(1).head(local_collision_turn_idx).sum();
           //std::cout << local_collision_turn_idx << std::endl;
 
-          /*
-          if (debug) {
-            std::cout << "updated collision dist" << std::endl;
-          }
-          */
-          
           // It is possible that turns_after_prev_slide and turns_after_slide have a different sequence of segment types.
           // Compute the local_collision_turn_idx for turns_after_prev_slide using collision_dist
           double dist = 0.;
@@ -431,40 +386,17 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
               break;
             }
           }
-          /*
-          std::cout << dist << " " << collision_dist << std::endl;
-          std::cout << turns_after_prev_slide << std::endl << std::endl;
-          std::cout << turns_after_slide << std::endl << std::endl;
-          */
           if (!found) {
             std::cout << "collision dist = " << collision_dist << " dist of turns after prev slide " << dist << " second minus first: " << dist - collision_dist << " dist of turns after slide: " << turns_after_slide.col(1).sum() << std::endl;
             throw std::runtime_error("Could not compute local_collision_turn_idx for turns_after_prev_slide");
           }
           // Convert collision_dist along turns_after_prev_slide overall to collision_dist along specific turn in turns_after_prev_slide
 
-          /*
-          if (debug) {
-            std::cout << "updated local_collision_turn_idx" << std::endl;
-          }
-          */
-
           collision_dist -= turns_after_prev_slide.col(1).head(local_collision_turn_idx).sum();
-
-          /*
-          if (debug) {
-            std::cout << "updated collision_dist again" << std::endl;
-          }
-          */
 
           if (local_collision_turn_idx == 0) {
             throw std::runtime_error("local_collision_turn_idx should not equal 0, since we are simply truncating local turn 0 (i.e. turn_idx - 1)");
           }
-
-          /*
-          if (debug) {
-            std::cout << "local_collision_turn_idx: " << local_collision_turn_idx << std::endl;
-          }
-          */
 
           // Split subpath into two subpaths
 
@@ -652,11 +584,6 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
         turns_after_prev_slide = turns_after_slide;
 
         if (debug) {
-          /*
-          if (debug) {
-            std::cout << "getting subpath" << std::endl;
-          }
-          */
           int num_total_turns = 0;
           for (auto subpath : subpaths) {
             num_total_turns += subpath.size();
@@ -681,11 +608,6 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
         if (slide_amount != prev_turn(1) || turns_after_prev_slide(0, 1) != 0) {
           throw std::runtime_error("slide_amount != prev_turn(1) || turns_after_prev_slide(0, 1) != 0");
         }
-        /*
-        if (debug) {
-          std::cout << "updating subpath" << std::endl;
-        }
-        */
         // Replace cur_turn and next_turn with three turns of the Dubins path, and delete prev_turn
         subpaths[subpath_idx].erase(subpaths[subpath_idx].begin() + turn_idx - 1); // We reduced this segment to zero length
         subpaths[subpath_idx][turn_idx - 1] = turns_after_prev_slide.row(1);
