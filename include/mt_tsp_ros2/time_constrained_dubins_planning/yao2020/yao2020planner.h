@@ -27,5 +27,6 @@ class Yao2020Planner {
     RowMatrixXd rects;
     Vector2d map_lb;
     Vector2d map_ub;
-    bool debug = true;
+    // bool debug = true;
+    bool debug = false;
 };
