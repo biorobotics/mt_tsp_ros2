@@ -3,6 +3,7 @@
 #include <pybind11/stl_bind.h>
 #include "mt_tsp_ros2/dag_dfs.h"
 #include "mt_tsp_ros2/lifelong_dag_dfs.h"
+#include "mt_tsp_ros2/lifelong_multi_agent_dag_dfs.h"
 #include "mt_tsp_ros2/backward_dag_dfs.h"
 
 namespace py = pybind11;
@@ -33,5 +34,11 @@ PYBIND11_MODULE(dag_dfs, m) {
   py::class_<BackwardDAGDFSPlanner>(m, "BackwardDAGDFSPlanner")
     .def(py::init<RowMatrixXdRef_const, VectorXlRef_const, const std::vector<py::array_t<long>> &, bool, bool, RowMatrixXdRef_const, int>())
     .def("plan", &BackwardDAGDFSPlanner::plan)
+    ;
+
+  py::class_<LifelongMultiAgentDAGDFSPlanner>(m, "LifelongMultiAgentDAGDFSPlanner")
+    .def(py::init<RowMatrixXdRef_const, VectorXlRef_const, const std::vector<py::array_t<long>> &, bool, bool, RowMatrixXdRef_const, int, int>())
+    .def("plan", &LifelongMultiAgentDAGDFSPlanner::plan)
+    .def("get_before_time", &LifelongMultiAgentDAGDFSPlanner::get_before_time)
     ;
 }
