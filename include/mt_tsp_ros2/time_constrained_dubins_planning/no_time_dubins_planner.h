@@ -36,6 +36,8 @@ class NoTimeDubinsPlanner {
 
     bool collision_free_get_intersection_point(double x, double y, double theta, double turn_dir, double turn_dist, double next_x, double next_y, double &x_collision, double &y_collision, double &theta_collision, double &collision_dist);
 
+    bool collision_free(double x, double y, double theta, double turn_dir, double turn_dist, double next_x, double next_y);
+
   private:
     std::shared_ptr<DubinsStateSpaceDeterministicSampling> space;
     ob::SpaceInformationPtr si;

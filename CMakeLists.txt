@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 project(mt_tsp_ros2)
 
+message(WARNING "The value of pybind11_DIR is: ${pybind11_DIR}")
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -316,6 +318,8 @@ install(TARGETS one_sided_dubins_elongation
 
 pybind11_add_module(memetic_pcg_utils
   src/bind_memetic_pcg_utils.cpp
+  src/elongate_dubins_path.cpp
+  src/time_constrained_dubins_planning/angle_mod.cpp
   src/dubins.cpp
 )
 target_link_libraries(memetic_pcg_utils PRIVATE OpenMP::OpenMP_CXX)
@@ -362,6 +366,8 @@ message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
 pybind11_add_module(dubins_trj_through_seq_of_targets
   src/bind_dubins_trj_through_seq_of_targets.cpp
+  src/elongate_dubins_path.cpp
+  src/time_constrained_dubins_planning/angle_mod.cpp
   src/dubins.cpp
 )
 target_link_libraries(dubins_trj_through_seq_of_targets PRIVATE OpenMP::OpenMP_CXX)
@@ -372,6 +378,8 @@ message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 
 pybind11_add_module(vs_dubins_trj_through_seq_of_targets
   src/bind_vs_dubins_trj_through_seq_of_targets.cpp
+  src/elongate_dubins_path.cpp
+  src/time_constrained_dubins_planning/angle_mod.cpp
   src/dubins.cpp
 )
 target_link_libraries(vs_dubins_trj_through_seq_of_targets PRIVATE OpenMP::OpenMP_CXX)

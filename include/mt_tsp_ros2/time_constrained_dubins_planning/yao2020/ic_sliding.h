@@ -4,7 +4,7 @@
 
 class ICSlidingClass {
   public:
-    ICSlidingClass(RowMatrixXdRef_const turns, double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double rho, bool direction);
+    ICSlidingClass(RowMatrixXdRef_const turns, double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double rho, bool final_turn, bool lengthen);
 
     RowMatrixXd slide(double amount, double prev_length);
 
@@ -21,7 +21,9 @@ class ICSlidingClass {
     double rho;
     bool direction;
     int slide_idx;
-    int turn_to_shorten;
+    int turn_to_shorten_or_lengthen;
+    bool final_turn;
+    bool lengthen;
 
     std::vector<DubinsPathType> path_type_options;
 };

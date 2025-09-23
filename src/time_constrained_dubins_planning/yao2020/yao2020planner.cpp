@@ -276,10 +276,10 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
 
       bool collision = false;
 
-      ICSlidingClass sliding_obj(turns_before_slide, x_0_tmp, y_0_tmp, theta_0_tmp, x_f_subpath, y_f_subpath, theta_f_subpath, rho, false);
+      ICSlidingClass sliding_obj(turns_before_slide, x_0_tmp, y_0_tmp, theta_0_tmp, x_f_subpath, y_f_subpath, theta_f_subpath, rho, false, false);
 
       while (slide_amount < prev_turn(1)) {
-        slide_amount += step_size;
+        slide_amount += slide_step_size;
         if (slide_amount > prev_turn(1)) {
           slide_amount = prev_turn(1);
         }
@@ -651,21 +651,28 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
   double next_theta;
   double next_ctheta;
   double next_stheta;
-  std::vector<std::pair<double, double>> feasible_length_intervals;
-  feasible_length_intervals.push_back(std::pair<double, double>(0., 0.));
   std::vector<Vector3d> elongation_intervals_per_subpath;
   std::vector<Vector3d> start_qs_per_subpath;
   std::vector<Vector3d> end_qs_per_subpath;
   double cur_length = 0.;
-  for (int subpath_idx2 = 0; subpath_idx2 < subpaths.size(); ++subpath_idx2) {
+  for (int subpath_idx = 0; subpath_idx < subpaths.size(); ++subpath_idx) {
+    if (subpaths[subpath_idx].size() != 3) {
+      throw std::runtime_error("All subpaths should have size 3 after normalization");
+    }
+    if (subpaths[subpath_idx][0](0) != 0 &&
+        subpaths[subpath_idx][1](0) != 0 &&
+        subpaths[subpath_idx][2](0) != 0) {
+      throw std::runtime_error("CCC path after normalization");
+    }
+
     double x_subpath_start = x;
     double y_subpath_start = y;
     double theta_subpath_start = theta;
 
     start_qs_per_subpath.push_back(Vector3d(x, y, theta));
-    for (int turn_idx2 = 0; turn_idx2 < subpaths[subpath_idx2].size(); ++turn_idx2) {
-      double turn_dir = subpaths[subpath_idx2][turn_idx2](0);
-      double turn_dist = subpaths[subpath_idx2][turn_idx2](1);
+    for (int turn_idx = 0; turn_idx < subpaths[subpath_idx].size(); ++turn_idx) {
+      double turn_dir = subpaths[subpath_idx][turn_idx](0);
+      double turn_dist = subpaths[subpath_idx][turn_idx](1);
       double rho_times_turn_dir = rho*turn_dir;
 
       if (turn_dir == 0) {
@@ -700,71 +707,62 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
 
     Vector3d elongation_intervals = get_elongation_intervals(x_subpath_start, y_subpath_start, theta_subpath_start, x_subpath_end, y_subpath_end, theta_subpath_end, rho);
     elongation_intervals_per_subpath.push_back(elongation_intervals);
-    // Incrementally compute Minkowski sum of the feasible length intervals of the individual subpaths
-    std::vector<std::pair<double, double>> new_feasible_length_intervals;
-    for (auto interval : feasible_length_intervals) {
-      if (std::isinf(elongation_intervals(1))) {
-        // Only one interval
-        new_feasible_length_intervals.push_back(std::pair<double, double>(interval.first + elongation_intervals(0), std::numeric_limits<double>::infinity()));
-      } else {
-        // Two intervals
-        new_feasible_length_intervals.push_back(std::pair<double, double>(interval.first + elongation_intervals(0), interval.first + elongation_intervals(1)));
-        new_feasible_length_intervals.push_back(std::pair<double, double>(interval.first + elongation_intervals(2), std::numeric_limits<double>::infinity()));
-      }
-    }
-    feasible_length_intervals = new_feasible_length_intervals;
   }
 
-  bool feasible_ignoring_obstacles = false;
   double des_length = vmax*(goal(3) - start(3));
-  for (auto interval : feasible_length_intervals) {
-    if (interval.first <= des_length && des_length <= interval.second) {
-      feasible_ignoring_obstacles = true;
-      break;
-    }
-  }
+  std::vector<bool> tried_adding_circles_to_subpath(subpaths.size(), false);
 
-  if (debug) {
-    std::cout << "Is elongation of normalized subpaths to desired sum of lengths feasible, keeping subpath endpoints fixed and ignoring collisions during elongation? ";
-    if (feasible_ignoring_obstacles) {
-      std::cout << "yes" << std::endl;
-    } else {
-      std::cout << "no" << std::endl;
-    }
-  }
+  std::vector<std::pair<double, double>> feasible_length_intervals;
 
-  if (!feasible_ignoring_obstacles) {
-    return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
-  }
-
-  double remaining_length = des_length - cur_length;
-  std::vector<bool> tried_and_failed_adding_left_circle_for_subpath;
-  std::vector<bool> tried_and_failed_adding_right_circle_for_subpath;
-  for (int subpath_idx = 0; subpath_idx < subpaths.size(); ++subpath_idx) {
-    if (subpaths[subpath_idx].size() != 3) {
-      throw std::runtime_error("All subpaths should have size 3 after normalization");
-    }
-    if (subpaths[subpath_idx][0](0) != 0 &&
-        subpaths[subpath_idx][1](0) != 0 &&
-        subpaths[subpath_idx][2](0) != 0) {
-      throw std::runtime_error("CCC path after normalization");
-    }
-
-    tried_and_failed_adding_left_circle_for_subpath.push_back(false);
-    tried_and_failed_adding_right_circle_for_subpath.push_back(false);
-  }
-
-  bool we_think_elongation_is_feasible = true;
   // int max_elongation_iter = 2000;
   int max_elongation_iter = 1; // TODO: replace with the above
   for (int elongation_iter = 0; elongation_iter < max_elongation_iter; ++elongation_iter) {
-    if (!we_think_elongation_is_feasible) {
-      // TODO: should I compute the Minkowski sum each elongation_iter?
-      break;
+    // Incrementally compute Minkowski sum of the feasible length intervals of the individual subpaths
+    feasible_length_intervals.clear();
+    feasible_length_intervals.push_back(std::pair<double, double>(0., 0.));
+
+    for (int subpath_idx = 0; subpath_idx < subpaths.size(); ++subpath_idx) {
+      const Ref<const Vector3d> elongation_intervals = elongation_intervals_per_subpath[subpath_idx];
+      std::vector<std::pair<double, double>> new_feasible_length_intervals;
+      for (auto interval : feasible_length_intervals) {
+        if (std::isinf(elongation_intervals(1))) {
+          // Only one interval
+          new_feasible_length_intervals.push_back(std::pair<double, double>(interval.first + elongation_intervals(0), std::numeric_limits<double>::infinity()));
+        } else {
+          // Two intervals
+          new_feasible_length_intervals.push_back(std::pair<double, double>(interval.first + elongation_intervals(0), interval.first + elongation_intervals(1)));
+          new_feasible_length_intervals.push_back(std::pair<double, double>(interval.first + elongation_intervals(2), std::numeric_limits<double>::infinity()));
+        }
+      }
+      feasible_length_intervals = new_feasible_length_intervals;
     }
+
+    bool feasible_ignoring_obstacles = false;
+    for (auto interval : feasible_length_intervals) {
+      if (interval.first <= des_length && des_length <= interval.second) {
+        feasible_ignoring_obstacles = true;
+        break;
+      }
+    }
+
+    if (debug) {
+      std::cout << "Is elongation of normalized subpaths to desired sum of lengths feasible, keeping subpath endpoints fixed and ignoring collisions during elongation? ";
+      if (feasible_ignoring_obstacles) {
+        std::cout << "yes" << std::endl;
+      } else {
+        std::cout << "no" << std::endl;
+      }
+    }
+
+    if (!feasible_ignoring_obstacles) {
+      return std::numeric_limits<double>::infinity()*RowMatrixXd::Ones(1, 2);
+    }
+
+    double remaining_length = des_length - cur_length;
+
     if (remaining_length >= 2*M_PI*rho) {
       for (int subpath_idx = 0; subpath_idx < subpaths.size(); ++subpath_idx) {
-        if (!tried_and_failed_adding_left_circle_for_subpath[subpath_idx]) {
+        if (!tried_adding_circles_to_subpath[subpath_idx]) {
           // Try adding full circles on the left
           x = start_qs_per_subpath[subpath_idx](0);
           y = start_qs_per_subpath[subpath_idx](1);
@@ -776,16 +774,9 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
             subpaths[subpath_idx][0](1) = remaining_length - remaining_length_mod_twopirho;
             remaining_length = remaining_length_mod_twopirho;
             break;
-          } else {
-            tried_and_failed_adding_left_circle_for_subpath[subpath_idx] = true;
           }
-        }
 
-        if (!tried_and_failed_adding_right_circle_for_subpath[subpath_idx]) {
           // Try adding full circles on the right
-          x = start_qs_per_subpath[subpath_idx](0);
-          y = start_qs_per_subpath[subpath_idx](1);
-          theta = start_qs_per_subpath[subpath_idx](2);
           if (spatial_planner.collision_free(x, y, theta, -1, 2*M_PI*rho, x, y)) {
             subpaths[subpath_idx].insert(subpaths[subpath_idx].begin(), RowVector2d::Zero());
             subpaths[subpath_idx][0](0) = -1;
@@ -793,9 +784,8 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
             subpaths[subpath_idx][0](1) = remaining_length - remaining_length_mod_twopirho;
             remaining_length = remaining_length_mod_twopirho;
             break;
-          } else {
-            tried_and_failed_adding_right_circle_for_subpath[subpath_idx] = true;
           }
+          tried_adding_circles_to_subpath[subpath_idx] = true;
         }
       }
 
@@ -816,7 +806,6 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
       }
     }
 
-    /*
     for (int subpath_idx = 0; subpath_idx < subpaths.size(); ++subpath_idx) {
       // Elongate this subpath as close as we can get to the desired length via IC-sliding
 
@@ -825,7 +814,7 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
       turns_before_slide(0, 0) = 1;
       turns_before_slide(0, 1) = 0;
       for (int local_turn_idx = 0; local_turn_idx < num_turns_after_slide; ++local_turn_idx) {
-        if (subpaths[subpath_idx](0, 1) >= 2*M_PI*rho) {
+        if (subpaths[subpath_idx][0](1) >= 2*M_PI*rho) {
           if (subpaths[subpath_idx].size() != 4) {
             throw std::runtime_error("If first segment length >= 2*M_PI*rho, subpaths[subpath_idx].size() should equal 4");
           }
@@ -838,10 +827,162 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
           }
           turns_before_slide.row(1 + local_turn_idx) = subpaths[subpath_idx][local_turn_idx];
         }
+      }
 
-        RowMatrixXd turns_after_prev_slide = turns_before_slide;
-        double slide_amount = 0.;
-        bool collision = false;
+      RowMatrixXd turns_after_prev_slide = turns_before_slide;
+
+      double x_0_subpath = start_qs_per_subpath[subpath_idx](0);
+      double y_0_subpath = start_qs_per_subpath[subpath_idx](1);
+      double theta_0_subpath = start_qs_per_subpath[subpath_idx](2);
+
+      double x_f_subpath = end_qs_per_subpath[subpath_idx](0);
+      double y_f_subpath = end_qs_per_subpath[subpath_idx](1);
+      double theta_f_subpath = end_qs_per_subpath[subpath_idx](2);
+
+      ICSlidingClass sliding_obj(turns_before_slide, x_0_subpath, y_0_subpath, theta_0_subpath, x_f_subpath, y_f_subpath, theta_f_subpath, rho, false, true);
+      double slide_amount = 0.;
+      while (slide_amount < remaining_length) {
+        slide_amount += slide_step_size;
+        if (slide_amount > remaining_length) {
+          slide_amount = remaining_length;
+        }
+        RowMatrixXd turns_after_slide = sliding_obj.slide(slide_amount, turns_after_prev_slide.col(1).sum());
+
+        double x_collision;
+        double y_collision;
+        double theta_collision;
+        int collision_turn_idx;
+        double collision_dist;
+        bool collision = check_path_collides(x_collision, y_collision, theta_collision,
+                                             collision_turn_idx, collision_dist,
+                                             x_0_subpath, y_0_subpath, theta_0_subpath,
+                                             x_f_subpath, y_f_subpath, theta_f_subpath,
+                                             turns_after_slide);
+
+        if (collision) {
+          // Split
+
+          // Convert collision_dist along specific turn in turns_after_slide to collision_dist along turns_after_slide overall
+          collision_dist += turns_after_slide.col(1).head(collision_turn_idx).sum();
+
+          // It is possible that turns_after_prev_slide and turns_after_slide have a different sequence of segment types.
+          // Compute the collision_turn_idx for turns_after_prev_slide using collision_dist
+          double dist = 0.;
+          bool found = false;
+          for (collision_turn_idx = 0; collision_turn_idx < num_turns_after_slide; ++collision_turn_idx) {
+            dist += turns_after_prev_slide(collision_turn_idx, 1);
+            if (dist >= collision_dist) {
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            std::cout << "collision dist = " << collision_dist << " dist of turns after prev slide " << dist << " second minus first: " << dist - collision_dist << " dist of turns after slide: " << turns_after_slide.col(1).sum() << std::endl;
+            throw std::runtime_error("Could not compute collision_turn_idx for turns_after_prev_slide");
+          }
+
+          // Convert collision_dist along turns_after_prev_slide overall to collision_dist along specific turn in turns_after_prev_slide
+          collision_dist -= turns_after_prev_slide.col(1).head(collision_turn_idx).sum();
+
+          // Split subpath into two subpaths
+
+          // New subpath before collision
+          subpaths.insert(subpaths.begin() + subpath_idx, std::vector<RowVector2d>(collision_turn_idx + 1));
+          for (int turn_idx = 0; turn_idx < collision_turn_idx; ++turn_idx) {
+            subpaths[subpath_idx][turn_idx] = turns_after_prev_slide.row(turn_idx);
+          }
+          subpaths[subpath_idx].back()(1) = collision_dist;
+
+          if (subpaths[subpath_idx + 1].size() == 4) {
+            // We had a full circle at the beginning
+            subpaths[subpath_idx].insert(subpaths[subpath_idx].begin(), subpaths[subpath_idx + 1][0]);
+          }
+
+          // New subpath after collision
+          subpaths[subpath_idx + 1].clear();
+          
+          // Insert the turns in turns_after_prev_slide that occur after the collision point
+          for (int turn_idx = collision_turn_idx; turn_idx < num_turns_after_slide; ++turn_idx) {
+            subpaths[subpath_idx + 1].push_back(turns_after_prev_slide.row(turn_idx));
+          }
+          subpaths[subpath_idx + 1][0](1) -= collision_dist; // Colliding turn
+
+          if (subpaths[subpath_idx + 1].size() == 1) {
+            // One row, and it must be type C. Add dummy S and C afterward
+            subpaths[subpath_idx + 1].push_back(RowVector2d(0, 0));
+            subpaths[subpath_idx + 1].push_back(RowVector2d(1, 0));
+          }
+
+          if (subpaths[subpath_idx + 1].size() == 2) {
+            // Two rows. They must be type SC or CC because we're at the tail end of a Dubins path.
+            // Either way, insert dummy C at the beginning
+            if (subpaths[subpath_idx + 1][0](0) == 1) {
+              // If CC, make sure we don't have two consecutive Ls or Rs
+              subpaths[subpath_idx + 1].insert(subpaths[subpath_idx + 1].begin(), RowVector2d(-1, 0));
+            } else {
+              subpaths[subpath_idx + 1].insert(subpaths[subpath_idx + 1].begin(), RowVector2d(1, 0));
+            }
+          }
+
+          // Don't set x_f_subpath = x_collision and so forth because we want to find the 
+          // point at the same distance along the path in the sliding iteration before collision
+          x_f_subpath = x_0_subpath;
+          y_f_subpath = y_0_subpath;
+          theta_f_subpath = theta_0_subpath;
+          double ctheta = cos(theta_f_subpath);
+          double stheta = sin(theta_f_subpath);
+          for (int turn_idx = 0; turn_idx < collision_turn_idx + 1; ++turn_idx) {
+            double turn_dir = subpaths[subpath_idx][turn_idx](0);
+            double turn_dist = subpaths[subpath_idx][turn_idx](1);
+            if (turn_dir == 0) {
+              // S segment
+              x_f_subpath += turn_dist*ctheta;
+              y_f_subpath += turn_dist*stheta;
+            } else {
+              // C segment
+              double rho_times_turn_dir = rho*turn_dir;
+              theta_f_subpath += turn_dist/rho_times_turn_dir;
+              double next_ctheta = cos(theta_f_subpath);
+              double next_stheta = sin(theta_f_subpath);
+              x_f_subpath += rho_times_turn_dir*(-stheta + next_stheta);
+              y_f_subpath += rho_times_turn_dir*(ctheta - next_ctheta);
+              ctheta = next_ctheta;
+              stheta = next_stheta;
+            }
+          }
+
+          start_qs_per_subpath.insert(start_qs_per_subpath.begin() + subpath_idx, start_qs_per_subpath[subpath_idx]);
+          end_qs_per_subpath.insert(end_qs_per_subpath.begin() + subpath_idx, Vector3d(x_f_subpath, y_f_subpath, theta_f_subpath));
+          start_qs_per_subpath[subpath_idx + 1] = end_qs_per_subpath[subpath_idx];
+
+          
+          Vector3d elongation_intervals = get_elongation_intervals(x_0_subpath, y_0_subpath, theta_0_subpath, x_f_subpath, y_f_subpath, theta_f_subpath, rho);
+          elongation_intervals_per_subpath.insert(elongation_intervals_per_subpath.begin() + subpath_idx, elongation_intervals);
+
+          tried_adding_circles_to_subpath.insert(tried_adding_circles_to_subpath.begin() + subpath_idx, false);
+
+          // Don't work on the new segments until we've tried elongating all subsequent ones
+          ++subpath_idx;
+          break;
+        }
+
+        turns_after_prev_slide = turns_after_slide;
+      }
+
+      if (debug) {
+        int num_total_turns = 0;
+        for (auto subpath : subpaths) {
+          num_total_turns += subpath.size();
+        }
+        RowMatrixXd overall_turns(num_total_turns, 2);
+        int overall_turn_idx = 0;
+        for (auto subpath : subpaths) {
+          for (int turn_idx = 0; turn_idx < subpath.size(); ++turn_idx) {
+            overall_turns.row(overall_turn_idx) = subpath[turn_idx];
+            ++overall_turn_idx;
+          }
+        }
+        path_seq.push_back(overall_turns);
       }
 
       // Slide initial incomplete arc forward around right turning circle 
@@ -850,12 +991,9 @@ RowMatrixXd Yao2020Planner::plan(VectorXdRef_const start, VectorXdRef_const goal
 
       // Slide final incomplete arc backward around right turning circle 
 
-      // TODO: if we split, ++subpath_idx so we don't work on the split segments
-      // and move on to the next segment
-
-      // TODO: if we split, update the reachable lengths and loop guard variable
+      // TODO: if we split, update the start and end points, the elongation intervals, 
+      // and the tried_adding_circles per subpath
     }
-    */
   }
 
   int num_total_turns = 0;

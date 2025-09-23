@@ -28,5 +28,6 @@ class Yao2020Planner {
     Vector2d map_lb;
     Vector2d map_ub;
     // bool debug = true;
-    bool debug = false;
+    bool debug = true;
+    double slide_step_size = 0.1;
 };

@@ -119,3 +119,7 @@ double NoTimeDubinsPlanner::checkMotion(VectorXdRef s_valid_vec, VectorXdRef_con
 bool NoTimeDubinsPlanner::collision_free_get_intersection_point(double x, double y, double theta, double turn_dir, double turn_dist, double next_x, double next_y, double &x_collision, double &y_collision, double &theta_collision, double &collision_dist) {
   return std::static_pointer_cast<NoTimeDubinsMotionValidatorRects>(motion_validator)->collision_free_get_intersection_point(x, y, theta, turn_dir, turn_dist, next_x, next_y, x_collision, y_collision, theta_collision, collision_dist);
 }
+
+bool NoTimeDubinsPlanner::collision_free(double x, double y, double theta, double turn_dir, double turn_dist, double next_x, double next_y) {
+  return std::static_pointer_cast<NoTimeDubinsMotionValidatorRects>(motion_validator)->collision_free(x, y, theta, turn_dir, turn_dist, next_x, next_y);
+}

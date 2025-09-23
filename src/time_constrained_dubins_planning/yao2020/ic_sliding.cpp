@@ -1,22 +1,21 @@
 #include "mt_tsp_ros2/time_constrained_dubins_planning/yao2020/ic_sliding.h"
 
-ICSlidingClass::ICSlidingClass(RowMatrixXdRef_const turns, double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double rho, bool direction) : turns(turns), x_0(x_0), y_0(y_0), theta_0(theta_0), x_f(x_f), y_f(y_f), theta_f(theta_f), rho(rho), direction(direction) {
-  slide_idx = direction ? turns.rows() - 2 : 1;
+ICSlidingClass::ICSlidingClass(RowMatrixXdRef_const turns, double x_0, double y_0, double theta_0, double x_f, double y_f, double theta_f, double rho,  bool final_turn, bool lengthen) : turns(turns), x_0(x_0), y_0(y_0), theta_0(theta_0), x_f(x_f), y_f(y_f), theta_f(theta_f), rho(rho), final_turn(final_turn), lengthen(lengthen) {
+  if (final_turn) {
+    slide_idx = turns.rows() - 2;
+  } else {
+    slide_idx = 1;
+  }
+
   if (turns(slide_idx, 0) == 0) {
     throw std::runtime_error("Cannot slide an S segment");
   }
-
-  /*
-  if (turns.rows() < 2) {
-    throw std::runtime_error("Cannot slide if we do not have at least two segments");
-  }
-  */
 
   if (turns.rows() != 4) {
     throw std::runtime_error("Cannot slide if we do not have at exactly four segments");
   }
 
-  turn_to_shorten = direction ? slide_idx + 1 : slide_idx - 1;
+  turn_to_shorten_or_lengthen = final_turn ? slide_idx + 1 : slide_idx - 1;
 
   path_type_options.push_back(DubinsPathType::LSL);
   path_type_options.push_back(DubinsPathType::LSR);
@@ -27,22 +26,26 @@ ICSlidingClass::ICSlidingClass(RowMatrixXdRef_const turns, double x_0, double y_
 }
 
 RowMatrixXd ICSlidingClass::slide(double amount, double prev_length) {
-  // Compute configuration after/before shortened segment (after if sliding backward, before if sliding forward)
+  // Compute configuration before/after shortened/lengthened segment (before if shortened/lengthened segment is final turn, after otherwise)
   double x_mid;
   double y_mid;
   double theta_mid;
-  double dist = turns(turn_to_shorten, 1) - amount;
-  if (turns(turn_to_shorten, 0) == 0) {
+  double dist;
+  if (lengthen) {
+    dist = turns(turn_to_shorten_or_lengthen, 1) + amount;
+  } else {
+    dist = turns(turn_to_shorten_or_lengthen, 1) - amount;
+  }
+
+  if (turns(turn_to_shorten_or_lengthen, 0) == 0) {
     // S segment
-    if (direction) {
-      // Sliding forward
+    if (final_turn) {
       double ctheta_f = cos(theta_f);
       double stheta_f = sin(theta_f);
       x_mid = x_f - ctheta_f*dist;
       y_mid = y_f - stheta_f*dist;
       theta_mid = theta_f;
     } else {
-      // Sliding backward
       double ctheta_0 = cos(theta_0);
       double stheta_0 = sin(theta_0);
       x_mid = x_0 + ctheta_0*dist;
@@ -51,9 +54,8 @@ RowMatrixXd ICSlidingClass::slide(double amount, double prev_length) {
     }
   } else {
     // C segment
-    double C_sign = turns(turn_to_shorten, 0);
-    if (direction) {
-      // Sliding forward
+    double C_sign = turns(turn_to_shorten_or_lengthen, 0);
+    if (final_turn) {
       double c_f = cos(theta_f);
       double s_f = sin(theta_f);
       theta_mid = theta_f - C_sign*dist/rho;
@@ -62,7 +64,6 @@ RowMatrixXd ICSlidingClass::slide(double amount, double prev_length) {
       x_mid = x_f - rho/C_sign*(-s_mid + s_f);
       y_mid = y_f - rho/C_sign*(c_mid - c_f);
     } else {
-      // Sliding backward
       double c_0 = cos(theta_0);
       double s_0 = sin(theta_0);
       theta_mid = theta_0 + C_sign*dist/rho;
@@ -75,16 +76,15 @@ RowMatrixXd ICSlidingClass::slide(double amount, double prev_length) {
 
   // Compute Dubins path
   RowMatrixXd ret(4, 2);
-  ret(turn_to_shorten, 0) = turns(turn_to_shorten, 0);
-  ret(turn_to_shorten, 1) = dist;
+  ret(turn_to_shorten_or_lengthen, 0) = turns(turn_to_shorten_or_lengthen, 0);
+  ret(turn_to_shorten_or_lengthen, 1) = dist;
   double q_0_for_dubins[3];
   double q_f_for_dubins[3];
 
   DubinsPath closest_path_among_options;
   double closest_path_length_abs_diff_among_options = std::numeric_limits<double>::infinity();
 
-  if (direction) {
-    // Sliding forward
+  if (final_turn) {
     q_0_for_dubins[0] = x_0;
     q_0_for_dubins[1] = y_0;
     q_0_for_dubins[2] = theta_0;
@@ -106,6 +106,7 @@ RowMatrixXd ICSlidingClass::slide(double amount, double prev_length) {
         closest_path_among_options = path;
       }
 
+      /*
       if (path.type == DubinsPathType::LSL) {
         std::cout << "LSL ";
       } else if (path.type == DubinsPathType::LSR) {
@@ -120,8 +121,9 @@ RowMatrixXd ICSlidingClass::slide(double amount, double prev_length) {
         std::cout << "LRL ";
       }
       std::cout << l << " ";
+      */
     }
-    std::cout << " prev length " << prev_length << std::endl;
+    // std::cout << " prev length " << prev_length << std::endl;
 
     if (closest_path_among_options.type == DubinsPathType::LSL) {
       ret(0, 0) = 1.;
@@ -152,7 +154,6 @@ RowMatrixXd ICSlidingClass::slide(double amount, double prev_length) {
     ret(1, 1) = closest_path_among_options.param[1]*rho;
     ret(2, 1) = closest_path_among_options.param[2]*rho;
   } else {
-    // Sliding backward
     q_0_for_dubins[0] = x_mid;
     q_0_for_dubins[1] = y_mid;
     q_0_for_dubins[2] = theta_mid;
