@@ -12,8 +12,6 @@
 #include <tuple>
 #include <omp.h>
 
-// THIS IS UNFINISHED
-
 typedef const Ref<const Matrix<long, Dynamic, Dynamic, RowMajor>> &RowMatrixXlRef_const;
 typedef const Ref<const Matrix<bool, Dynamic, Dynamic, RowMajor>> &RowMatrixXbRef_const;
 
