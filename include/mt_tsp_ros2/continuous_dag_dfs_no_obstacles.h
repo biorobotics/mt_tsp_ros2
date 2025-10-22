@@ -82,8 +82,8 @@ double sft(Ref<Vector2d> next_pos, const Ref<const Vector2d> &pos, double t, dou
   double time_multiplier = negate_trj_input ? -1 : 1;
   double next_t = tw_end;
   double delta_t = next_t - t;
-  next_pos = trj(time_multiplier*next_t);
-  double dist = (next_pos - pos).norm();
+  Vector2d tw_end_pos = trj(time_multiplier*next_t);
+  double dist = (tw_end_pos - pos).norm();
 
   if (dist > vmax*delta_t) {
     return std::numeric_limits<double>::infinity();
@@ -99,10 +99,11 @@ double sft(Ref<Vector2d> next_pos, const Ref<const Vector2d> &pos, double t, dou
     return start_delta_t;
   }
 
+  double root_finding_tol = 1e-4;
+
   int max_newton_iter = 100;
   double feas_next_t = next_t;
-  Vector2d feas_next_pos = next_pos;
-  double feas_dist = dist;
+  Vector2d feas_next_pos = tw_end_pos;
   bool newton_success = false;
   for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
     // Find root of dist - vmax*delta_t
@@ -115,9 +116,8 @@ double sft(Ref<Vector2d> next_pos, const Ref<const Vector2d> &pos, double t, dou
     if (dist <= vmax*delta_t) {
       feas_next_t = next_t;
       feas_next_pos = next_pos;
-      feas_dist = dist;
 
-      if (std::abs(resid) < 1e-4) {
+      if (std::abs(resid) < root_finding_tol) {
         newton_success = true;
         break;
       }
@@ -125,7 +125,40 @@ double sft(Ref<Vector2d> next_pos, const Ref<const Vector2d> &pos, double t, dou
   }
 
   if (!newton_success) {
-    throw std::runtime_error("Newton did not converge. Increase the max number of iterations");
+    // Run bisection
+    double t_low = std::max(t, tw_start);
+    feas_next_t = tw_end;
+    feas_next_pos = tw_end_pos;
+    int max_bisection_iter = 100;
+    bool bisection_success = false;
+    for (int bisection_iter = 0; bisection_iter < max_bisection_iter; ++bisection_iter) {
+      double t_mid = 0.5*(t_low + feas_next_t);
+      delta_t = t_mid - t;
+      Vector2d pos_mid = trj(time_multiplier*t_mid);
+      dist = (pos_mid - pos).norm();
+
+      double resid = dist - vmax*delta_t;
+
+      if (dist > vmax*delta_t) {
+        // Travel is infeasible
+        t_low = t_mid;
+      } else {
+        // Travel is feasible
+        feas_next_t = t_mid;
+        feas_next_pos = pos_mid;
+
+        if (std::abs(resid) < root_finding_tol) {
+          bisection_success = true;
+          break;
+        }
+      }
+    }
+
+    if (!bisection_success) {
+      throw std::runtime_error("Bisection did not converge. Increase the max number of iterations");
+    }
+
+    // throw std::runtime_error("Newton did not converge. Increase the max number of iterations");
   }
   next_pos = feas_next_pos;
   return feas_next_t - t;
