@@ -288,7 +288,7 @@ VectorXd continuous_dag_dfs_no_obstacles(Ref<VectorXl> target_seq, Ref<VectorXd>
         // profiling_data(3) += ((double)tmp_nanos)/1e9; // node gen time
 
         auto it = earliest_node_per_key.find(neighbor_node->key);
-        if (it != earliest_node_per_key.end() && it->second->final_time <= pop->final_time) {
+        if (it != earliest_node_per_key.end() && it->second->final_time <= neighbor_node->final_time) {
           continue;
         }
 
