@@ -70,7 +70,8 @@ install(DIRECTORY irb1600_aggregated DESTINATION share/${PROJECT_NAME})
 include_directories(
   include
   $ENV{HOME}/Clarabel.cpp/include
-  $ENV{HOME}/gurobi1103/linux64/include/
+  # $ENV{HOME}/gurobi1103/linux64/include/
+  $ENV{HOME}/gurobi1203/linux64/include/
 )
 
 ament_python_install_package(${PROJECT_NAME})
@@ -89,8 +90,10 @@ pybind11_add_module(gurobi_wrapper
   src/gurobi_wrapper.cpp
   src/bind_gurobi_wrapper.cpp
 )
-target_link_directories(gurobi_wrapper PRIVATE /$ENV{HOME}/gurobi1103/linux64/lib/)
-target_link_libraries(gurobi_wrapper PRIVATE gurobi110)
+# target_link_directories(gurobi_wrapper PRIVATE /$ENV{HOME}/gurobi1103/linux64/lib/)
+# target_link_libraries(gurobi_wrapper PRIVATE gurobi110)
+target_link_directories(gurobi_wrapper PRIVATE /$ENV{HOME}/gurobi1203/linux64/lib/)
+target_link_libraries(gurobi_wrapper PRIVATE gurobi120)
 install(TARGETS gurobi_wrapper
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
@@ -106,8 +109,10 @@ pybind11_add_module(gtsp_wrapper
   src/gtsp.cpp
   src/bind_gtsp.cpp
 )
-target_link_directories(gtsp_wrapper PRIVATE /$ENV{HOME}/gurobi1103/linux64/lib/)
-target_link_libraries(gtsp_wrapper PRIVATE gurobi110)
+# target_link_directories(gtsp_wrapper PRIVATE /$ENV{HOME}/gurobi1103/linux64/lib/)
+# target_link_libraries(gtsp_wrapper PRIVATE gurobi110)
+target_link_directories(gtsp_wrapper PRIVATE /$ENV{HOME}/gurobi1203/linux64/lib/)
+target_link_libraries(gtsp_wrapper PRIVATE gurobi120)
 install(TARGETS gtsp_wrapper
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
