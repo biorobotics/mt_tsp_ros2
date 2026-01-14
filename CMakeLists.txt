@@ -415,6 +415,14 @@ install(TARGETS memetic_robot_arm
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(continuous_dag_dfs_no_obstacles
+  src/bind_continuous_dag_dfs_no_obstacles.cpp
+)
+target_link_libraries(continuous_dag_dfs_no_obstacles PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS continuous_dag_dfs_no_obstacles
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 # There by default
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
