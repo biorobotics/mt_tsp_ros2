@@ -1,6 +1,6 @@
 #include "mt_tsp_ros2/trajopt_through_convex_sets.h"
 #include <limits>
-#include <Clarabel>
+#include <clarabel.hpp>
 #include <fstream>
 
 MatrixXd openData(std::string fileToOpen)

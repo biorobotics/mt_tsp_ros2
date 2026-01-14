@@ -121,6 +121,7 @@ pybind11_add_module(gmdm_wrapper
   src/elongate_dubins_path.cpp
   src/bind_gmdm.cpp
   src/dubins.cpp
+  src/time_constrained_dubins_planning/angle_mod.cpp
 )
 target_include_directories(gmdm_wrapper PRIVATE /$ENV{HOME}/cppitertools/cppitertools/)
 target_link_libraries(gmdm_wrapper PRIVATE OpenMP::OpenMP_CXX)
@@ -271,6 +272,8 @@ message(WARNING "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}")
 pybind11_add_module(memetic_dubins_ce_mt_tsp
   src/bind_memetic_dubins_ce_mt_tsp.cpp
   src/dubins.cpp
+  src/elongate_dubins_path.cpp
+  src/time_constrained_dubins_planning/angle_mod.cpp
 )
 target_link_libraries(memetic_dubins_ce_mt_tsp PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS memetic_dubins_ce_mt_tsp
@@ -280,6 +283,8 @@ install(TARGETS memetic_dubins_ce_mt_tsp
 pybind11_add_module(memetic_dubins_mt_tsp
   src/bind_memetic_dubins_mt_tsp.cpp
   src/dubins.cpp
+  src/elongate_dubins_path.cpp
+  src/time_constrained_dubins_planning/angle_mod.cpp
 )
 target_link_libraries(memetic_dubins_mt_tsp PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS memetic_dubins_mt_tsp
@@ -289,6 +294,8 @@ install(TARGETS memetic_dubins_mt_tsp
 pybind11_add_module(memetic_vs_dubins_mt_tsp
   src/bind_memetic_vs_dubins_mt_tsp.cpp
   src/dubins.cpp
+  src/elongate_dubins_path.cpp
+  src/time_constrained_dubins_planning/angle_mod.cpp
 )
 target_link_libraries(memetic_vs_dubins_mt_tsp PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS memetic_vs_dubins_mt_tsp
@@ -298,6 +305,8 @@ install(TARGETS memetic_vs_dubins_mt_tsp
 pybind11_add_module(memetic_sampling
   src/bind_memetic_sampling.cpp
   src/dubins.cpp
+  src/elongate_dubins_path.cpp
+  src/time_constrained_dubins_planning/angle_mod.cpp
 )
 target_link_libraries(memetic_sampling PRIVATE OpenMP::OpenMP_CXX)
 install(TARGETS memetic_sampling
