@@ -50,7 +50,7 @@ std::vector<size_t> sort_indexes(const std::vector<T> &v) {
 
 void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const Vector2d> &p0, double vmax, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const VectorXd> &target_radii, std::string error_prefix, bool no_tw, double t0, double servicing_time) {
   int num_targets = tw_per_target.rows();
-  double t = t0;
+  double t = t0 + servicing_time;
   Vector2d pos = p0;
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
     int target_idx = chromosome(seq_idx, 0);
@@ -66,7 +66,7 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
     Vector2d next_pos = q_trj_per_target[target_idx](t) + next_rel_pos;
     double dist = (next_pos - pos).norm();
 
-    if (dist > vmax*(delta_t - servicing_time) + 1e-4) {
+    if (dist > vmax*delta_t + 1e-4) {
       throw std::runtime_error(error_prefix + "speed constraint violated");
     }
     pos = next_pos;
@@ -80,7 +80,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   int num_targets = tw_per_target.rows();
 
   bool repair_failed = false;
-  double t = t0;
+  double t = t0 + servicing_time;
   Vector2d pos = p0;
   double heading = heading0;
   Vector2d next_rel_pos;
@@ -748,7 +748,7 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
 bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const Ref<const VectorXd> &target_radii, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, double &cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw, double servicing_time) {
   int num_targets = tw_per_target.rows();
 
-  double t = 0;
+  double t = servicing_time;
   Vector2d pos = p0;
   Vector2d next_rel_pos;
   Vector2d next_pos;
@@ -1445,7 +1445,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       }
     }
   } else {
-    double t = 0;
+    double t = servicing_time;
     Vector2d pos = p0;
     for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
       int target_idx = Xbest(seq_idx, 0);
@@ -1521,7 +1521,7 @@ void get_selected_pts(Ref<RowMatrixXd> selected_pts_per_target, const std::vecto
       }
     }
   } else {
-    double t = 0;
+    double t = servicing_time;
     Vector2d pos = p0;
     std::cout << "Checking feasibility in get selected pts" << std::endl;
     for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
