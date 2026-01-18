@@ -74,7 +74,7 @@ class MemeticPCGUtilsSampling {
       RowMatrixXd updated_population = population;
       VectorXd updated_population_costs = population_costs;
 
-      #pragma omp parallel for
+      // #pragma omp parallel for
       for (int chromosome_idx = 0; chromosome_idx < pop_size; ++chromosome_idx) {
         int parent1_idx = chromosome_idx;
         int parent2_idx = parent_distribution(rngs_per_thread[omp_get_thread_num()]);
