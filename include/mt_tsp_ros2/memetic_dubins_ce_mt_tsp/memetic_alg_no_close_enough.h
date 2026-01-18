@@ -54,7 +54,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
   int num_targets = tw_per_target.rows();
 
   bool repair_failed = false;
-  double t = t0;
+  double t = t0 + servicing_time;
   Vector2d pos = p0;
   double heading = heading0;
   Vector2d next_pos;
@@ -747,7 +747,7 @@ bool transform_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_
 bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, Ref<Vector1d> cost, int &max_newton_iter_for_success_repair, int &max_bisection_iter_for_success_transformation, const MemeticAlgParams &params, bool no_tw, double t0, double servicing_time) {
   int num_targets = tw_per_target.rows();
 
-  double t = t0;
+  double t = t0 + servicing_time;
   Vector2d pos = p0;
   Vector2d next_rel_pos;
   Vector2d next_pos;
@@ -764,7 +764,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
       MatrixXd tmp_chromosome = X.block(seq_idx, 0, 1, gene_size);
       tmp_chromosome(0, 0) = 0;
       double dummy_next_heading;
-      bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), tmp_q_trj, pos, 0., vmax, tmp_cost, false, 0., max_newton_iter_for_success_repair, params, no_tw, dummy_next_heading, t, servicing_time);
+      bool repair_failed = repair_chromosome(tmp_chromosome, tw_per_target.block(target_idx, 0, 1, 2), tmp_q_trj, pos, 0., vmax, tmp_cost, false, 0., max_newton_iter_for_success_repair, params, no_tw, dummy_next_heading, t - servicing_time, servicing_time);
       if (repair_failed) {
         cost(0) = std::numeric_limits<double>::infinity();
         return false;
@@ -900,7 +900,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
 
 void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<const RowMatrixXd> &tw_per_target, double vmax, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, int chromosome_idx, double servicing_time) {
   int num_targets = tw_per_target.rows();
-  double t = 0.;
+  double t = servicing_time;
   Vector2d pos = p0;
   for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
     int target_idx = chromosome(seq_idx, 0);
@@ -913,7 +913,7 @@ void check_chromosome_feasible(const Ref<const MatrixXd> &chromosome, const Ref<
       throw std::runtime_error("time out of bounds for chromosome " + std::to_string(chromosome_idx));
     }
 
-    if ((next_pos - pos).norm() > vmax*(delta_t - servicing_time)) {
+    if ((next_pos - pos).norm() > vmax*delta_t) {
       std::cout << (next_pos - pos).norm() - vmax*(delta_t - servicing_time) << std::endl;
       throw std::runtime_error("distance larger than vmax*delta_t for chromosome " + std::to_string(chromosome_idx));
     }
@@ -1266,7 +1266,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
       }
     }
   } else {
-    double t = 0;
+    double t = servicing_time;
     Vector2d pos = p0;
     for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
       int target_idx = Xbest(seq_idx, 0);
@@ -1340,7 +1340,7 @@ void get_selected_pts(Ref<RowMatrixXd> selected_pts_per_target, const std::vecto
       }
     }
   } else {
-    double t = 0;
+    double t = servicing_time;
     Vector2d pos;
     for (int seq_idx = 0; seq_idx < num_targets; ++seq_idx) {
       int target_idx = X(seq_idx, 0);
