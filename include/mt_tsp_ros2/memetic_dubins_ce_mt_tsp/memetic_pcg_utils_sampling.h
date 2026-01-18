@@ -29,13 +29,10 @@ bool repair_chromosome(const Ref<const VectorXl> &target_seq, const py::array_t<
   auto gtsp_cost_mat_flat_unchecked = gtsp_cost_mat_flat.unchecked<1>();
   auto all_pts_unchecked = all_pts.unchecked<2>();
 
-  int pt_dim = X.cols() - 1;
+  int pt_dim = all_pts_unchecked.shape(1);
 
   for (int tour_idx = 1; tour_idx < tour.size() - 1; ++tour_idx) {
     int node_idx = tour(tour_idx);
-    for (int i = 0; i < pt_dim; ++i) {
-      X(tour_idx - 1, 1 + i) = all_pts_unchecked(node_idx, i);
-    }
     cost += gtsp_cost_mat_flat_unchecked(prev_node_idx*num_nodes + node_idx);
     // std::cout << prev_node_idx << " " << node_idx << " " << num_nodes << " " << gtsp_cost_mat_flat_unchecked(prev_node_idx*num_nodes + node_idx) << " " << gtsp_cost_mat_rounded_and_scaled_flat_unchecked(prev_node_idx*num_nodes + node_idx) << std::endl;
     prev_node_idx = node_idx;
@@ -48,7 +45,7 @@ bool repair_chromosome(const Ref<const VectorXl> &target_seq, const py::array_t<
 
 class MemeticPCGUtilsSampling {
   public:
-    MemeticPCGUtilsSampling(int num_openmp_threads, double mutation_prob) : num_openmp_threads(num_openmp_threads), mutation_prob(mutation_prob) {
+    MemeticPCGUtilsSampling(int num_openmp_threads, double mutation_prob, int num_targets, int gene_size) : num_openmp_threads(num_openmp_threads), mutation_prob(mutation_prob) {
       std::vector<unsigned int> seeds{4223100027, 870236586, 1683737518, 3430707182, 1613429085, 1714341085, 853110547, 1988005940, 2629786018, 1139192408};
 
       if (num_openmp_threads > seeds.size()) {
@@ -61,7 +58,6 @@ class MemeticPCGUtilsSampling {
         target_seq_per_thread.push_back(VectorXl::Zero(num_targets));
         inserted_targets_per_thread.push_back(VectorXb::Zero(num_targets));
       }
-      omp_set_num_threads(num_openmp_threads);
     }
 
     void crossover(Ref<RowMatrixXd> population, Ref<VectorXd> population_costs, const py::array_t<long> &gtsp_cost_mat_rounded_and_scaled_flat, const py::array_t<double> &gtsp_cost_mat_flat, const std::vector<py::array_t<long>> &target_to_pt_ptr, const py::array_t<double> &all_pts, long inf_val, int num_nodes) {
@@ -132,17 +128,17 @@ class MemeticPCGUtilsSampling {
         }
 
         double cost = -1.;
-        VectorXl tour = -VectorXl::Ones(num_targets);
+        VectorXl tour = -VectorXl::Ones(num_targets + 2);
         bool repair_failed = repair_chromosome(target_seq_per_thread[thread_idx], gtsp_cost_mat_rounded_and_scaled_flat, gtsp_cost_mat_flat, target_to_pt_ptr, all_pts, cost, inf_val, num_nodes, tour);
         bool success = !repair_failed;
         if (cost == -1.) {
           throw std::runtime_error("Did not update cost");
         }
-        if (tour.minCoeff() == -1) {
+        if (std::isfinite(cost) && tour.minCoeff() == -1) {
           throw std::runtime_error("Did not populate some element of tour");
         }
 
-        if (!success || cost(0) >= population_costs(chromosome_idx)) {
+        if (!success || cost >= population_costs(chromosome_idx)) {
           continue;
         }
 
@@ -151,7 +147,7 @@ class MemeticPCGUtilsSampling {
           updated_population.block(updated_start_row + seq_idx, 1, 1, gene_size - 1) = selected_pts_per_target_per_thread[thread_idx].row(target_idx);
           updated_population(updated_start_row + seq_idx, 0) = target_idx;
         }
-        updated_population_costs(chromosome_idx) = cost(0);
+        updated_population_costs(chromosome_idx) = cost;
       }
 
       population = updated_population;

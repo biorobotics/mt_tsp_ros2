@@ -5,9 +5,13 @@
 
 namespace py = pybind11;
 
+PYBIND11_MAKE_OPAQUE(std::vector<py::array_t<long>>)
+
 PYBIND11_MODULE(memetic_pcg_utils_sampling, m) {
-  py::class_<MemeticPCGUtils>(m, "MemeticPCGUtilsSampling")
-    .def(py::init<int, double>())
+  py::bind_vector<std::vector<py::array_t<long>>>(m, "VectorOfLongArrays");
+
+  py::class_<MemeticPCGUtilsSampling>(m, "MemeticPCGUtilsSampling")
+    .def(py::init<int, double, int, int>())
     .def("crossover", &MemeticPCGUtilsSampling::crossover)
     ;
 }
