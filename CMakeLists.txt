@@ -341,6 +341,14 @@ install(TARGETS memetic_pcg_utils
   DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
 )
 
+pybind11_add_module(memetic_pcg_utils_sampling
+  src/bind_memetic_pcg_utils_sampling.cpp
+)
+target_link_libraries(memetic_pcg_utils_sampling PRIVATE OpenMP::OpenMP_CXX)
+install(TARGETS memetic_pcg_utils_sampling
+  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+)
+
 add_executable(compare_to_gdip 
   src/time_constrained_dubins_planning/angle_mod.cpp
   src/elongate_dubins_path.cpp
