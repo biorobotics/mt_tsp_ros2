@@ -21,6 +21,8 @@ PYBIND11_MODULE(dag_dfs, m) {
     .def("plan_considering_evaluations", &LifelongDAGDFSPlanner::plan_considering_evaluations)
     .def("plan_biased", &LifelongDAGDFSPlanner::plan_biased)
     .def("get_before_time", &LifelongDAGDFSPlanner::get_before_time)
+    .def("get_max_observed_stack_size", &LifelongDAGDFSPlanner::get_max_observed_stack_size)
+    .def("get_max_observed_closed_list_size", &LifelongDAGDFSPlanner::get_max_observed_closed_list_size)
     .def("adjust_before_using_tour", &LifelongDAGDFSPlanner::adjust_before_using_tour)
     .def("compute_before_target_to_target", &LifelongDAGDFSPlanner::compute_before_target_to_target)
     ;

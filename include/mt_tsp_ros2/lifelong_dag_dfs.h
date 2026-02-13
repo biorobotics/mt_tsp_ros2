@@ -44,6 +44,9 @@ class LifelongDAGDFSPlanner {
         auto nanos = std::chrono::duration_cast<std::chrono::microseconds>(timer_stop - timer_start).count();
         before_time = ((double)nanos)/1e9;
       }
+
+      max_observed_stack_size = 0;
+      max_observed_closed_list_size = 0;
     }
 
     MatrixXb compute_before_target_to_target(const std::vector<py::array_t<long>> &target_to_pt_ptr) {
@@ -354,6 +357,8 @@ class LifelongDAGDFSPlanner {
       omp_set_num_threads(num_threads);
 
       while (stack.size()) {
+        max_observed_stack_size = std::max(max_observed_stack_size, (int)(stack.size()));
+        max_observed_closed_list_size = std::max(max_observed_closed_list_size, (int)(closed_list.size()));
         auto timer_stop = std::chrono::high_resolution_clock::now();
         auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(timer_stop - timer_start).count();
         if (((double)nanos)/1e9 > time_limit) {
@@ -518,12 +523,23 @@ class LifelongDAGDFSPlanner {
     double get_before_time() {
       return before_time;
     }
+
+    int get_max_observed_stack_size() {
+      return max_observed_stack_size;
+    }
+
+    int get_max_observed_closed_list_size() {
+      return max_observed_closed_list_size;
+    }
+
   private:
     MatrixXb before;
     double before_time;
     int num_threads;
     MatrixXb before_target_to_target;
     int num_targets;
+    int max_observed_stack_size;
+    int max_observed_closed_list_size;
 };
 
 class LifelongDAGDFSPlannerUnorderedSet {
@@ -703,6 +719,7 @@ class LifelongDAGDFSPlannerUnorderedSet {
     double get_before_time() {
       return before_time;
     }
+
   private:
     MatrixXb before;
     double before_time;
