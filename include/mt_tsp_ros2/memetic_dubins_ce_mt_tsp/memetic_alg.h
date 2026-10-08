@@ -942,7 +942,7 @@ void gradient_based_local_search(Ref<MatrixXd> X, double &cost, int gene_idx, co
             transformation_succeeded = false;
           }
         } else {
-          if (do_transformation_for_nondubins_distance_objective || no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
+          if ((do_transformation_for_nondubins_distance_objective && !params.min_latency && !params.min_time) || no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
             transformation_succeeded = transform_chromosome_no_dubins(local_modification, tw_per_target, target_radii, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair, max_bisection_iter_for_success_transformation, params, no_tw, servicing_time);
           } else {
             transformation_succeeded = false;

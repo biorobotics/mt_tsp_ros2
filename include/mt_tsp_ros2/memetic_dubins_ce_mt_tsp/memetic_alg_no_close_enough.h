@@ -370,7 +370,7 @@ bool repair_chromosome(Ref<MatrixXd> X, const Ref<const RowMatrixXd> &tw_per_tar
         if (!no_tw) {
           // Check if we can intercept at start of time window
           double next_t = tw_per_target(target_idx, 0);
-          Vector2d next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+          Vector2d next_pos = q_trj_per_target[target_idx](next_t);
           double dist = (next_pos - pos).norm();
           double delta_t = next_t - t;
           if (dist <= vmax*delta_t) {
@@ -749,7 +749,6 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
 
   double t = t0 + servicing_time;
   Vector2d pos = p0;
-  Vector2d next_rel_pos;
   Vector2d next_pos;
   cost(0) = 0;
   bool made_change = false;
@@ -783,7 +782,7 @@ bool transform_chromosome_no_dubins(Ref<MatrixXd> X, const Ref<const RowMatrixXd
       if (!no_tw && t <= tw_per_target(target_idx, 0)) {
         // Check if we can intercept at start of time window
         double next_t = tw_per_target(target_idx, 0);
-        Vector2d next_pos = q_trj_per_target[target_idx](next_t) + next_rel_pos;
+        Vector2d next_pos = q_trj_per_target[target_idx](next_t);
         double dist = (next_pos - pos).norm();
         double delta_t = next_t - t;
         if (dist <= vmax*delta_t) {
@@ -1129,7 +1128,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         (*updated_population_costs)[chromosome_idx] = (*population_costs)[chromosome_idx];
         continue;
       }
-
+      
       num_feas_chromosomes_generated_per_thread(omp_get_thread_num()) += 1;
 
       if (cost < (*population_costs)[chromosome_idx]) {
@@ -1154,7 +1153,7 @@ RowMatrixXd memetic_alg(Ref<RowMatrixXd> selected_pts_per_target, const Ref<cons
         }
       } else {
         // if (true) {
-        if (do_transformation_for_nondubins_distance_objective || no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
+        if ((do_transformation_for_nondubins_distance_objective && !params.min_latency && !params.min_time) || no_tw || ((params.min_latency || params.min_time) && !optimization_during_repair)) {
           success = transform_chromosome_no_dubins(Xnew, tw_per_target, q_trj_per_target, p0, vmax, tmp_cost, max_newton_iter_for_success_repair_per_thread[omp_get_thread_num()], max_bisection_iter_for_success_transformation_per_thread[omp_get_thread_num()], params, no_tw, 0., servicing_time);
           cost = tmp_cost(0);
         } else {
