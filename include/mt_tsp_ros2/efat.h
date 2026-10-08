@@ -24,7 +24,7 @@ const double root_finding_tol = 1e-2;
 
 class EFAT {
   public:
-    EFAT(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, bool no_tw, double t0) : tw_per_target(tw_per_target), q_trj_per_target(q_trj_per_target), p0(p0), vmax(vmax), no_tw(no_tw), t0(t0) {
+    EFAT(const Ref<const RowMatrixXd> &tw_per_target, const std::vector<ExtendedCppSpline> &q_trj_per_target, const Ref<const Vector2d> &p0, double vmax, bool no_tw, double t0, bool min_time) : tw_per_target(tw_per_target), q_trj_per_target(q_trj_per_target), p0(p0), vmax(vmax), no_tw(no_tw), t0(t0), min_time(min_time) {
     }
 
     bool efat_chain(Ref<Vector1d> cost, Ref<RowMatrixXd> selected_pts_per_target, VectorXlRef_const target_seq, bool feasible_times) {
@@ -56,7 +56,17 @@ class EFAT {
           selected_pts_per_target(target_idx, 0) = next_t;
           selected_pts_per_target(target_idx, 1) = next_pos(0);
           selected_pts_per_target(target_idx, 2) = next_pos(1);
-          cost(0) += next_t - tw_per_target(target_idx, 0);
+          if (min_time) {
+            if (seq_idx + 1 == num_targets) {
+              cost(0) = next_t;
+            }
+          } else {
+            if (no_tw) {
+              cost(0) += next_t;
+            } else {
+              cost(0) += next_t - tw_per_target(target_idx, 0);
+            }
+          }
           t = next_t;
           pos = next_pos;
           continue;
@@ -76,6 +86,7 @@ class EFAT {
         int max_newton_iter = 10;
         double feas_next_t = next_t;
         Vector2d feas_next_pos = next_pos;
+        bool converged = false;
         for (int newton_iter = 0; newton_iter < max_newton_iter; ++newton_iter) {
           // Find root of dist - vmax*delta_t
           double resid = dist - vmax*delta_t + 1e-4; // The 1e-4 is so we actually get to a feasible solution
@@ -92,9 +103,13 @@ class EFAT {
             }
 
             if (std::abs(resid) < root_finding_tol) {
+              converged = true;
               break;
             }
           }
+        }
+        if (!converged) {
+          throw std::runtime_error("Newton did not converge");
         }
 
         next_t = feas_next_t;
@@ -105,10 +120,16 @@ class EFAT {
         selected_pts_per_target(target_idx, 2) = next_pos(1);
 
         // Update cost, time, and position
-        if (no_tw) {
-          cost(0) += next_t;
+        if (min_time) {
+          if (seq_idx + 1 == num_targets) {
+            cost(0) = next_t;
+          }
         } else {
-          cost(0) += next_t - tw_per_target(target_idx, 0);
+          if (no_tw) {
+            cost(0) += next_t;
+          } else {
+            cost(0) += next_t - tw_per_target(target_idx, 0);
+          }
         }
 
         t = next_t;
@@ -148,7 +169,17 @@ class EFAT {
             selected_pts_per_target(target_idx, 0) = next_t;
             selected_pts_per_target(target_idx, 1) = next_pos(0);
             selected_pts_per_target(target_idx, 2) = next_pos(1);
-            cost(0) += next_t - tw_per_target(target_idx, 0);
+            if (min_time) {
+              if (seq_idx + 1 == num_targets) {
+                cost(0) = next_t;
+              }
+            } else {
+              if (no_tw) {
+                cost(0) += next_t;
+              } else {
+                cost(0) += next_t - tw_per_target(target_idx, 0);
+              }
+            }
             t = next_t;
             pos = next_pos;
             continue;
@@ -179,10 +210,16 @@ class EFAT {
         selected_pts_per_target(target_idx, 2) = next_pos(1);
 
         // Update cost, time, and position
-        if (no_tw) {
-          cost(0) += t_high;
+        if (min_time) {
+          if (seq_idx + 1 == num_targets) {
+            cost(0) = next_t;
+          }
         } else {
-          cost(0) += t_high - tw_per_target(target_idx, 0);
+          if (no_tw) {
+            cost(0) += next_t;
+          } else {
+            cost(0) += next_t - tw_per_target(target_idx, 0);
+          }
         }
 
         t = t_high;
@@ -199,4 +236,5 @@ class EFAT {
     double vmax;
     bool no_tw;
     double t0;
+    bool min_time;
 };

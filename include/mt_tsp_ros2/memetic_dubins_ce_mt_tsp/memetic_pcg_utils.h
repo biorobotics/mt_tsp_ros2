@@ -29,9 +29,12 @@ class MemeticPCGUtils {
       }
       if (rho == 0) {
         if (!min_latency) {
+          if (!min_time) {
+            throw std::runtime_error("!min_latency && !min_time");
+          }
           throw std::runtime_error("Only accepting min-latency for close-enough MT-TSP currently");
         }
-        efat_obj = std::make_shared<EFAT>(tw_per_target, q_trj_per_target, p0, vmax, false, 0.);
+        efat_obj = std::make_shared<EFAT>(tw_per_target, q_trj_per_target, p0, vmax, false, 0., min_time);
       } else {
         dubins_obj = std::make_shared<DubinsTrjThroughSeqOfTargets>(tw_per_target, q_trj_per_target, p0, heading0, vmax, rho, false, 0., min_latency, min_time, newton_step_size);
       }

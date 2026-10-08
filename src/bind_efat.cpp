@@ -6,7 +6,7 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(efat, m) {
   py::class_<EFAT>(m, "EFAT")
-    .def(py::init<const Ref<const RowMatrixXd>&, const std::vector<ExtendedCppSpline>&, const Ref<const Vector2d>&, double, bool, double>())
+    .def(py::init<const Ref<const RowMatrixXd>&, const std::vector<ExtendedCppSpline>&, const Ref<const Vector2d>&, double, bool, double, bool>())
     .def("efat_chain", &EFAT::efat_chain)
     ;
 }
